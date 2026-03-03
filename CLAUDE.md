@@ -7,8 +7,16 @@
 - **Company**: WEDISON (Motor Listrik / Electric Motorcycle)
 - **System**: Internal RTO (Rent To Own) Management
 - **Users**: Admin only (no customer login)
-- **Motor Models**: Athena (55K/day), Victory (55K/day), EdPower (75K/day)
-- **Max Rental**: 7 days per transaction
+- **Motor Models**:
+  - Athena Regular Battery (55K/day, DP Rp 530.000)
+  - Athena Extended Battery (55K/day, DP Rp 580.000)
+  - Victory Regular Battery (55K/day, DP Rp 530.000)
+  - Victory Extended Battery (55K/day, DP Rp 580.000)
+  - EdPower (75K/day, DP Rp 780.000)
+- **Ownership Target**: 1.278 hari
+- **Billing Model**: Auto-billing harian dengan rollover
+- **Payment Gateway**: DOKU
+- **Manual Payment**: 1–7 hari ke depan (opsi tambahan)
 
 ## Tech Stack
 
@@ -85,9 +93,14 @@ npm run dev:frontend
 | PUT | /api/contracts/:id | Edit contract |
 | PATCH | /api/contracts/:id/cancel | Cancel contract |
 | DELETE | /api/contracts/:id | Soft delete contract |
-| POST | /api/contracts/:id/extend | Extend contract |
+| POST | /api/contracts/:id/pay-billing | Bayar tagihan (1-7 hari) |
 | PATCH | /api/contracts/:id/repossess | Repossess motor |
+| PATCH | /api/contracts/:id/receive-unit | Mark unit received |
 | GET | /api/contracts/overdue-warnings | Get overdue warnings |
+| GET/POST | /api/billings | List/Generate billings |
+| GET | /api/billings/:id | Get billing detail |
+| POST | /api/billings/:id/pay | Pay billing → generate invoice |
+| POST | /api/webhooks/doku | DOKU payment webhook (public) |
 | GET | /api/reports | Get report data (supports filters) |
 | GET | /api/reports/export/json | Export report as JSON |
 | GET | /api/reports/export/csv | Export report as CSV |
@@ -751,6 +764,118 @@ Comprehensive audit of Phase 1-5 logic to fix MVP/dummy behaviors that don't mat
 
 ---
 
+## 2026-03-03 - Phase 6.5: RTO Business Model Overhaul (PLANNED)
+
+### Context
+
+Perubahan signifikan pada model bisnis RTO sebelum masuk Phase 7. Sistem berubah dari model extension sederhana menjadi sistem billing harian otomatis dengan Down Payment, payment gateway DOKU, dan WhatsApp reminder.
+
+### Daftar Perubahan
+
+#### PERUBAHAN 1 — Terminologi
+- Ganti semua label "Extend Sewa" / "Perpanjang Sewa" → **"Bayar Tagihan"**
+- Pilihan rentang hari tetap: 1–7 hari (sebagai opsi pembayaran manual)
+
+#### PERUBAHAN 2 — Down Payment (DP)
+Pengajuan RTO pertama wajib bayar DP:
+
+| Motor + Battery | DP Amount |
+|----------------|-----------|
+| Athena / Victory (Regular Battery) | Rp 530.000 |
+| Athena / Victory (Extended Battery) | Rp 580.000 |
+| EdPower | Rp 780.000 |
+
+Skema pembayaran DP:
+- **a) Lunas sekaligus** saat pengajuan
+- **b) Dicicil 2x**: cicilan 1 saat pengajuan, cicilan 2 setelah unit diterima
+
+Tagihan harian mulai berjalan **H+1 setelah user menerima unit motor** (H penerimaan = bebas tagihan).
+
+#### PERUBAHAN 3 — Cicilan DP
+- Admin dapat mengkonfigurasi nominal cicilan DP di settings
+- Default: DP dibagi 2 merata (contoh: Rp 580.000 → 2x Rp 290.000)
+
+#### PERUBAHAN 4 — Lifecycle Billing & Invoice
+Dua status berbeda untuk tagihan harian:
+- **BILLING**: Status awal saat tagihan diterbitkan (belum dibayar)
+- **INVOICE**: Status setelah billing berhasil dibayar (generate invoice otomatis)
+
+Aturan:
+- Billing expired/dibatalkan → soft delete, history tetap tersimpan
+- Billing TIDAK langsung menjadi invoice; harus melalui proses pembayaran
+
+#### PERUBAHAN 5 — Target Kepemilikan
+- Total hari target kepemilikan penuh = **1.278 hari** (sebelumnya 1.825 hari)
+
+#### PERUBAHAN 6 — Fasilitas Libur Bayar
+Ketentuan per kontrak:
+- HANYA berlaku di hari **Minggu**
+- Minimal: 2 hari per bulan
+- Maksimal: 4 hari per bulan
+- Default: 2 hari per bulan
+- Jumlah ditentukan oleh admin per kontrak
+
+#### PERUBAHAN 7 — Mekanisme Billing Otomatis & Rollover
+- Sistem generate billing otomatis **1x sehari**
+- Rollover jika user tidak bayar:
+  - Tgl 3 → billing Rp 55.000 diterbitkan
+  - User tidak bayar → Tgl 4 → billing baru Rp 110.000 (55.000 × 2 hari)
+  - Billing Tgl 3 expired, tidak bisa digunakan lagi
+  - User WAJIB bayar billing terbaru yang sudah akumulasi
+- Fitur manual payment (1–7 hari ke depan) tetap tersedia sebagai opsi tambahan
+
+#### PERUBAHAN 8 — Payment Gateway: DOKU
+- Semua transaksi (tagihan harian + DP) via **DOKU Payment Gateway**
+- Billing baru → hit DOKU API → generate payment link
+- Simpan response DOKU (payment URL, reference ID) di database
+- Webhook handler untuk konfirmasi pembayaran otomatis
+
+#### PERUBAHAN 9 — Reminder Otomatis via WhatsApp
+- Kirim reminder setiap hari: **pagi** dan **sore**
+- Konten: nominal tagihan, link pembayaran (DOKU), panduan pembayaran
+
+### Technical Impact
+
+**New Entities:**
+- `Billing` — Daily billing lifecycle (separate from Invoice)
+
+**Modified Entities:**
+- `Contract` — Add: batteryType, unitReceivedDate, dpAmount, dpScheme, dpPaidAmount, holidayDaysPerMonth, billingStartDate
+- `Invoice` — Add: type (DP/DP_INSTALLMENT/DAILY_BILLING/MANUAL_PAYMENT), dokuPaymentUrl, dokuReferenceId, billingPeriodStart, billingPeriodEnd
+
+**New Enums:**
+- `BatteryType`: REGULAR, EXTENDED
+- `InvoiceType`: DP, DP_INSTALLMENT, DAILY_BILLING, MANUAL_PAYMENT
+- `BillingStatus`: ACTIVE, PAID, EXPIRED, CANCELLED
+
+**New Services:**
+- `BillingService` — Auto-billing, rollover, billing→invoice conversion, Libur Bayar
+- `DokuService` — DOKU API integration (payment link, webhook)
+- `WhatsAppService` — WhatsApp API integration
+- `ReminderService` — Scheduled reminders (morning + afternoon)
+
+**New Infrastructure:**
+- `scheduler.ts` — Cron jobs (daily billing, reminders)
+- `WebhookController` — DOKU webhook handler (public endpoint)
+
+**Updated Constants:**
+- `OWNERSHIP_TARGET_DAYS`: 1825 → 1278
+- `DP_AMOUNTS`: New constant per motor+battery
+- `MOTOR_DAILY_RATES`: Unchanged (Athena/Victory 55K, EdPower 75K)
+
+### New API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | /api/contracts/:id/pay-billing | Bayar tagihan manual (1-7 hari) |
+| PATCH | /api/contracts/:id/receive-unit | Mark unit motor diterima |
+| GET/POST | /api/billings | List/Generate billings |
+| GET | /api/billings/:id | Get billing detail |
+| POST | /api/billings/:id/pay | Pay billing → generate invoice |
+| POST | /api/webhooks/doku | DOKU payment webhook (public) |
+
+---
+
 ## Development Roadmap
 
 > Prinsip: Fungsionalitas dulu → Polish & UX → Infrastruktur & Produksi.
@@ -865,7 +990,137 @@ Fokus: Pengalaman pengguna yang lebih baik dan UI yang lebih lengkap.
   - `useKeyboardShortcut` reusable hook
   - Search hint button in sidebar
 
-### Phase 7: Security & Authentication
+### Phase 6.5: RTO Business Model Overhaul (Micro-Phases)
+
+> Fokus: Transformasi model bisnis RTO — DP, billing otomatis, DOKU, WhatsApp reminder.
+> Phase 7 (Security) ditunda sampai semua micro-phase ini selesai dan stabil.
+
+#### MP-6A: Domain Model & Enum Overhaul (Backend) — Kompleksitas: M
+
+- [ ] Update `Contract` entity: batteryType, unitReceivedDate, dpAmount, dpScheme, dpPaidAmount, holidayDaysPerMonth, billingStartDate
+- [ ] Update `Invoice` entity: type, dokuPaymentUrl, dokuReferenceId, billingPeriodStart, billingPeriodEnd
+- [ ] Create `Billing` entity baru (daily billing lifecycle)
+- [ ] Add enums: BatteryType, InvoiceType, BillingStatus
+- [ ] Update constants: OWNERSHIP_TARGET_DAYS=1278, DP_AMOUNTS
+- [ ] Create IBillingRepository interface + InMemoryBillingRepository
+
+**Files:** Contract.ts, Invoice.ts, Billing.ts (new), enums/index.ts, interfaces/, InMemoryBillingRepository.ts (new)
+**Dependencies:** Tidak ada (foundation layer)
+
+#### MP-6B: DP & Contract Creation Flow (Backend) — Kompleksitas: M
+
+- [ ] Update CreateContractDto: batteryType, dpScheme
+- [ ] Rewrite ContractService.create() untuk DP flow
+- [ ] Generate DP invoice (lunas atau cicilan 2x)
+- [ ] Add unit delivery tracking (receive-unit endpoint)
+- [ ] Add DP settings ke SettingService
+
+**Files:** dtos/index.ts, ContractService.ts, SettingService.ts, routes/index.ts
+**Dependencies:** MP-6A
+
+#### MP-6C: Billing Lifecycle & Rollover (Backend) — Kompleksitas: L
+
+- [ ] Create BillingService: generateDailyBilling(), rolloverExpiredBillings()
+- [ ] Billing → Invoice conversion on payment
+- [ ] Libur Bayar logic (Minggu, 2-4 hari/bulan, configurable per kontrak)
+- [ ] Create scheduler.ts: daily cron job untuk auto-billing
+- [ ] Update ContractService: extend() → payBilling() terminology
+- [ ] Register scheduler di index.ts
+
+**Files:** BillingService.ts (new), scheduler.ts (new), ContractService.ts, InvoiceService.ts, index.ts
+**Dependencies:** MP-6A, MP-6B
+
+#### MP-6D: DOKU Payment Gateway (Backend) — Kompleksitas: L
+
+- [ ] Create DokuService: createPaymentLink(), handleWebhook(), checkPaymentStatus()
+- [ ] Integrate DOKU di BillingService (auto-generate payment link)
+- [ ] Integrate DOKU di InvoiceService (DP payment)
+- [ ] Create WebhookController + public webhook route
+- [ ] DOKU config (API credentials, environment)
+
+**Files:** DokuService.ts (new), WebhookController.ts (new), BillingService.ts, InvoiceService.ts, routes/index.ts, config/
+**Dependencies:** MP-6C
+
+#### MP-6E: WhatsApp Reminder (Backend) — Kompleksitas: M
+
+- [ ] Create WhatsAppService: sendReminder(), buildMessage()
+- [ ] Create ReminderService: scheduleMorningReminder(), scheduleAfternoonReminder()
+- [ ] Add reminder cron jobs ke scheduler.ts
+- [ ] WhatsApp API config
+
+**Files:** WhatsAppService.ts (new), ReminderService.ts (new), scheduler.ts, config/
+**Dependencies:** MP-6D (butuh payment link dari DOKU)
+
+#### MP-6F: Frontend — Terminologi & Contract Form (Frontend) — Kompleksitas: S
+
+- [ ] Rename semua "Extend Sewa" / "Perpanjang Sewa" → "Bayar Tagihan"
+- [ ] Add battery type selector di contract creation form
+- [ ] Add DP scheme selector (lunas / cicilan 2x)
+- [ ] Update types: BatteryType, InvoiceType, DPScheme enums; Contract/Invoice interfaces
+- [ ] Update API client: extendContract → payBilling, add DP methods
+- [ ] Update contractSchema di schemas.ts
+
+**Files:** contracts/[id]/page.tsx, contracts/page.tsx, invoices/page.tsx, types/index.ts, api.ts, schemas.ts
+**Dependencies:** MP-6B
+
+#### MP-6G: Frontend — Billing & DP UI — Kompleksitas: M
+
+- [ ] DP section di contract detail (status DP, cicilan progress)
+- [ ] Billing section di contract detail (current billing, rollover history)
+- [ ] Libur Bayar info display
+- [ ] Unit delivery date input/display
+- [ ] DP status column di contract list
+- [ ] Create BillingCard component
+
+**Files:** contracts/[id]/page.tsx, contracts/page.tsx, BillingCard.tsx (new), api.ts
+**Dependencies:** MP-6C, MP-6F
+
+#### MP-6H: Frontend — Payment Gateway & Reminder UI — Kompleksitas: S
+
+- [ ] DOKU payment link display di billing/invoice
+- [ ] Payment link column di invoices page
+- [ ] Reminder settings di settings page
+- [ ] DOKU config display di settings page
+
+**Files:** contracts/[id]/page.tsx, invoices/page.tsx, settings/page.tsx
+**Dependencies:** MP-6D, MP-6G
+
+#### MP-6I: Seed Data & Tests Update — Kompleksitas: M
+
+- [ ] Rewrite seed.ts untuk model DP + billing
+- [ ] Update ContractService.test.ts untuk DP flow
+- [ ] Update InvoiceService.test.ts untuk billing→invoice flow
+- [ ] Create BillingService.test.ts (new test suite)
+- [ ] Create DokuService.test.ts (mocked, new test suite)
+
+**Files:** seed.ts, ContractService.test.ts, InvoiceService.test.ts, BillingService.test.ts (new), DokuService.test.ts (new)
+**Dependencies:** Semua backend micro-phases (MP-6A s/d MP-6E)
+
+#### Execution Order
+
+```
+MP-6A → MP-6B → MP-6F → MP-6C → MP-6G → MP-6D → MP-6H → MP-6E → MP-6I
+```
+
+#### Dependency Graph
+
+```
+MP-6A (Domain Models)
+  ├── MP-6B (DP & Contract) ──┐
+  │     └── MP-6F (FE Terms)  │
+  │           └── MP-6G (FE Billing)
+  └── MP-6C (Billing) ────────┘
+        └── MP-6D (DOKU)
+              ├── MP-6E (WhatsApp)
+              └── MP-6H (FE Payment)
+MP-6I (Tests) — setelah semua backend phases
+```
+
+---
+
+### Phase 7: Security & Authentication (DITUNDA)
+
+> Ditunda sampai Phase 6.5 selesai dan stabil.
 
 Fokus: Keamanan yang proper sebelum masuk produksi.
 
@@ -897,39 +1152,16 @@ Fokus: Keamanan yang proper sebelum masuk produksi.
 Fokus: Migrasi ke database nyata dan persiapan production.
 
 - [ ] **PostgreSQL + Prisma migration**
-  - Setup Prisma schema berdasarkan domain entities
-  - Buat Prisma-based repository implementations
-  - Migration scripts
-  - Swap in-memory → Prisma repositories
-  - Seed data via Prisma seeder
 - [ ] **File upload (KTP images)**
-  - Upload foto KTP saat registrasi customer
-  - Storage: local filesystem (dev) / S3-compatible (prod)
-  - Image preview di customer detail
 - [ ] **Environment configuration**
-  - `.env` management untuk dev/staging/production
-  - Docker Compose untuk local development
 - [ ] **Error monitoring & logging**
-  - Structured logging (winston/pino)
-  - Error tracking setup
 - [ ] **Database backup strategy**
-  - Automated backup scripts
-  - Point-in-time recovery plan
 
-### Phase 9: Integration & Deployment
+### Phase 9: Deployment
 
-Fokus: Integrasi dengan layanan eksternal dan deployment.
+Fokus: CI/CD dan deployment.
 
-- [ ] **Real QRIS payment gateway integration**
-  - Integrasi dengan payment gateway (Midtrans/Xendit)
-  - Webhook handler untuk konfirmasi pembayaran otomatis
-  - Replace payment simulation dengan flow asli
-- [ ] **Notifikasi**
-  - WhatsApp/SMS reminder untuk pembayaran yang akan jatuh tempo
-  - Email receipt setelah pembayaran berhasil
-  - Notifikasi internal (in-app) untuk admin
-- [ ] **Deployment**
-  - CI/CD pipeline (GitHub Actions)
-  - Production deployment (VPS/Cloud)
-  - SSL/HTTPS setup
-  - Domain configuration
+- [ ] **CI/CD pipeline (GitHub Actions)**
+- [ ] **Production deployment (VPS/Cloud)**
+- [ ] **SSL/HTTPS setup**
+- [ ] **Domain configuration**
