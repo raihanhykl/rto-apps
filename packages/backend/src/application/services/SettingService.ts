@@ -59,7 +59,7 @@ export class SettingService {
       { key: 'invoice_prefix', value: 'INV', description: 'Invoice number prefix' },
       { key: 'contract_prefix', value: 'RTO', description: 'Contract number prefix' },
       { key: 'max_rental_days', value: '7', description: 'Maximum rental days per contract/extension' },
-      { key: 'ownership_target_days', value: '1825', description: 'Total days to own motor (default 5 years)' },
+      { key: 'ownership_target_days', value: '1278', description: 'Total days to own motor (default ~3.5 years)' },
       { key: 'grace_period_days', value: '7', description: 'Grace period days before repossession' },
       { key: 'late_fee_per_day', value: '10000', description: 'Late fee per day (Rp) for overdue invoices' },
     ];

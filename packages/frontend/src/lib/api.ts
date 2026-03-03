@@ -173,7 +173,14 @@ class ApiClient {
     });
   }
 
-  async editContract(id: string, data: { notes?: string; gracePeriodDays?: number; ownershipTargetDays?: number }) {
+  async receiveUnit(id: string, bastPhoto: string, bastNotes?: string) {
+    return this.request<any>(`/contracts/${id}/receive-unit`, {
+      method: 'PATCH',
+      body: JSON.stringify({ bastPhoto, bastNotes }),
+    });
+  }
+
+  async editContract(id: string, data: { notes?: string; gracePeriodDays?: number; ownershipTargetDays?: number; color?: string; year?: number | null; vinNumber?: string; engineNumber?: string }) {
     return this.request<any>(`/contracts/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
@@ -247,10 +254,31 @@ class ApiClient {
     });
   }
 
+  async revertInvoiceStatus(id: string) {
+    return this.request<any>(`/invoices/${id}/revert`, {
+      method: 'PATCH',
+    });
+  }
+
   async bulkMarkPaid(invoiceIds: string[]) {
     return this.request<{ success: string[]; failed: Array<{ id: string; error: string }> }>('/invoices/bulk-pay', {
       method: 'POST',
       body: JSON.stringify({ invoiceIds }),
+    });
+  }
+
+  // Billings
+  async getBillingsByContract(contractId: string) {
+    return this.request<any[]>(`/billings/contract/${contractId}`);
+  }
+
+  async getActiveBillingByContract(contractId: string) {
+    return this.request<any>(`/billings/contract/${contractId}/active`);
+  }
+
+  async payBilling(id: string) {
+    return this.request<any>(`/billings/${id}/pay`, {
+      method: 'POST',
     });
   }
 

@@ -4,6 +4,11 @@ export enum MotorModel {
   EDPOWER = 'EDPOWER',
 }
 
+export enum BatteryType {
+  REGULAR = 'REGULAR',
+  EXTENDED = 'EXTENDED',
+}
+
 export enum ContractStatus {
   ACTIVE = 'ACTIVE',
   COMPLETED = 'COMPLETED',
@@ -20,10 +25,41 @@ export enum PaymentStatus {
   VOID = 'VOID',
 }
 
-export const MOTOR_DAILY_RATES: Record<MotorModel, number> = {
-  [MotorModel.ATHENA]: 55000,
-  [MotorModel.VICTORY]: 55000,
-  [MotorModel.EDPOWER]: 75000,
+export enum InvoiceType {
+  DP = 'DP',
+  DP_INSTALLMENT = 'DP_INSTALLMENT',
+  DAILY_BILLING = 'DAILY_BILLING',
+  MANUAL_PAYMENT = 'MANUAL_PAYMENT',
+}
+
+export enum BillingStatus {
+  ACTIVE = 'ACTIVE',
+  PAID = 'PAID',
+  EXPIRED = 'EXPIRED',
+  CANCELLED = 'CANCELLED',
+}
+
+export enum DPScheme {
+  FULL = 'FULL',
+  INSTALLMENT = 'INSTALLMENT',
+}
+
+export const MOTOR_DAILY_RATES: Record<string, number> = {
+  'ATHENA_REGULAR': 58000,
+  'ATHENA_EXTENDED': 63000,
+  'VICTORY_REGULAR': 58000,
+  'VICTORY_EXTENDED': 63000,
+  'EDPOWER_REGULAR': 83000,
+  'EDPOWER_EXTENDED': 83000,
+};
+
+export const DP_AMOUNTS: Record<string, number> = {
+  'ATHENA_REGULAR': 530000,
+  'ATHENA_EXTENDED': 580000,
+  'VICTORY_REGULAR': 530000,
+  'VICTORY_EXTENDED': 580000,
+  'EDPOWER_REGULAR': 780000,
+  'EDPOWER_EXTENDED': 780000,
 };
 
 export interface User {
@@ -33,13 +69,32 @@ export interface User {
   role: string;
 }
 
+export enum Gender {
+  MALE = 'MALE',
+  FEMALE = 'FEMALE',
+}
+
 export interface Customer {
   id: string;
   fullName: string;
   phone: string;
   email: string;
   address: string;
+  birthDate: string | null;
+  gender: Gender | null;
+  rideHailingApps: string[];
   ktpNumber: string;
+  // Document photos
+  ktpPhoto: string | null;
+  simPhoto: string | null;
+  kkPhoto: string | null;
+  // Guarantor
+  guarantorName: string;
+  guarantorPhone: string;
+  guarantorKtpPhoto: string | null;
+  // Spouse (optional)
+  spouseName: string;
+  spouseKtpPhoto: string | null;
   notes: string;
   isDeleted: boolean;
   deletedAt: string | null;
@@ -52,6 +107,7 @@ export interface Contract {
   contractNumber: string;
   customerId: string;
   motorModel: MotorModel;
+  batteryType: BatteryType;
   dailyRate: number;
   durationDays: number;
   totalAmount: number;
@@ -60,6 +116,22 @@ export interface Contract {
   status: ContractStatus;
   notes: string;
   createdBy: string;
+  // Unit details
+  color: string;
+  year: number | null;
+  vinNumber: string;
+  engineNumber: string;
+  // DP fields
+  dpAmount: number;
+  dpScheme: DPScheme;
+  dpPaidAmount: number;
+  dpFullyPaid: boolean;
+  // Unit delivery & billing
+  unitReceivedDate: string | null;
+  billingStartDate: string | null;
+  bastPhoto: string | null;
+  bastNotes: string;
+  holidayDaysPerMonth: number;
   // RTO fields
   ownershipTargetDays: number;
   totalDaysPaid: number;
@@ -80,11 +152,41 @@ export interface Invoice {
   customerId: string;
   amount: number;
   lateFee: number;
+  type: InvoiceType;
   status: PaymentStatus;
   qrCodeData: string;
   dueDate: string;
   paidAt: string | null;
   extensionDays: number | null;
+  // DOKU payment gateway
+  dokuPaymentUrl: string | null;
+  dokuReferenceId: string | null;
+  // Billing period
+  billingPeriodStart: string | null;
+  billingPeriodEnd: string | null;
+  billingId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Billing {
+  id: string;
+  billingNumber: string;
+  contractId: string;
+  customerId: string;
+  amount: number;
+  dailyRate: number;
+  daysCount: number;
+  status: BillingStatus;
+  dokuPaymentUrl: string | null;
+  dokuReferenceId: string | null;
+  periodStart: string;
+  periodEnd: string;
+  expiredAt: string | null;
+  paidAt: string | null;
+  invoiceId: string | null;
+  isDeleted: boolean;
+  deletedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }

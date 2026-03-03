@@ -8,6 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -27,6 +35,8 @@ import { Plus, Search, Pencil, Trash2, Users, Eye } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toastSuccess, toastError } from "@/stores/toastStore";
 
+const RIDE_HAILING_OPTIONS = ["Grab", "Gojek", "Maxim", "Indrive", "Shopee"];
+
 export default function CustomersPage() {
   const router = useRouter();
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -39,11 +49,17 @@ export default function CustomersPage() {
 
   const pagination = usePagination({ initialSortBy: "createdAt", initialSortOrder: "desc" });
 
-  const { register, handleSubmit: rhfSubmit, reset, formState: { errors } } = useForm<CustomerFormData>({
+  const { register, handleSubmit: rhfSubmit, reset, setValue, watch, formState: { errors } } = useForm<CustomerFormData>({
     resolver: zodResolver(customerSchema),
-    defaultValues: { fullName: "", phone: "", email: "", address: "", ktpNumber: "", notes: "" },
+    defaultValues: {
+      fullName: "", phone: "", email: "", address: "",
+      birthDate: "", gender: "", rideHailingApps: [],
+      ktpNumber: "", guarantorName: "", guarantorPhone: "",
+      spouseName: "", notes: "",
+    },
   });
   const [formError, setFormError] = useState("");
+  const watchApps = watch("rideHailingApps");
 
   const loadCustomers = useCallback(async () => {
     setLoading(true);
@@ -70,7 +86,12 @@ export default function CustomersPage() {
 
   const openCreate = () => {
     setEditingCustomer(null);
-    reset({ fullName: "", phone: "", email: "", address: "", ktpNumber: "", notes: "" });
+    reset({
+      fullName: "", phone: "", email: "", address: "",
+      birthDate: "", gender: "", rideHailingApps: [],
+      ktpNumber: "", guarantorName: "", guarantorPhone: "",
+      spouseName: "", notes: "",
+    });
     setFormError("");
     setDialogOpen(true);
   };
@@ -82,22 +103,42 @@ export default function CustomersPage() {
       phone: customer.phone,
       email: customer.email,
       address: customer.address,
+      birthDate: customer.birthDate || "",
+      gender: customer.gender || "",
+      rideHailingApps: customer.rideHailingApps || [],
       ktpNumber: customer.ktpNumber,
+      guarantorName: customer.guarantorName || "",
+      guarantorPhone: customer.guarantorPhone || "",
+      spouseName: customer.spouseName || "",
       notes: customer.notes,
     });
     setFormError("");
     setDialogOpen(true);
   };
 
+  const toggleApp = (app: string) => {
+    const current = watchApps || [];
+    if (current.includes(app)) {
+      setValue("rideHailingApps", current.filter(a => a !== app));
+    } else {
+      setValue("rideHailingApps", [...current, app]);
+    }
+  };
+
   const handleSave = async (data: CustomerFormData) => {
     setSaving(true);
     setFormError("");
     try {
+      const payload: any = {
+        ...data,
+        birthDate: data.birthDate || null,
+        gender: data.gender || null,
+      };
       if (editingCustomer) {
-        await api.updateCustomer(editingCustomer.id, data);
+        await api.updateCustomer(editingCustomer.id, payload);
         toastSuccess("Customer diupdate", `Data ${data.fullName} berhasil diperbarui.`);
       } else {
-        await api.createCustomer(data);
+        await api.createCustomer(payload);
         toastSuccess("Customer ditambahkan", `${data.fullName} berhasil ditambahkan.`);
       }
       setDialogOpen(false);
@@ -178,7 +219,8 @@ export default function CustomersPage() {
                     <SortableHeader label="Nama" field="fullName" currentSortBy={pagination.sortBy} currentSortOrder={pagination.sortOrder} onSort={pagination.handleSort} />
                     <SortableHeader label="Telepon" field="phone" currentSortBy={pagination.sortBy} currentSortOrder={pagination.sortOrder} onSort={pagination.handleSort} />
                     <th className="text-left p-4 text-sm font-medium">KTP</th>
-                    <th className="text-left p-4 text-sm font-medium">Alamat</th>
+                    <th className="text-left p-4 text-sm font-medium">Aplikasi</th>
+                    <th className="text-left p-4 text-sm font-medium">Penjamin</th>
                     <SortableHeader label="Tanggal" field="createdAt" currentSortBy={pagination.sortBy} currentSortOrder={pagination.sortOrder} onSort={pagination.handleSort} />
                     <th className="text-right p-4 text-sm font-medium">Aksi</th>
                   </tr>
@@ -187,7 +229,7 @@ export default function CustomersPage() {
                   {loading ? (
                     Array.from({ length: 5 }).map((_, i) => (
                       <tr key={i} className="border-b">
-                        {Array.from({ length: 6 }).map((_, j) => (
+                        {Array.from({ length: 7 }).map((_, j) => (
                           <td key={j} className="p-4">
                             <div className="h-4 bg-muted animate-pulse rounded" />
                           </td>
@@ -205,7 +247,17 @@ export default function CustomersPage() {
                         </td>
                         <td className="p-4 text-sm">{customer.phone}</td>
                         <td className="p-4 text-sm font-mono">{customer.ktpNumber}</td>
-                        <td className="p-4 text-sm max-w-[200px] truncate">{customer.address}</td>
+                        <td className="p-4">
+                          <div className="flex flex-wrap gap-1">
+                            {(customer.rideHailingApps || []).map(app => (
+                              <Badge key={app} variant="outline" className="text-xs">{app}</Badge>
+                            ))}
+                            {(!customer.rideHailingApps || customer.rideHailingApps.length === 0) && (
+                              <span className="text-xs text-muted-foreground">-</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="p-4 text-sm">{customer.guarantorName || "-"}</td>
                         <td className="p-4 text-sm text-muted-foreground">
                           {formatDate(customer.createdAt)}
                         </td>
@@ -250,7 +302,7 @@ export default function CustomersPage() {
 
       {/* Create/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {editingCustomer ? "Edit Customer" : "Tambah Customer Baru"}
@@ -267,37 +319,107 @@ export default function CustomersPage() {
           )}
 
           <form onSubmit={rhfSubmit(handleSave)} className="space-y-4">
-            <div className="space-y-2">
-              <Label>Nama Lengkap *</Label>
-              <Input {...register("fullName")} placeholder="Nama lengkap" />
-              {errors.fullName && <p className="text-destructive text-xs">{errors.fullName.message}</p>}
-            </div>
-            <div className="grid grid-cols-2 gap-4">
+            {/* Data Pribadi */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Data Pribadi</h3>
               <div className="space-y-2">
-                <Label>Telepon *</Label>
-                <Input {...register("phone")} placeholder="08xx..." />
-                {errors.phone && <p className="text-destructive text-xs">{errors.phone.message}</p>}
+                <Label>Nama Lengkap *</Label>
+                <Input {...register("fullName")} placeholder="Nama lengkap" />
+                {errors.fullName && <p className="text-destructive text-xs">{errors.fullName.message}</p>}
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Telepon *</Label>
+                  <Input {...register("phone")} placeholder="08xx..." />
+                  {errors.phone && <p className="text-destructive text-xs">{errors.phone.message}</p>}
+                </div>
+                <div className="space-y-2">
+                  <Label>Email</Label>
+                  <Input type="email" {...register("email")} placeholder="email@example.com" />
+                  {errors.email && <p className="text-destructive text-xs">{errors.email.message}</p>}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Tanggal Lahir</Label>
+                  <Input type="date" {...register("birthDate")} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Jenis Kelamin</Label>
+                  <select
+                    {...register("gender")}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <option value="">Pilih...</option>
+                    <option value="MALE">Laki-laki</option>
+                    <option value="FEMALE">Perempuan</option>
+                  </select>
+                </div>
               </div>
               <div className="space-y-2">
-                <Label>Email</Label>
-                <Input type="email" {...register("email")} placeholder="email@example.com" />
-                {errors.email && <p className="text-destructive text-xs">{errors.email.message}</p>}
+                <Label>No. KTP *</Label>
+                <Input {...register("ktpNumber")} placeholder="16 digit nomor KTP" maxLength={16} />
+                {errors.ktpNumber && <p className="text-destructive text-xs">{errors.ktpNumber.message}</p>}
+              </div>
+              <div className="space-y-2">
+                <Label>Alamat *</Label>
+                <Textarea {...register("address")} placeholder="Alamat lengkap" rows={2} />
+                {errors.address && <p className="text-destructive text-xs">{errors.address.message}</p>}
               </div>
             </div>
-            <div className="space-y-2">
-              <Label>No. KTP *</Label>
-              <Input {...register("ktpNumber")} placeholder="16 digit nomor KTP" maxLength={16} />
-              {errors.ktpNumber && <p className="text-destructive text-xs">{errors.ktpNumber.message}</p>}
+
+            {/* Aplikasi */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Aplikasi Ojol</h3>
+              <div className="flex flex-wrap gap-2">
+                {RIDE_HAILING_OPTIONS.map(app => (
+                  <button
+                    key={app}
+                    type="button"
+                    onClick={() => toggleApp(app)}
+                    className={`px-3 py-1.5 text-sm rounded-full border transition-colors ${
+                      (watchApps || []).includes(app)
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-background border-input hover:bg-muted"
+                    }`}
+                  >
+                    {app}
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label>Alamat *</Label>
-              <Textarea {...register("address")} placeholder="Alamat lengkap" rows={2} />
-              {errors.address && <p className="text-destructive text-xs">{errors.address.message}</p>}
+
+            {/* Penjamin */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Penjamin (Guarantor)</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Nama Penjamin</Label>
+                  <Input {...register("guarantorName")} placeholder="Nama penjamin" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Telepon Penjamin</Label>
+                  <Input {...register("guarantorPhone")} placeholder="08xx..." />
+                </div>
+              </div>
             </div>
+
+            {/* Spouse */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Pasangan (Opsional)</h3>
+              <div className="space-y-2">
+                <Label>Nama Pasangan</Label>
+                <Input {...register("spouseName")} placeholder="Nama istri/suami (opsional)" />
+              </div>
+            </div>
+
+            {/* Catatan */}
             <div className="space-y-2">
               <Label>Catatan</Label>
               <Input {...register("notes")} placeholder="Catatan tambahan (opsional)" />
             </div>
+
+            <p className="text-xs text-muted-foreground">* Upload foto dokumen (KTP, SIM, KK, dll) akan tersedia setelah fitur upload diimplementasi.</p>
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>

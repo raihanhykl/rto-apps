@@ -6,7 +6,7 @@ import {
   PaginatedResult,
 } from '../../domain/interfaces';
 import { Invoice, Contract } from '../../domain/entities';
-import { PaymentStatus, AuditAction, ContractStatus } from '../../domain/enums';
+import { PaymentStatus, AuditAction, ContractStatus, InvoiceType } from '../../domain/enums';
 import { v4 as uuidv4 } from 'uuid';
 import QRCode from 'qrcode';
 
@@ -58,10 +58,22 @@ export class InvoiceService {
    * Apply paid invoice to contract: credit days, update progress, check completion
    */
   private async applyPaymentToContract(invoice: Invoice): Promise<void> {
-    if (!invoice.extensionDays || invoice.extensionDays <= 0) return;
-
     const contract = await this.contractRepo.findById(invoice.contractId);
     if (!contract) return;
+
+    // Handle DP / DP_INSTALLMENT payments: update dpPaidAmount and dpFullyPaid
+    if (invoice.type === InvoiceType.DP || invoice.type === InvoiceType.DP_INSTALLMENT) {
+      const newDpPaid = contract.dpPaidAmount + invoice.amount;
+      const dpFullyPaid = newDpPaid >= contract.dpAmount;
+      await this.contractRepo.update(invoice.contractId, {
+        dpPaidAmount: newDpPaid,
+        dpFullyPaid,
+      });
+      return;
+    }
+
+    // For non-DP invoices, credit days to contract
+    if (!invoice.extensionDays || invoice.extensionDays <= 0) return;
 
     const newTotalDaysPaid = contract.totalDaysPaid + invoice.extensionDays;
     const newProgress = parseFloat(((newTotalDaysPaid / contract.ownershipTargetDays) * 100).toFixed(2));
@@ -200,6 +212,89 @@ export class InvoiceService {
       entityId: invoiceId,
       description: `Manual payment for invoice ${invoice.invoiceNumber} - Rp ${totalPayable.toLocaleString('id-ID')}`,
       metadata: { invoiceNumber: invoice.invoiceNumber, amount: invoice.amount, lateFee: invoice.lateFee, manual: true, extensionDays: invoice.extensionDays },
+      ipAddress: '',
+      createdAt: new Date(),
+    });
+
+    return updated;
+  }
+
+  /**
+   * Revert paid invoice: undo contract changes (DP or extension days)
+   */
+  private async revertPaymentFromContract(invoice: Invoice): Promise<void> {
+    const contract = await this.contractRepo.findById(invoice.contractId);
+    if (!contract) return;
+
+    // Revert DP payments
+    if (invoice.type === InvoiceType.DP || invoice.type === InvoiceType.DP_INSTALLMENT) {
+      const newDpPaid = Math.max(0, contract.dpPaidAmount - invoice.amount);
+      await this.contractRepo.update(invoice.contractId, {
+        dpPaidAmount: newDpPaid,
+        dpFullyPaid: newDpPaid >= contract.dpAmount,
+      });
+      return;
+    }
+
+    // Revert extension days
+    if (!invoice.extensionDays || invoice.extensionDays <= 0) return;
+
+    const newTotalDaysPaid = Math.max(0, contract.totalDaysPaid - invoice.extensionDays);
+    const newProgress = contract.ownershipTargetDays > 0
+      ? parseFloat(((newTotalDaysPaid / contract.ownershipTargetDays) * 100).toFixed(2))
+      : 0;
+
+    const updateData: Partial<Contract> = {
+      totalDaysPaid: newTotalDaysPaid,
+      ownershipProgress: Math.min(newProgress, 100),
+      durationDays: Math.max(0, contract.durationDays - invoice.extensionDays),
+      totalAmount: Math.max(0, contract.totalAmount - invoice.amount - (invoice.lateFee || 0)),
+    };
+
+    // If contract was completed by this payment, revert to ACTIVE
+    if (contract.status === ContractStatus.COMPLETED && contract.completedAt) {
+      updateData.status = ContractStatus.ACTIVE;
+      updateData.completedAt = null;
+    }
+
+    await this.contractRepo.update(invoice.contractId, updateData);
+  }
+
+  async revertInvoiceStatus(invoiceId: string, adminId: string): Promise<Invoice> {
+    const invoice = await this.invoiceRepo.findById(invoiceId);
+    if (!invoice) throw new Error('Invoice not found');
+
+    if (invoice.status === PaymentStatus.PENDING) {
+      throw new Error('Invoice sudah berstatus PENDING, tidak bisa di-revert');
+    }
+
+    const previousStatus = invoice.status;
+
+    // If reverting from PAID, undo contract changes
+    if (previousStatus === PaymentStatus.PAID) {
+      await this.revertPaymentFromContract(invoice);
+    }
+
+    const updated = await this.invoiceRepo.update(invoiceId, {
+      status: PaymentStatus.PENDING,
+      paidAt: null,
+    });
+    if (!updated) throw new Error('Failed to update invoice');
+
+    await this.auditRepo.create({
+      id: uuidv4(),
+      userId: adminId,
+      action: AuditAction.UPDATE,
+      module: 'invoice',
+      entityId: invoiceId,
+      description: `Reverted invoice ${invoice.invoiceNumber} from ${previousStatus} to PENDING`,
+      metadata: {
+        invoiceNumber: invoice.invoiceNumber,
+        previousStatus,
+        amount: invoice.amount,
+        lateFee: invoice.lateFee,
+        extensionDays: invoice.extensionDays,
+      },
       ipAddress: '',
       createdAt: new Date(),
     });

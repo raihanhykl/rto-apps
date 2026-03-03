@@ -13,7 +13,18 @@ describe('CustomerService', () => {
     phone: '081234567890',
     email: 'budi@example.com',
     address: 'Jl. Merdeka No. 10, Jakarta',
+    birthDate: null as string | null,
+    gender: null as any,
+    rideHailingApps: [] as string[],
     ktpNumber: '3201011234567890',
+    ktpPhoto: null as string | null,
+    simPhoto: null as string | null,
+    kkPhoto: null as string | null,
+    guarantorName: '',
+    guarantorPhone: '',
+    guarantorKtpPhoto: null as string | null,
+    spouseName: '',
+    spouseKtpPhoto: null as string | null,
     notes: '',
   };
 

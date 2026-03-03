@@ -27,7 +27,7 @@ const PAGES: SearchResult[] = [
   { type: "page", id: "dashboard", title: "Dashboard", href: "/", subtitle: "Overview" },
   { type: "page", id: "customers", title: "Customers", href: "/customers", subtitle: "Kelola customer" },
   { type: "page", id: "contracts", title: "Contracts", href: "/contracts", subtitle: "Kelola kontrak" },
-  { type: "page", id: "invoices", title: "Invoices", href: "/invoices", subtitle: "Daftar invoice" },
+  { type: "page", id: "invoices", title: "Tagihan", href: "/invoices", subtitle: "Daftar tagihan" },
   { type: "page", id: "reports", title: "Reports", href: "/reports", subtitle: "Laporan" },
   { type: "page", id: "audit", title: "Audit Log", href: "/audit", subtitle: "Riwayat aktivitas" },
   { type: "page", id: "settings", title: "Settings", href: "/settings", subtitle: "Pengaturan" },

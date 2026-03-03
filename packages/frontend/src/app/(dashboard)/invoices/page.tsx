@@ -35,6 +35,7 @@ import {
   FileDown,
   XCircle,
   FileX,
+  Undo2,
 } from "lucide-react";
 
 const statusBadgeVariant = (status: string) => {
@@ -61,6 +62,8 @@ export default function InvoicesPage() {
   const [voidInvoiceTarget, setVoidInvoiceTarget] = useState<Invoice | null>(null);
   const [markPaidDialogOpen, setMarkPaidDialogOpen] = useState(false);
   const [markPaidTarget, setMarkPaidTarget] = useState<Invoice | null>(null);
+  const [revertDialogOpen, setRevertDialogOpen] = useState(false);
+  const [revertTarget, setRevertTarget] = useState<Invoice | null>(null);
 
   const pagination = usePagination({ initialSortBy: "createdAt", initialSortOrder: "desc" });
 
@@ -118,7 +121,7 @@ export default function InvoicesPage() {
       await api.simulatePayment(invoiceId, status);
       toastSuccess(
         "Pembayaran",
-        `Invoice berhasil di-${status === "PAID" ? "bayar" : "gagalkan"}.`
+        `Tagihan berhasil di-${status === "PAID" ? "bayar" : "gagalkan"}.`
       );
       await loadData();
     } catch (error: any) {
@@ -135,13 +138,13 @@ export default function InvoicesPage() {
       await api.voidInvoice(voidInvoiceTarget.id);
       toastSuccess(
         "Berhasil",
-        `Invoice ${voidInvoiceTarget.invoiceNumber} berhasil di-void.`
+        `Tagihan ${voidInvoiceTarget.invoiceNumber} berhasil di-void.`
       );
       setVoidDialogOpen(false);
       setVoidInvoiceTarget(null);
       await loadData();
     } catch (error: any) {
-      toastError("Gagal", error?.message || "Gagal void invoice.");
+      toastError("Gagal", error?.message || "Gagal void tagihan.");
     } finally {
       setProcessing(false);
     }
@@ -154,13 +157,29 @@ export default function InvoicesPage() {
       await api.markInvoicePaid(markPaidTarget.id);
       toastSuccess(
         "Berhasil",
-        `Invoice ${markPaidTarget.invoiceNumber} ditandai lunas.`
+        `Tagihan ${markPaidTarget.invoiceNumber} ditandai lunas.`
       );
       setMarkPaidDialogOpen(false);
       setMarkPaidTarget(null);
       await loadData();
     } catch (error: any) {
-      toastError("Gagal", error?.message || "Gagal menandai invoice lunas.");
+      toastError("Gagal", error?.message || "Gagal menandai tagihan lunas.");
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleRevertInvoice = async () => {
+    if (!revertTarget) return;
+    setProcessing(true);
+    try {
+      await api.revertInvoiceStatus(revertTarget.id);
+      toastSuccess("Berhasil", `Tagihan ${revertTarget.invoiceNumber} dikembalikan ke PENDING.`);
+      setRevertDialogOpen(false);
+      setRevertTarget(null);
+      await loadData();
+    } catch (error: any) {
+      toastError("Gagal", error?.message || "Gagal me-revert tagihan.");
     } finally {
       setProcessing(false);
     }
@@ -169,8 +188,8 @@ export default function InvoicesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Invoices</h1>
-        <p className="text-muted-foreground">Daftar invoice & QR pembayaran</p>
+        <h1 className="text-2xl font-bold">Tagihan</h1>
+        <p className="text-muted-foreground">Daftar tagihan & QR pembayaran</p>
       </div>
 
       {/* Search & Filter */}
@@ -178,7 +197,7 @@ export default function InvoicesPage() {
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Cari no. invoice atau no. kontrak..."
+            placeholder="Cari no. tagihan atau no. kontrak..."
             value={pagination.search}
             onChange={(e) => pagination.setSearch(e.target.value)}
             className="pl-9"
@@ -197,7 +216,7 @@ export default function InvoicesPage() {
           </SelectContent>
         </Select>
         {pagination.total > 0 && (
-          <span className="text-sm text-muted-foreground self-center">{pagination.total} invoice</span>
+          <span className="text-sm text-muted-foreground self-center">{pagination.total} tagihan</span>
         )}
       </div>
 
@@ -207,8 +226,8 @@ export default function InvoicesPage() {
             <Receipt className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <p className="text-muted-foreground">
               {pagination.debouncedSearch || statusFilter !== "ALL"
-                ? "Tidak ada invoice yang cocok dengan filter."
-                : "Belum ada invoice. Invoice otomatis dibuat saat kontrak baru dibuat."}
+                ? "Tidak ada tagihan yang cocok dengan filter."
+                : "Belum ada tagihan."}
             </p>
           </CardContent>
         </Card>
@@ -219,7 +238,7 @@ export default function InvoicesPage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b bg-muted/50">
-                    <SortableHeader label="No. Invoice" field="invoiceNumber" currentSortBy={pagination.sortBy} currentSortOrder={pagination.sortOrder} onSort={pagination.handleSort} />
+                    <SortableHeader label="No. Tagihan" field="invoiceNumber" currentSortBy={pagination.sortBy} currentSortOrder={pagination.sortOrder} onSort={pagination.handleSort} />
                     <th className="text-left p-4 text-sm font-medium">No. Kontrak</th>
                     <SortableHeader label="Amount" field="amount" currentSortBy={pagination.sortBy} currentSortOrder={pagination.sortOrder} onSort={pagination.handleSort} />
                     <SortableHeader label="Status" field="status" currentSortBy={pagination.sortBy} currentSortOrder={pagination.sortOrder} onSort={pagination.handleSort} />
@@ -358,6 +377,19 @@ export default function InvoicesPage() {
                                   </Button>
                                 </>
                               )}
+                              {(invoice.status === "PAID" || invoice.status === "VOID") && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  disabled={processing}
+                                  onClick={() => {
+                                    setRevertTarget(invoice);
+                                    setRevertDialogOpen(true);
+                                  }}
+                                >
+                                  <Undo2 className="h-4 w-4 mr-1" /> Revert
+                                </Button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -380,7 +412,7 @@ export default function InvoicesPage() {
               {selectedInvoice?.status === "PAID" ? "Bukti Pembayaran" : "QR Pembayaran"}
             </DialogTitle>
             <DialogDescription>
-              Invoice: {selectedInvoice?.invoiceNumber}
+              Tagihan: {selectedInvoice?.invoiceNumber}
             </DialogDescription>
           </DialogHeader>
           {selectedInvoice?.status === "PAID" ? (
@@ -396,7 +428,7 @@ export default function InvoicesPage() {
               </div>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">No. Invoice</span>
+                  <span className="text-muted-foreground">No. Tagihan</span>
                   <span className="font-mono">{selectedInvoice.invoiceNumber}</span>
                 </div>
                 <div className="flex justify-between">
@@ -419,7 +451,7 @@ export default function InvoicesPage() {
                 )}
                 {selectedInvoice.extensionDays && (
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Perpanjangan</span>
+                    <span className="text-muted-foreground">Tagihan Harian</span>
                     <span>{selectedInvoice.extensionDays} hari</span>
                   </div>
                 )}
@@ -465,20 +497,20 @@ export default function InvoicesPage() {
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <FileX className="h-5 w-5" /> Void Invoice
+              <FileX className="h-5 w-5" /> Void Tagihan
             </DialogTitle>
             <DialogDescription>
-              Void invoice {voidInvoiceTarget?.invoiceNumber}? Invoice yang di-void tidak dapat dibayar.
+              Void tagihan {voidInvoiceTarget?.invoiceNumber}? Tagihan yang di-void tidak dapat dibayar.
             </DialogDescription>
           </DialogHeader>
           <div className="bg-muted/50 rounded-lg p-4 text-sm space-y-1">
-            <p><strong>Invoice:</strong> {voidInvoiceTarget?.invoiceNumber}</p>
+            <p><strong>Tagihan:</strong> {voidInvoiceTarget?.invoiceNumber}</p>
             <p>
               <strong>Jumlah:</strong>{" "}
               {voidInvoiceTarget && formatCurrency(voidInvoiceTarget.amount + (voidInvoiceTarget.lateFee || 0))}
             </p>
             {voidInvoiceTarget?.extensionDays && (
-              <p><strong>Perpanjangan:</strong> {voidInvoiceTarget.extensionDays} hari</p>
+              <p><strong>Tagihan Harian:</strong> {voidInvoiceTarget.extensionDays} hari</p>
             )}
           </div>
           <DialogFooter>
@@ -492,7 +524,7 @@ export default function InvoicesPage() {
               Batal
             </Button>
             <Button variant="destructive" onClick={handleVoidInvoice} disabled={processing}>
-              {processing ? "Memproses..." : "Ya, Void Invoice"}
+              {processing ? "Memproses..." : "Ya, Void Tagihan"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -512,17 +544,17 @@ export default function InvoicesPage() {
               <CheckCircle2 className="h-5 w-5 text-green-600" /> Tandai Lunas
             </DialogTitle>
             <DialogDescription>
-              Tandai invoice {markPaidTarget?.invoiceNumber} sebagai lunas secara manual?
+              Tandai tagihan {markPaidTarget?.invoiceNumber} sebagai lunas secara manual?
             </DialogDescription>
           </DialogHeader>
           <div className="bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-900 rounded-lg p-4 text-sm space-y-1">
-            <p><strong>Invoice:</strong> {markPaidTarget?.invoiceNumber}</p>
+            <p><strong>Tagihan:</strong> {markPaidTarget?.invoiceNumber}</p>
             <p>
               <strong>Jumlah:</strong>{" "}
               {markPaidTarget && formatCurrency(markPaidTarget.amount + (markPaidTarget.lateFee || 0))}
             </p>
             {markPaidTarget?.extensionDays && (
-              <p><strong>Perpanjangan:</strong> {markPaidTarget.extensionDays} hari (akan diterapkan ke kontrak)</p>
+              <p><strong>Tagihan Harian:</strong> {markPaidTarget.extensionDays} hari (akan diterapkan ke kontrak)</p>
             )}
           </div>
           <DialogFooter>
@@ -537,6 +569,34 @@ export default function InvoicesPage() {
             </Button>
             <Button variant="success" onClick={handleMarkPaid} disabled={processing}>
               {processing ? "Memproses..." : "Ya, Tandai Lunas"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Revert Invoice Confirmation Dialog */}
+      <Dialog open={revertDialogOpen} onOpenChange={(open) => { setRevertDialogOpen(open); if (!open) setRevertTarget(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Undo2 className="h-5 w-5 text-orange-600" /> Revert Status
+            </DialogTitle>
+            <DialogDescription>
+              Kembalikan tagihan {revertTarget?.invoiceNumber} ke status PENDING?
+              {revertTarget?.status === "PAID" && " Perubahan pada kontrak akan di-revert."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-900 rounded-lg p-4 text-sm space-y-1">
+            <p><strong>Tagihan:</strong> {revertTarget?.invoiceNumber}</p>
+            <p><strong>Status saat ini:</strong> {revertTarget?.status}</p>
+            <p><strong>Jumlah:</strong> {revertTarget && formatCurrency(revertTarget.amount + (revertTarget.lateFee || 0))}</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setRevertDialogOpen(false); setRevertTarget(null); }}>
+              Batal
+            </Button>
+            <Button variant="destructive" onClick={handleRevertInvoice} disabled={processing}>
+              {processing ? "Memproses..." : "Ya, Revert"}
             </Button>
           </DialogFooter>
         </DialogContent>

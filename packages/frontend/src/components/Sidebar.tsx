@@ -26,7 +26,7 @@ const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/customers", label: "Customers", icon: Users },
   { href: "/contracts", label: "Contracts", icon: FileText },
-  { href: "/invoices", label: "Invoices", icon: Receipt },
+  { href: "/invoices", label: "Tagihan", icon: Receipt },
   { href: "/payments", label: "Payments", icon: CreditCard },
   { href: "/reports", label: "Reports", icon: BarChart3 },
   { href: "/audit", label: "Audit Log", icon: ClipboardList },

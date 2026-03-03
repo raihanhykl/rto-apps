@@ -27,7 +27,7 @@ import { Pagination } from "@/components/ui/pagination";
 import { SortableHeader } from "@/components/SortableHeader";
 import { usePagination } from "@/hooks/usePagination";
 import { api } from "@/lib/api";
-import { Contract, Customer, MotorModel } from "@/types";
+import { Contract, Customer, MotorModel, BatteryType, DPScheme, DP_AMOUNTS, MOTOR_DAILY_RATES } from "@/types";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { contractSchema, ContractFormData } from "@/lib/schemas";
 import { Plus, FileText, Search } from "lucide-react";
@@ -64,13 +64,15 @@ export default function ContractsPage() {
     defaultValues: {
       customerId: "",
       motorModel: undefined,
-      durationDays: 1,
+      batteryType: undefined,
+      dpScheme: undefined,
       startDate: new Date().toISOString().split("T")[0],
       notes: "",
     },
   });
   const watchMotorModel = watch("motorModel");
-  const watchDurationDays = watch("durationDays");
+  const watchBatteryType = watch("batteryType");
+  const watchDpScheme = watch("dpScheme");
 
   const loadContracts = useCallback(async () => {
     setLoading(true);
@@ -113,26 +115,45 @@ export default function ContractsPage() {
     reset({
       customerId: "",
       motorModel: undefined,
-      durationDays: 1,
+      batteryType: undefined,
+      dpScheme: undefined,
       startDate: new Date().toISOString().split("T")[0],
+      color: "",
+      year: "",
+      vinNumber: "",
+      engineNumber: "",
       notes: "",
     });
     setFormError("");
     setDialogOpen(true);
   };
 
-  const calculateTotal = () => {
-    if (!watchMotorModel) return 0;
-    return (motorRates[watchMotorModel] || 0) * watchDurationDays;
+  const getRateKey = () => {
+    if (!watchMotorModel || !watchBatteryType) return null;
+    return `${watchMotorModel}_${watchBatteryType}`;
+  };
+
+  const getDpAmount = () => {
+    const key = getRateKey();
+    return key ? (DP_AMOUNTS[key] || 0) : 0;
+  };
+
+  const getDailyRate = () => {
+    const key = getRateKey();
+    return key ? (MOTOR_DAILY_RATES[key] || 0) : 0;
   };
 
   const handleSave = async (data: ContractFormData) => {
     setSaving(true);
     setFormError("");
     try {
-      await api.createContract(data);
+      const payload: any = {
+        ...data,
+        year: data.year ? parseInt(data.year, 10) : null,
+      };
+      await api.createContract(payload);
       setDialogOpen(false);
-      toastSuccess("Kontrak dibuat", `Kontrak ${data.motorModel} (${data.durationDays} hari) berhasil dibuat.`);
+      toastSuccess("Kontrak dibuat", `Kontrak ${data.motorModel} ${data.batteryType} (DP: ${data.dpScheme}) berhasil dibuat.`);
       loadContracts();
     } catch (error: any) {
       setFormError(error.message);
@@ -214,6 +235,7 @@ export default function ContractsPage() {
                     <SortableHeader label="No. Kontrak" field="contractNumber" currentSortBy={pagination.sortBy} currentSortOrder={pagination.sortOrder} onSort={pagination.handleSort} />
                     <th className="text-left p-4 text-sm font-medium">Customer</th>
                     <SortableHeader label="Motor" field="motorModel" currentSortBy={pagination.sortBy} currentSortOrder={pagination.sortOrder} onSort={pagination.handleSort} />
+                    <th className="text-left p-4 text-sm font-medium">DP</th>
                     <th className="text-left p-4 text-sm font-medium">Progress</th>
                     <SortableHeader label="Total" field="totalAmount" currentSortBy={pagination.sortBy} currentSortOrder={pagination.sortOrder} onSort={pagination.handleSort} />
                     <th className="text-left p-4 text-sm font-medium">Periode Aktif</th>
@@ -225,7 +247,7 @@ export default function ContractsPage() {
                   {loading ? (
                     Array.from({ length: 5 }).map((_, i) => (
                       <tr key={i} className="border-b">
-                        {Array.from({ length: 8 }).map((_, j) => (
+                        {Array.from({ length: 9 }).map((_, j) => (
                           <td key={j} className="p-4">
                             <div className="h-4 bg-muted animate-pulse rounded" />
                           </td>
@@ -238,6 +260,11 @@ export default function ContractsPage() {
                         <td className="p-4 font-mono text-sm text-primary">{contract.contractNumber}</td>
                         <td className="p-4 text-sm">{getCustomerName(contract.customerId)}</td>
                         <td className="p-4 text-sm">{contract.motorModel}</td>
+                        <td className="p-4">
+                          <Badge variant={contract.dpFullyPaid ? "success" : "warning"} className="text-xs">
+                            {contract.dpFullyPaid ? "Lunas" : "Pending"}
+                          </Badge>
+                        </td>
                         <td className="p-4">
                           <div className="flex items-center gap-2">
                             <div className="w-16 bg-muted rounded-full h-2 overflow-hidden">
@@ -319,55 +346,67 @@ export default function ContractsPage() {
               {errors.customerId && <p className="text-destructive text-xs">{errors.customerId.message}</p>}
             </div>
 
-            <div className="space-y-2">
-              <Label>Model Motor *</Label>
-              <Controller
-                name="motorModel"
-                control={control}
-                render={({ field }) => (
-                  <Select value={field.value || ""} onValueChange={field.onChange}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Pilih model motor" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={MotorModel.ATHENA}>
-                        Athena - {formatCurrency(motorRates[MotorModel.ATHENA] || 0)}/hari
-                      </SelectItem>
-                      <SelectItem value={MotorModel.VICTORY}>
-                        Victory - {formatCurrency(motorRates[MotorModel.VICTORY] || 0)}/hari
-                      </SelectItem>
-                      <SelectItem value={MotorModel.EDPOWER}>
-                        EdPower - {formatCurrency(motorRates[MotorModel.EDPOWER] || 0)}/hari
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                )}
-              />
-              {errors.motorModel && <p className="text-destructive text-xs">{errors.motorModel.message}</p>}
-            </div>
-
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Durasi (hari) *</Label>
+                <Label>Model Motor *</Label>
                 <Controller
-                  name="durationDays"
+                  name="motorModel"
                   control={control}
                   render={({ field }) => (
-                    <Select value={field.value.toString()} onValueChange={(val) => field.onChange(parseInt(val))}>
+                    <Select value={field.value || ""} onValueChange={field.onChange}>
                       <SelectTrigger>
-                        <SelectValue />
+                        <SelectValue placeholder="Pilih motor" />
                       </SelectTrigger>
                       <SelectContent>
-                        {[1, 2, 3, 4, 5, 6, 7].map((d) => (
-                          <SelectItem key={d} value={d.toString()}>
-                            {d} hari
-                          </SelectItem>
-                        ))}
+                        <SelectItem value={MotorModel.ATHENA}>Athena</SelectItem>
+                        <SelectItem value={MotorModel.VICTORY}>Victory</SelectItem>
+                        <SelectItem value={MotorModel.EDPOWER}>EdPower</SelectItem>
                       </SelectContent>
                     </Select>
                   )}
                 />
-                {errors.durationDays && <p className="text-destructive text-xs">{errors.durationDays.message}</p>}
+                {errors.motorModel && <p className="text-destructive text-xs">{errors.motorModel.message}</p>}
+              </div>
+              <div className="space-y-2">
+                <Label>Tipe Baterai *</Label>
+                <Controller
+                  name="batteryType"
+                  control={control}
+                  render={({ field }) => (
+                    <Select value={field.value || ""} onValueChange={field.onChange}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Pilih baterai" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={BatteryType.REGULAR}>Regular</SelectItem>
+                        <SelectItem value={BatteryType.EXTENDED}>Extended</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+                {errors.batteryType && <p className="text-destructive text-xs">{errors.batteryType.message}</p>}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Skema DP *</Label>
+                <Controller
+                  name="dpScheme"
+                  control={control}
+                  render={({ field }) => (
+                    <Select value={field.value || ""} onValueChange={field.onChange}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Pilih skema" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={DPScheme.FULL}>Bayar Lunas</SelectItem>
+                        <SelectItem value={DPScheme.INSTALLMENT}>Cicilan 2x</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+                {errors.dpScheme && <p className="text-destructive text-xs">{errors.dpScheme.message}</p>}
               </div>
               <div className="space-y-2">
                 <Label>Tanggal Mulai *</Label>
@@ -376,25 +415,51 @@ export default function ContractsPage() {
               </div>
             </div>
 
+            {/* Detail Unit */}
+            <div className="space-y-2">
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Detail Unit</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Warna</Label>
+                  <Input {...register("color")} placeholder="Warna motor" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Tahun</Label>
+                  <Input type="number" {...register("year")} placeholder="2025" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>VIN Number</Label>
+                  <Input {...register("vinNumber")} placeholder="Nomor VIN" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Nomor Mesin</Label>
+                  <Input {...register("engineNumber")} placeholder="Nomor mesin" />
+                </div>
+              </div>
+            </div>
+
             <div className="space-y-2">
               <Label>Catatan</Label>
               <Input {...register("notes")} placeholder="Catatan tambahan (opsional)" />
             </div>
 
-            {watchMotorModel && (
-              <div className="bg-muted/50 rounded-lg p-4">
+            {watchMotorModel && watchBatteryType && (
+              <div className="bg-muted/50 rounded-lg p-4 space-y-1">
                 <div className="flex justify-between text-sm">
                   <span>Rate per hari</span>
-                  <span>{formatCurrency(motorRates[watchMotorModel] || 0)}</span>
+                  <span>{formatCurrency(getDailyRate())}</span>
                 </div>
-                <div className="flex justify-between text-sm mt-1">
-                  <span>Durasi</span>
-                  <span>{watchDurationDays} hari</span>
+                <div className="flex justify-between text-sm">
+                  <span>DP ({watchDpScheme === DPScheme.INSTALLMENT ? "Cicilan 2x" : "Lunas"})</span>
+                  <span className="font-bold text-primary">{formatCurrency(getDpAmount())}</span>
                 </div>
-                <div className="border-t mt-2 pt-2 flex justify-between font-bold">
-                  <span>Total</span>
-                  <span className="text-primary">{formatCurrency(calculateTotal())}</span>
-                </div>
+                {watchDpScheme === DPScheme.INSTALLMENT && getDpAmount() > 0 && (
+                  <div className="text-xs text-muted-foreground pl-2">
+                    Cicilan 1: {formatCurrency(Math.ceil(getDpAmount() / 2))} &middot; Cicilan 2: {formatCurrency(Math.floor(getDpAmount() / 2))}
+                  </div>
+                )}
               </div>
             )}
 

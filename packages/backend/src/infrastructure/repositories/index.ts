@@ -4,3 +4,4 @@ export { InMemoryContractRepository } from './InMemoryContractRepository';
 export { InMemoryInvoiceRepository } from './InMemoryInvoiceRepository';
 export { InMemoryAuditLogRepository } from './InMemoryAuditLogRepository';
 export { InMemorySettingRepository } from './InMemorySettingRepository';
+export { InMemoryBillingRepository } from './InMemoryBillingRepository';

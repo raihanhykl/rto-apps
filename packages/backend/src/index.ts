@@ -8,6 +8,7 @@ import {
   InMemoryInvoiceRepository,
   InMemoryAuditLogRepository,
   InMemorySettingRepository,
+  InMemoryBillingRepository,
 } from './infrastructure/repositories';
 import {
   AuthService,
@@ -18,6 +19,7 @@ import {
   ReportService,
   AuditService,
   SettingService,
+  BillingService,
 } from './application/services';
 import { AuthController } from './presentation/controllers/AuthController';
 import { CustomerController } from './presentation/controllers/CustomerController';
@@ -27,10 +29,12 @@ import { DashboardController } from './presentation/controllers/DashboardControl
 import { ReportController } from './presentation/controllers/ReportController';
 import { AuditController } from './presentation/controllers/AuditController';
 import { SettingController } from './presentation/controllers/SettingController';
+import { BillingController } from './presentation/controllers/BillingController';
 import { createRoutes } from './presentation/routes';
 import { createAuthMiddleware } from './infrastructure/middleware/authMiddleware';
 import { errorHandler } from './infrastructure/middleware/errorHandler';
 import { seedDummyData } from './infrastructure/seed';
+import { Scheduler } from './infrastructure/scheduler';
 
 async function bootstrap() {
   const app = express();
@@ -46,6 +50,7 @@ async function bootstrap() {
   const invoiceRepo = new InMemoryInvoiceRepository();
   const auditRepo = new InMemoryAuditLogRepository();
   const settingRepo = new InMemorySettingRepository();
+  const billingRepo = new InMemoryBillingRepository();
 
   // Initialize Services
   const authService = new AuthService(userRepo, auditRepo);
@@ -53,6 +58,7 @@ async function bootstrap() {
   const customerService = new CustomerService(customerRepo, auditRepo, contractRepo);
   const contractService = new ContractService(contractRepo, customerRepo, invoiceRepo, auditRepo, settingService);
   const invoiceService = new InvoiceService(invoiceRepo, contractRepo, auditRepo);
+  const billingService = new BillingService(billingRepo, contractRepo, invoiceRepo, auditRepo, settingService);
   const dashboardService = new DashboardService(contractRepo, customerRepo, invoiceRepo, auditRepo);
   const reportService = new ReportService(contractRepo, customerRepo, invoiceRepo);
   const auditService = new AuditService(auditRepo);
@@ -67,6 +73,10 @@ async function bootstrap() {
     await seedDummyData(customerRepo, contractRepo, invoiceRepo, auditRepo, adminUser.id);
   }
 
+  // Start scheduler for daily billing
+  const scheduler = new Scheduler(billingService, contractService);
+  scheduler.start();
+
   // Initialize Controllers
   const authController = new AuthController(authService);
   const customerController = new CustomerController(customerService);
@@ -76,6 +86,7 @@ async function bootstrap() {
   const reportController = new ReportController(reportService, auditRepo);
   const auditController = new AuditController(auditService);
   const settingController = new SettingController(settingService);
+  const billingController = new BillingController(billingService);
 
   // Auth Middleware
   const authMiddleware = createAuthMiddleware(authService);
@@ -86,6 +97,7 @@ async function bootstrap() {
     customerController,
     contractController,
     invoiceController,
+    billingController,
     dashboardController,
     reportController,
     auditController,

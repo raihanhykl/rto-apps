@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { api } from "@/lib/api";
-import { Contract, Customer, Invoice } from "@/types";
+import { Contract, Customer, Invoice, Billing } from "@/types";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -37,6 +37,10 @@ import {
   FileX,
   FileDown,
   History,
+  Package,
+  Zap,
+  CalendarOff,
+  Undo2,
 } from "lucide-react";
 import {
   Dialog,
@@ -98,12 +102,23 @@ export default function ContractDetailPage() {
   const [editNotes, setEditNotes] = useState("");
   const [editGracePeriod, setEditGracePeriod] = useState("");
   const [editOwnershipTarget, setEditOwnershipTarget] = useState("");
+  const [editColor, setEditColor] = useState("");
+  const [editYear, setEditYear] = useState("");
+  const [editVinNumber, setEditVinNumber] = useState("");
+  const [editEngineNumber, setEditEngineNumber] = useState("");
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [voidDialogOpen, setVoidDialogOpen] = useState(false);
   const [voidInvoiceTarget, setVoidInvoiceTarget] = useState<Invoice | null>(null);
   const [markPaidDialogOpen, setMarkPaidDialogOpen] = useState(false);
   const [markPaidTarget, setMarkPaidTarget] = useState<Invoice | null>(null);
+  const [revertDialogOpen, setRevertDialogOpen] = useState(false);
+  const [revertTarget, setRevertTarget] = useState<Invoice | null>(null);
+  const [activeBilling, setActiveBilling] = useState<Billing | null>(null);
+  const [billings, setBillings] = useState<Billing[]>([]);
+  const [receiveUnitDialogOpen, setReceiveUnitDialogOpen] = useState(false);
+  const [bastPhoto, setBastPhoto] = useState("");
+  const [bastNotes, setBastNotes] = useState("");
 
   useEffect(() => {
     if (id) loadData();
@@ -115,6 +130,18 @@ export default function ContractDetailPage() {
       setContract(data.contract);
       setCustomer(data.customer);
       setInvoices(data.invoices || []);
+
+      // Load billing data
+      try {
+        const [billingsData, activeBillingData] = await Promise.all([
+          api.getBillingsByContract(id),
+          api.getActiveBillingByContract(id),
+        ]);
+        setBillings(billingsData || []);
+        setActiveBilling(activeBillingData);
+      } catch {
+        // Billing data is optional, don't fail the page
+      }
     } catch (error) {
       console.error("Failed to load contract detail:", error);
     } finally {
@@ -137,7 +164,7 @@ export default function ContractDetailPage() {
     setProcessing(true);
     try {
       await api.simulatePayment(invoiceId, status);
-      toastSuccess("Pembayaran", `Invoice berhasil di-${status === "PAID" ? "bayar" : "gagalkan"}.`);
+      toastSuccess("Pembayaran", `Tagihan berhasil di-${status === "PAID" ? "bayar" : "gagalkan"}.`);
       await loadData();
     } catch (error: any) {
       toastError("Gagal", error.message);
@@ -150,7 +177,7 @@ export default function ContractDetailPage() {
     setProcessing(true);
     try {
       await api.extendContract(id, parseInt(extendDays));
-      toastSuccess("Perpanjangan", `Kontrak berhasil diperpanjang ${extendDays} hari.`);
+      toastSuccess("Bayar Tagihan", `Tagihan ${extendDays} hari berhasil dibuat.`);
       setExtendDialogOpen(false);
       await loadData();
     } catch (error: any) {
@@ -179,6 +206,10 @@ export default function ContractDetailPage() {
     setEditNotes(contract.notes || "");
     setEditGracePeriod(contract.gracePeriodDays.toString());
     setEditOwnershipTarget(contract.ownershipTargetDays.toString());
+    setEditColor(contract.color || "");
+    setEditYear(contract.year ? contract.year.toString() : "");
+    setEditVinNumber(contract.vinNumber || "");
+    setEditEngineNumber(contract.engineNumber || "");
     setEditDialogOpen(true);
   };
 
@@ -189,6 +220,10 @@ export default function ContractDetailPage() {
         notes: editNotes,
         gracePeriodDays: parseInt(editGracePeriod),
         ownershipTargetDays: parseInt(editOwnershipTarget),
+        color: editColor,
+        year: editYear ? parseInt(editYear, 10) : null,
+        vinNumber: editVinNumber,
+        engineNumber: editEngineNumber,
       });
       toastSuccess("Berhasil", "Kontrak berhasil diperbarui.");
       setEditDialogOpen(false);
@@ -224,7 +259,7 @@ export default function ContractDetailPage() {
     setProcessing(true);
     try {
       await api.voidInvoice(voidInvoiceTarget.id);
-      toastSuccess("Berhasil", `Invoice ${voidInvoiceTarget.invoiceNumber} berhasil di-void.`);
+      toastSuccess("Berhasil", `Tagihan ${voidInvoiceTarget.invoiceNumber} berhasil di-void.`);
       setVoidDialogOpen(false);
       setVoidInvoiceTarget(null);
       await loadData();
@@ -240,9 +275,58 @@ export default function ContractDetailPage() {
     setProcessing(true);
     try {
       await api.markInvoicePaid(markPaidTarget.id);
-      toastSuccess("Berhasil", `Invoice ${markPaidTarget.invoiceNumber} ditandai lunas.`);
+      toastSuccess("Berhasil", `Tagihan ${markPaidTarget.invoiceNumber} ditandai lunas.`);
       setMarkPaidDialogOpen(false);
       setMarkPaidTarget(null);
+      await loadData();
+    } catch (error: any) {
+      toastError("Gagal", error.message);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleRevertInvoice = async () => {
+    if (!revertTarget) return;
+    setProcessing(true);
+    try {
+      await api.revertInvoiceStatus(revertTarget.id);
+      toastSuccess("Berhasil", `Tagihan ${revertTarget.invoiceNumber} dikembalikan ke PENDING.`);
+      setRevertDialogOpen(false);
+      setRevertTarget(null);
+      await loadData();
+    } catch (error: any) {
+      toastError("Gagal", error.message);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleReceiveUnit = async () => {
+    if (!bastPhoto.trim()) {
+      toastError("Gagal", "Foto BAST wajib dilampirkan");
+      return;
+    }
+    setProcessing(true);
+    try {
+      await api.receiveUnit(id, bastPhoto.trim(), bastNotes.trim());
+      toastSuccess("Berhasil", "Unit berhasil diterima. Billing harian dimulai H+1.");
+      setReceiveUnitDialogOpen(false);
+      setBastPhoto("");
+      setBastNotes("");
+      await loadData();
+    } catch (error: any) {
+      toastError("Gagal", error.message);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handlePayBilling = async (billingId: string) => {
+    setProcessing(true);
+    try {
+      await api.payBilling(billingId);
+      toastSuccess("Berhasil", "Billing berhasil dibayar.");
       await loadData();
     } catch (error: any) {
       toastError("Gagal", error.message);
@@ -298,7 +382,7 @@ export default function ContractDetailPage() {
           </Button>
           {canExtend && (
             <Button onClick={() => setExtendDialogOpen(true)}>
-              <RefreshCw className="h-4 w-4 mr-2" /> Perpanjang Sewa
+              <RefreshCw className="h-4 w-4 mr-2" /> Bayar Tagihan
             </Button>
           )}
           {canCancel && (
@@ -313,6 +397,125 @@ export default function ContractDetailPage() {
           )}
         </div>
       </div>
+
+      {/* Payment Status Summary - Prominent at top */}
+      <Card className={
+        contract.status === "COMPLETED" ? "border-green-300 dark:border-green-800 bg-green-50/50 dark:bg-green-950/20" :
+        contract.status === "REPOSSESSED" ? "border-red-300 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20" :
+        !contract.dpFullyPaid ? "border-yellow-300 dark:border-yellow-800 bg-yellow-50/50 dark:bg-yellow-950/20" :
+        contract.status === "OVERDUE" ? "border-red-300 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20" :
+        activeBilling ? "border-blue-300 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20" :
+        "border-green-300 dark:border-green-800 bg-green-50/50 dark:bg-green-950/20"
+      }>
+        <CardContent className="p-4">
+          <div className="flex flex-col md:flex-row md:items-center gap-4">
+            {/* Status Icon & Text */}
+            <div className="flex items-center gap-3 flex-1">
+              {contract.status === "COMPLETED" ? (
+                <>
+                  <div className="h-12 w-12 rounded-full bg-green-100 dark:bg-green-900/50 flex items-center justify-center">
+                    <Trophy className="h-6 w-6 text-green-600" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-green-700 dark:text-green-400 text-lg">Motor Resmi Milik Customer</p>
+                    <p className="text-sm text-green-600 dark:text-green-500">Tanggal kepemilikan: {contract.completedAt && formatDate(contract.completedAt)}</p>
+                  </div>
+                </>
+              ) : contract.status === "REPOSSESSED" ? (
+                <>
+                  <div className="h-12 w-12 rounded-full bg-red-100 dark:bg-red-900/50 flex items-center justify-center">
+                    <AlertTriangle className="h-6 w-6 text-red-600" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-red-700 dark:text-red-400 text-lg">Motor Ditarik</p>
+                    <p className="text-sm text-red-600 dark:text-red-500">Tanggal penarikan: {contract.repossessedAt && formatDate(contract.repossessedAt)}</p>
+                  </div>
+                </>
+              ) : contract.status === "CANCELLED" ? (
+                <>
+                  <div className="h-12 w-12 rounded-full bg-gray-100 dark:bg-gray-900/50 flex items-center justify-center">
+                    <Ban className="h-6 w-6 text-gray-600" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-gray-700 dark:text-gray-400 text-lg">Kontrak Dibatalkan</p>
+                  </div>
+                </>
+              ) : !contract.dpFullyPaid ? (
+                <>
+                  <div className="h-12 w-12 rounded-full bg-yellow-100 dark:bg-yellow-900/50 flex items-center justify-center">
+                    <CreditCard className="h-6 w-6 text-yellow-600" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-yellow-700 dark:text-yellow-400 text-lg">Menunggu Pembayaran DP</p>
+                    <p className="text-sm text-yellow-600 dark:text-yellow-500">
+                      {contract.dpScheme === "FULL" ? "DP Lunas" : "DP Cicilan 2x"} — Terbayar {formatCurrency(contract.dpPaidAmount)} dari {formatCurrency(contract.dpAmount)}
+                    </p>
+                  </div>
+                </>
+              ) : !contract.unitReceivedDate ? (
+                <>
+                  <div className="h-12 w-12 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center">
+                    <Package className="h-6 w-6 text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-blue-700 dark:text-blue-400 text-lg">Menunggu Serah Terima Unit</p>
+                    <p className="text-sm text-blue-600 dark:text-blue-500">DP sudah lunas. Unit motor belum diserahkan ke customer.</p>
+                  </div>
+                </>
+              ) : contract.status === "OVERDUE" ? (
+                <>
+                  <div className="h-12 w-12 rounded-full bg-red-100 dark:bg-red-900/50 flex items-center justify-center">
+                    <AlertTriangle className="h-6 w-6 text-red-600" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-red-700 dark:text-red-400 text-lg">Terlambat Bayar</p>
+                    <p className="text-sm text-red-600 dark:text-red-500">
+                      Customer melewati jatuh tempo. Grace period: {contract.gracePeriodDays} hari.
+                    </p>
+                  </div>
+                </>
+              ) : activeBilling ? (
+                <>
+                  <div className="h-12 w-12 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center">
+                    <CreditCard className="h-6 w-6 text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-blue-700 dark:text-blue-400 text-lg">Ada Tagihan Aktif</p>
+                    <p className="text-sm text-blue-600 dark:text-blue-500">
+                      {formatCurrency(activeBilling.amount)} — {activeBilling.daysCount} hari ({formatDate(activeBilling.periodStart)} s/d {formatDate(activeBilling.periodEnd)})
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="h-12 w-12 rounded-full bg-green-100 dark:bg-green-900/50 flex items-center justify-center">
+                    <CheckCircle2 className="h-6 w-6 text-green-600" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-green-700 dark:text-green-400 text-lg">Pembayaran Lancar</p>
+                    <p className="text-sm text-green-600 dark:text-green-500">Tidak ada tunggakan. Billing harian berjalan otomatis.</p>
+                  </div>
+                </>
+              )}
+            </div>
+            {/* Quick Stats */}
+            <div className="flex gap-4 text-center">
+              <div className="px-4 py-2 rounded-lg bg-white/60 dark:bg-gray-900/40">
+                <p className="text-xs text-muted-foreground">Progress</p>
+                <p className="font-bold text-lg">{contract.ownershipProgress}%</p>
+              </div>
+              <div className="px-4 py-2 rounded-lg bg-white/60 dark:bg-gray-900/40">
+                <p className="text-xs text-muted-foreground">Hari Dibayar</p>
+                <p className="font-bold text-lg">{contract.totalDaysPaid}</p>
+              </div>
+              <div className="px-4 py-2 rounded-lg bg-white/60 dark:bg-gray-900/40">
+                <p className="text-xs text-muted-foreground">Total Bayar</p>
+                <p className="font-bold text-lg">{formatCurrency(contract.totalAmount)}</p>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Ownership Progress */}
       <Card>
@@ -379,6 +582,197 @@ export default function ContractDetailPage() {
         </CardContent>
       </Card>
 
+      {/* DP Status Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <CreditCard className="h-5 w-5" /> Status Down Payment (DP)
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+              <p className="text-xs text-muted-foreground">Skema DP</p>
+              <p className="font-bold text-lg mt-1">
+                {contract.dpScheme === "FULL" ? "Lunas" : "Cicilan 2x"}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Total DP</p>
+              <p className="font-bold text-lg mt-1">{formatCurrency(contract.dpAmount)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Terbayar</p>
+              <p className="font-bold text-lg mt-1">{formatCurrency(contract.dpPaidAmount)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Status</p>
+              <Badge variant={contract.dpFullyPaid ? "success" : "warning"} className="mt-1">
+                {contract.dpFullyPaid ? "Lunas" : "Belum Lunas"}
+              </Badge>
+            </div>
+          </div>
+          {/* DP Invoice List */}
+          {(() => {
+            const dpInvoices = invoices.filter(inv => inv.type === "DP" || inv.type === "DP_INSTALLMENT");
+            if (dpInvoices.length === 0) return null;
+            return (
+              <div className="mt-4 pt-4 border-t space-y-2">
+                <p className="text-xs text-muted-foreground font-medium">Tagihan DP</p>
+                {dpInvoices.map((inv, idx) => (
+                  <div key={inv.id} className="flex items-center justify-between text-sm bg-muted/30 rounded-lg p-3">
+                    <div className="flex items-center gap-3">
+                      <span className="font-mono text-xs">{inv.invoiceNumber}</span>
+                      {inv.type === "DP_INSTALLMENT" && (
+                        <span className="text-xs text-muted-foreground">Cicilan {idx + 1}</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="font-medium">{formatCurrency(inv.amount)}</span>
+                      <Badge variant={paymentBadgeVariant(inv.status)} className="text-xs">
+                        {inv.status}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+        </CardContent>
+      </Card>
+
+      {/* Unit Delivery & Billing Status */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Package className="h-5 w-5" /> Pengiriman Unit & Billing
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Unit Delivery */}
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground font-medium">Pengiriman Unit</p>
+              {contract.unitReceivedDate ? (
+                <div className="bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-900 rounded-lg p-3">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    <span className="text-sm font-medium text-green-700 dark:text-green-400">Unit Diterima</span>
+                  </div>
+                  <p className="text-xs text-green-600 dark:text-green-500 mt-1">
+                    {formatDate(contract.unitReceivedDate)}
+                  </p>
+                  {contract.billingStartDate && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Billing dimulai: {formatDate(contract.billingStartDate)}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-lg p-3">
+                  <div className="flex items-center gap-2">
+                    <Package className="h-4 w-4 text-amber-600" />
+                    <span className="text-sm font-medium text-amber-700 dark:text-amber-400">Menunggu Pengiriman</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    DP harus dibayar sebelum unit bisa dikirim.
+                  </p>
+                  {contract.status === "ACTIVE" && (
+                    <Button
+                      size="sm"
+                      className="mt-2"
+                      onClick={() => setReceiveUnitDialogOpen(true)}
+                    >
+                      <Package className="h-3.5 w-3.5 mr-1" /> Terima Unit
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Current Billing */}
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground font-medium">Billing Harian Aktif</p>
+              {activeBilling ? (
+                <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-lg p-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="font-mono text-xs">{activeBilling.billingNumber}</span>
+                      <p className="text-lg font-bold mt-1">{formatCurrency(activeBilling.amount)}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {activeBilling.daysCount} hari tertunggak
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      disabled={processing}
+                      onClick={() => handlePayBilling(activeBilling.id)}
+                    >
+                      <Zap className="h-3.5 w-3.5 mr-1" /> Bayar
+                    </Button>
+                  </div>
+                </div>
+              ) : contract.unitReceivedDate ? (
+                <div className="bg-muted/30 rounded-lg p-3 text-center">
+                  <p className="text-sm text-muted-foreground">Tidak ada billing aktif</p>
+                </div>
+              ) : (
+                <div className="bg-muted/30 rounded-lg p-3 text-center">
+                  <p className="text-sm text-muted-foreground">Billing dimulai setelah unit diterima</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Libur Bayar Info */}
+          <div className="mt-4 pt-4 border-t">
+            <div className="flex items-center gap-2 text-sm">
+              <CalendarOff className="h-4 w-4 text-muted-foreground" />
+              <span className="text-muted-foreground">Libur Bayar:</span>
+              <span className="font-medium">Setiap Minggu + {contract.holidayDaysPerMonth} hari/bulan</span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1 ml-6">
+              Hari libur tetap dihitung sebagai progress kepemilikan tanpa biaya.
+            </p>
+          </div>
+
+          {/* Billing History */}
+          {billings.length > 0 && (
+            <div className="mt-4 pt-4 border-t">
+              <p className="text-xs text-muted-foreground font-medium mb-2">Riwayat Billing ({billings.length})</p>
+              <div className="space-y-1 max-h-48 overflow-y-auto">
+                {billings.slice(0, 20).map((b) => (
+                  <div key={b.id} className="flex items-center justify-between text-xs bg-muted/20 rounded px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono">{b.billingNumber}</span>
+                      <Badge
+                        variant={
+                          b.status === "PAID" ? "success" :
+                          b.status === "ACTIVE" ? "default" :
+                          b.status === "EXPIRED" ? "warning" :
+                          "secondary"
+                        }
+                        className="text-[10px]"
+                      >
+                        {b.status}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {b.daysCount === 0 ? (
+                        <span className="text-muted-foreground">Libur</span>
+                      ) : (
+                        <span>{b.daysCount} hari</span>
+                      )}
+                      <span className="font-medium">{formatCurrency(b.amount)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Contract Info */}
         <Card className="lg:col-span-2">
@@ -392,6 +786,10 @@ export default function ContractDetailPage() {
               <div>
                 <p className="text-xs text-muted-foreground">Model Motor</p>
                 <p className="text-lg font-bold mt-1">{contract.motorModel}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Tipe Baterai</p>
+                <p className="font-medium mt-1">{contract.batteryType === "EXTENDED" ? "Extended" : "Regular"}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Rate / Hari</p>
@@ -418,6 +816,38 @@ export default function ContractDetailPage() {
                 <p className="font-medium mt-1">{contract.gracePeriodDays} hari</p>
               </div>
             </div>
+            {/* Unit Details */}
+            {(contract.color || contract.vinNumber || contract.engineNumber || contract.year) && (
+              <div className="mt-4 pt-4 border-t">
+                <p className="text-xs text-muted-foreground font-semibold uppercase mb-3">Detail Unit</p>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {contract.color && (
+                    <div>
+                      <p className="text-xs text-muted-foreground">Warna</p>
+                      <p className="font-medium mt-0.5">{contract.color}</p>
+                    </div>
+                  )}
+                  {contract.year && (
+                    <div>
+                      <p className="text-xs text-muted-foreground">Tahun</p>
+                      <p className="font-medium mt-0.5">{contract.year}</p>
+                    </div>
+                  )}
+                  {contract.vinNumber && (
+                    <div>
+                      <p className="text-xs text-muted-foreground">VIN</p>
+                      <p className="font-medium font-mono mt-0.5">{contract.vinNumber}</p>
+                    </div>
+                  )}
+                  {contract.engineNumber && (
+                    <div>
+                      <p className="text-xs text-muted-foreground">No. Mesin</p>
+                      <p className="font-medium font-mono mt-0.5">{contract.engineNumber}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
             {contract.notes && (
               <div className="mt-4 pt-4 border-t">
                 <p className="text-xs text-muted-foreground">Catatan</p>
@@ -482,7 +912,7 @@ export default function ContractDetailPage() {
                           {idx === 0 && inv.extensionDays
                             ? `Kontrak awal (${inv.extensionDays} hari)`
                             : inv.extensionDays
-                            ? `Perpanjangan ${inv.extensionDays} hari`
+                            ? `Bayar Tagihan ${inv.extensionDays} hari`
                             : `Pembayaran ${inv.invoiceNumber}`
                           }
                         </p>
@@ -505,12 +935,12 @@ export default function ContractDetailPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
-            <CreditCard className="h-5 w-5" /> Riwayat Invoice ({invoices.length})
+            <CreditCard className="h-5 w-5" /> Riwayat Tagihan ({invoices.length})
           </CardTitle>
         </CardHeader>
         <CardContent>
           {invoices.length === 0 ? (
-            <p className="text-muted-foreground text-center py-4">Belum ada invoice.</p>
+            <p className="text-muted-foreground text-center py-4">Belum ada tagihan.</p>
           ) : (
             <div className="space-y-4">
               {invoices.map((invoice) => (
@@ -618,6 +1048,16 @@ export default function ContractDetailPage() {
                         </Button>
                       </>
                     )}
+                    {(invoice.status === "PAID" || invoice.status === "VOID") && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={processing}
+                        onClick={() => { setRevertTarget(invoice); setRevertDialogOpen(true); }}
+                      >
+                        <Undo2 className="h-3.5 w-3.5 mr-1" /> Revert
+                      </Button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -673,7 +1113,7 @@ export default function ContractDetailPage() {
                 )}
                 {qrInvoice.extensionDays && (
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Perpanjangan</span>
+                    <span className="text-muted-foreground">Tagihan Harian</span>
                     <span>{qrInvoice.extensionDays} hari</span>
                   </div>
                 )}
@@ -707,14 +1147,14 @@ export default function ContractDetailPage() {
       <Dialog open={extendDialogOpen} onOpenChange={setExtendDialogOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Perpanjang Sewa</DialogTitle>
+            <DialogTitle>Bayar Tagihan</DialogTitle>
             <DialogDescription>
-              Perpanjang kontrak {contract.contractNumber} (maks 7 hari per perpanjangan).
+              Bayar tagihan harian kontrak {contract.contractNumber} (maks 7 hari per pembayaran).
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>Durasi Perpanjangan</Label>
+              <Label>Jumlah Hari</Label>
               <Select value={extendDays} onValueChange={setExtendDays}>
                 <SelectTrigger>
                   <SelectValue />
@@ -756,7 +1196,7 @@ export default function ContractDetailPage() {
               Batal
             </Button>
             <Button onClick={handleExtend} disabled={processing}>
-              {processing ? "Memproses..." : "Perpanjang"}
+              {processing ? "Memproses..." : "Bayar"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -792,7 +1232,7 @@ export default function ContractDetailPage() {
 
       {/* Edit Contract Dialog */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Kontrak</DialogTitle>
             <DialogDescription>
@@ -800,15 +1240,45 @@ export default function ContractDetailPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Catatan</Label>
-              <Textarea
-                value={editNotes}
-                onChange={(e) => setEditNotes(e.target.value)}
-                placeholder="Catatan kontrak..."
-                rows={3}
-              />
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Detail Unit</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Warna</Label>
+                <Input
+                  value={editColor}
+                  onChange={(e) => setEditColor(e.target.value)}
+                  placeholder="Warna motor"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Tahun</Label>
+                <Input
+                  type="number"
+                  value={editYear}
+                  onChange={(e) => setEditYear(e.target.value)}
+                  placeholder="2025"
+                />
+              </div>
             </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>VIN Number</Label>
+                <Input
+                  value={editVinNumber}
+                  onChange={(e) => setEditVinNumber(e.target.value)}
+                  placeholder="Nomor VIN"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Nomor Mesin</Label>
+                <Input
+                  value={editEngineNumber}
+                  onChange={(e) => setEditEngineNumber(e.target.value)}
+                  placeholder="Nomor mesin"
+                />
+              </div>
+            </div>
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider pt-2">Pengaturan</h3>
             <div className="space-y-2">
               <Label>Grace Period (hari)</Label>
               <Input
@@ -830,6 +1300,15 @@ export default function ContractDetailPage() {
                 Progress saat ini: {contract.totalDaysPaid} / {editOwnershipTarget || contract.ownershipTargetDays} hari
                 ({editOwnershipTarget ? ((contract.totalDaysPaid / parseInt(editOwnershipTarget || "1")) * 100).toFixed(1) : contract.ownershipProgress}%)
               </p>
+            </div>
+            <div className="space-y-2">
+              <Label>Catatan</Label>
+              <Textarea
+                value={editNotes}
+                onChange={(e) => setEditNotes(e.target.value)}
+                placeholder="Catatan kontrak..."
+                rows={3}
+              />
             </div>
           </div>
           <DialogFooter>
@@ -890,17 +1369,17 @@ export default function ContractDetailPage() {
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <FileX className="h-5 w-5" /> Void Invoice
+              <FileX className="h-5 w-5" /> Void Tagihan
             </DialogTitle>
             <DialogDescription>
-              Void invoice {voidInvoiceTarget?.invoiceNumber}? Invoice yang di-void tidak dapat dibayar.
+              Void tagihan {voidInvoiceTarget?.invoiceNumber}? Tagihan yang di-void tidak dapat dibayar.
             </DialogDescription>
           </DialogHeader>
           <div className="bg-muted/50 rounded-lg p-4 text-sm space-y-1">
-            <p><strong>Invoice:</strong> {voidInvoiceTarget?.invoiceNumber}</p>
+            <p><strong>Tagihan:</strong> {voidInvoiceTarget?.invoiceNumber}</p>
             <p><strong>Jumlah:</strong> {voidInvoiceTarget && formatCurrency(voidInvoiceTarget.amount)}</p>
             {voidInvoiceTarget?.extensionDays && (
-              <p><strong>Perpanjangan:</strong> {voidInvoiceTarget.extensionDays} hari</p>
+              <p><strong>Tagihan Harian:</strong> {voidInvoiceTarget.extensionDays} hari</p>
             )}
           </div>
           <DialogFooter>
@@ -908,7 +1387,68 @@ export default function ContractDetailPage() {
               Batal
             </Button>
             <Button variant="destructive" onClick={handleVoidInvoice} disabled={processing}>
-              {processing ? "Memproses..." : "Ya, Void Invoice"}
+              {processing ? "Memproses..." : "Ya, Void Tagihan"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Receive Unit Confirmation Dialog */}
+      <Dialog open={receiveUnitDialogOpen} onOpenChange={(open) => { setReceiveUnitDialogOpen(open); if (!open) { setBastPhoto(""); setBastNotes(""); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Package className="h-5 w-5" /> Serah Terima Unit (BAST)
+            </DialogTitle>
+            <DialogDescription>
+              Konfirmasi penerimaan unit motor untuk kontrak {contract.contractNumber}.
+              Billing harian akan dimulai H+1.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="bg-muted/50 rounded-lg p-4 text-sm space-y-1">
+              <p><strong>Customer:</strong> {customer.fullName}</p>
+              <p><strong>Motor:</strong> {contract.motorModel} ({contract.batteryType === "EXTENDED" ? "Extended" : "Regular"})</p>
+              <p><strong>Skema DP:</strong> {contract.dpScheme === "FULL" ? "Lunas" : "Cicilan 2x"}</p>
+              <p><strong>Status DP:</strong> {contract.dpFullyPaid ? "Lunas" : `Terbayar ${formatCurrency(contract.dpPaidAmount)} / ${formatCurrency(contract.dpAmount)}`}</p>
+            </div>
+            {!contract.dpFullyPaid && contract.dpScheme === "FULL" && (
+              <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 rounded-lg p-3 text-sm text-red-700 dark:text-red-400">
+                <strong>DP belum lunas!</strong> Customer harus membayar DP terlebih dahulu sebelum unit bisa diserahkan.
+              </div>
+            )}
+            {!contract.dpFullyPaid && contract.dpScheme === "INSTALLMENT" && (
+              <div className="bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-200 dark:border-yellow-900 rounded-lg p-3 text-sm text-yellow-700 dark:text-yellow-400">
+                <strong>Perhatian:</strong> DP cicilan pertama harus sudah dibayar sebelum unit bisa diserahkan.
+              </div>
+            )}
+            <div>
+              <Label className="text-sm font-medium">Foto BAST <span className="text-red-500">*</span></Label>
+              <Input
+                value={bastPhoto}
+                onChange={(e) => setBastPhoto(e.target.value)}
+                placeholder="URL foto bukti serah terima..."
+                className="mt-1"
+              />
+              <p className="text-xs text-muted-foreground mt-1">Masukkan URL foto Berita Acara Serah Terima (BAST)</p>
+            </div>
+            <div>
+              <Label className="text-sm font-medium">Catatan BAST</Label>
+              <Textarea
+                value={bastNotes}
+                onChange={(e) => setBastNotes(e.target.value)}
+                placeholder="Catatan tambahan serah terima (opsional)..."
+                className="mt-1"
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReceiveUnitDialogOpen(false)}>
+              Batal
+            </Button>
+            <Button onClick={handleReceiveUnit} disabled={processing || !bastPhoto.trim()}>
+              {processing ? "Memproses..." : "Ya, Terima Unit"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -922,14 +1462,14 @@ export default function ContractDetailPage() {
               <CheckCircle2 className="h-5 w-5 text-green-600" /> Tandai Lunas
             </DialogTitle>
             <DialogDescription>
-              Tandai invoice {markPaidTarget?.invoiceNumber} sebagai lunas secara manual?
+              Tandai tagihan {markPaidTarget?.invoiceNumber} sebagai lunas secara manual?
             </DialogDescription>
           </DialogHeader>
           <div className="bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-900 rounded-lg p-4 text-sm space-y-1">
-            <p><strong>Invoice:</strong> {markPaidTarget?.invoiceNumber}</p>
+            <p><strong>Tagihan:</strong> {markPaidTarget?.invoiceNumber}</p>
             <p><strong>Jumlah:</strong> {markPaidTarget && formatCurrency(markPaidTarget.amount)}</p>
             {markPaidTarget?.extensionDays && (
-              <p><strong>Perpanjangan:</strong> {markPaidTarget.extensionDays} hari (akan diterapkan ke kontrak)</p>
+              <p><strong>Tagihan Harian:</strong> {markPaidTarget.extensionDays} hari (akan diterapkan ke kontrak)</p>
             )}
           </div>
           <DialogFooter>
@@ -938,6 +1478,37 @@ export default function ContractDetailPage() {
             </Button>
             <Button variant="success" onClick={handleMarkPaid} disabled={processing}>
               {processing ? "Memproses..." : "Ya, Tandai Lunas"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Revert Invoice Confirmation Dialog */}
+      <Dialog open={revertDialogOpen} onOpenChange={(open) => { setRevertDialogOpen(open); if (!open) setRevertTarget(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Undo2 className="h-5 w-5 text-orange-600" /> Revert Status
+            </DialogTitle>
+            <DialogDescription>
+              Kembalikan tagihan {revertTarget?.invoiceNumber} ke status PENDING?
+              {revertTarget?.status === "PAID" && " Perubahan pada kontrak akan di-revert."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-900 rounded-lg p-4 text-sm space-y-1">
+            <p><strong>Tagihan:</strong> {revertTarget?.invoiceNumber}</p>
+            <p><strong>Status saat ini:</strong> {revertTarget?.status}</p>
+            <p><strong>Jumlah:</strong> {revertTarget && formatCurrency(revertTarget.amount + (revertTarget.lateFee || 0))}</p>
+            {revertTarget?.status === "PAID" && revertTarget?.extensionDays && (
+              <p className="text-orange-700 dark:text-orange-400"><strong>Perhatian:</strong> {revertTarget.extensionDays} hari yang sudah dikreditkan akan dikurangi dari kontrak.</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setRevertDialogOpen(false); setRevertTarget(null); }}>
+              Batal
+            </Button>
+            <Button variant="destructive" onClick={handleRevertInvoice} disabled={processing}>
+              {processing ? "Memproses..." : "Ya, Revert"}
             </Button>
           </DialogFooter>
         </DialogContent>

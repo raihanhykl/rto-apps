@@ -8,11 +8,11 @@
 - **System**: Internal RTO (Rent To Own) Management
 - **Users**: Admin only (no customer login)
 - **Motor Models**:
-  - Athena Regular Battery (55K/day, DP Rp 530.000)
-  - Athena Extended Battery (55K/day, DP Rp 580.000)
-  - Victory Regular Battery (55K/day, DP Rp 530.000)
-  - Victory Extended Battery (55K/day, DP Rp 580.000)
-  - EdPower (75K/day, DP Rp 780.000)
+  - Athena Regular Battery (58K/day, DP Rp 530.000)
+  - Athena Extended Battery (63K/day, DP Rp 580.000)
+  - Victory Regular Battery (58K/day, DP Rp 530.000)
+  - Victory Extended Battery (63K/day, DP Rp 580.000)
+  - EdPower (83K/day, DP Rp 780.000)
 - **Ownership Target**: 1.278 hari
 - **Billing Model**: Auto-billing harian dengan rollover
 - **Payment Gateway**: DOKU
@@ -88,6 +88,7 @@ npm run dev:frontend
 | POST | /api/invoices/:id/payment | Simulate payment |
 | PATCH | /api/invoices/:id/void | Void invoice |
 | PATCH | /api/invoices/:id/mark-paid | Manual mark paid |
+| PATCH | /api/invoices/:id/revert | Revert invoice status to PENDING |
 | POST | /api/invoices/bulk-pay | Bulk mark invoices as paid |
 | GET | /api/invoices/:id/pdf | Download invoice as PDF |
 | PUT | /api/contracts/:id | Edit contract |
@@ -861,7 +862,7 @@ Ketentuan per kontrak:
 **Updated Constants:**
 - `OWNERSHIP_TARGET_DAYS`: 1825 → 1278
 - `DP_AMOUNTS`: New constant per motor+battery
-- `MOTOR_DAILY_RATES`: Unchanged (Athena/Victory 55K, EdPower 75K)
+- `MOTOR_DAILY_RATES`: Now keyed by `MOTOR_BATTERY` (Athena/Victory Regular 58K, Extended 63K, EdPower 83K)
 
 ### New API Endpoints
 
@@ -995,39 +996,48 @@ Fokus: Pengalaman pengguna yang lebih baik dan UI yang lebih lengkap.
 > Fokus: Transformasi model bisnis RTO — DP, billing otomatis, DOKU, WhatsApp reminder.
 > Phase 7 (Security) ditunda sampai semua micro-phase ini selesai dan stabil.
 
-#### MP-6A: Domain Model & Enum Overhaul (Backend) — Kompleksitas: M
+#### MP-6A: Domain Model & Enum Overhaul (Backend) — Kompleksitas: M ✅ COMPLETED
 
-- [ ] Update `Contract` entity: batteryType, unitReceivedDate, dpAmount, dpScheme, dpPaidAmount, holidayDaysPerMonth, billingStartDate
-- [ ] Update `Invoice` entity: type, dokuPaymentUrl, dokuReferenceId, billingPeriodStart, billingPeriodEnd
-- [ ] Create `Billing` entity baru (daily billing lifecycle)
-- [ ] Add enums: BatteryType, InvoiceType, BillingStatus
-- [ ] Update constants: OWNERSHIP_TARGET_DAYS=1278, DP_AMOUNTS
-- [ ] Create IBillingRepository interface + InMemoryBillingRepository
+- [x] Update `Contract` entity: batteryType, unitReceivedDate, dpAmount, dpScheme, dpPaidAmount, holidayDaysPerMonth, billingStartDate
+- [x] Update `Invoice` entity: type, dokuPaymentUrl, dokuReferenceId, billingPeriodStart, billingPeriodEnd
+- [x] Create `Billing` entity baru (daily billing lifecycle)
+- [x] Add enums: BatteryType, InvoiceType, BillingStatus, DPScheme
+- [x] Update constants: OWNERSHIP_TARGET_DAYS=1278, DP_AMOUNTS, MOTOR_DAILY_RATES (motor+battery keys)
+- [x] Create IBillingRepository interface + InMemoryBillingRepository
+- [x] Update frontend types (Contract, Invoice, Billing, enums, constants)
 
-**Files:** Contract.ts, Invoice.ts, Billing.ts (new), enums/index.ts, interfaces/, InMemoryBillingRepository.ts (new)
+**Files:** Contract.ts, Invoice.ts, Billing.ts (new), enums/index.ts, interfaces/, InMemoryBillingRepository.ts (new), frontend types/index.ts
 **Dependencies:** Tidak ada (foundation layer)
 
-#### MP-6B: DP & Contract Creation Flow (Backend) — Kompleksitas: M
+#### MP-6B: DP & Contract Creation Flow (Backend) — Kompleksitas: M ✅ COMPLETED
 
-- [ ] Update CreateContractDto: batteryType, dpScheme
-- [ ] Rewrite ContractService.create() untuk DP flow
-- [ ] Generate DP invoice (lunas atau cicilan 2x)
-- [ ] Add unit delivery tracking (receive-unit endpoint)
-- [ ] Add DP settings ke SettingService
+- [x] Update CreateContractDto: remove durationDays, add batteryType + dpScheme
+- [x] Rewrite ContractService.create() untuk DP flow (contract starts durationDays=0, totalAmount=0)
+- [x] Generate DP invoice: FULL=1 invoice (type=DP), INSTALLMENT=2 invoices (type=DP_INSTALLMENT, ceil/floor split)
+- [x] Add ContractService.receiveUnit(): validate DP paid, set unitReceivedDate + billingStartDate (H+1)
+- [x] Add ContractController.receiveUnit handler + PATCH /api/contracts/:id/receive-unit route
+- [x] Update SettingService: ownership_target_days default 1825→1278
+- [x] Update seed data with DP invoices, battery types, realistic DP scenarios
+- [x] Update ContractService tests: 93 tests passing (up from 88), 7 new receiveUnit tests
 
-**Files:** dtos/index.ts, ContractService.ts, SettingService.ts, routes/index.ts
+**Files:** dtos/index.ts, ContractService.ts, ContractController.ts, routes/index.ts, SettingService.ts, seed.ts, ContractService.test.ts
 **Dependencies:** MP-6A
 
-#### MP-6C: Billing Lifecycle & Rollover (Backend) — Kompleksitas: L
+#### MP-6C: Billing Lifecycle & Rollover (Backend) — Kompleksitas: L ✅ COMPLETED
 
-- [ ] Create BillingService: generateDailyBilling(), rolloverExpiredBillings()
-- [ ] Billing → Invoice conversion on payment
-- [ ] Libur Bayar logic (Minggu, 2-4 hari/bulan, configurable per kontrak)
-- [ ] Create scheduler.ts: daily cron job untuk auto-billing
-- [ ] Update ContractService: extend() → payBilling() terminology
-- [ ] Register scheduler di index.ts
+- [x] Create BillingService: generateDailyBilling(), rolloverExpiredBillings(), payBilling()
+- [x] Billing → Invoice conversion on payment (payBilling creates DAILY_BILLING invoice)
+- [x] Libur Bayar logic (Minggu auto-holiday + configurable holidays per month spread evenly)
+- [x] Holiday billings: zero amount, auto-PAID, credits 1 free day to ownership
+- [x] Rollover: expired billing → new billing with accumulated amount + days
+- [x] Create scheduler.ts: setInterval-based daily task runner (no external dependency)
+- [x] Scheduler runs: rolloverExpiredBillings → generateDailyBilling → checkAndUpdateOverdueContracts
+- [x] InMemoryBillingRepository registered in repos index
+- [x] BillingController with routes: GET /billings/contract/:id, GET /billings/contract/:id/active, POST /billings/:id/pay
+- [x] Registered scheduler + BillingService + BillingController in index.ts
+- [x] BillingService tests: 18 new tests (111 total, 5 suites)
 
-**Files:** BillingService.ts (new), scheduler.ts (new), ContractService.ts, InvoiceService.ts, index.ts
+**Files:** BillingService.ts (new), BillingController.ts (new), scheduler.ts (new), InMemoryBillingRepository.ts, index.ts, routes/index.ts, services/index.ts, repositories/index.ts
 **Dependencies:** MP-6A, MP-6B
 
 #### MP-6D: DOKU Payment Gateway (Backend) — Kompleksitas: L
@@ -1051,28 +1061,33 @@ Fokus: Pengalaman pengguna yang lebih baik dan UI yang lebih lengkap.
 **Files:** WhatsAppService.ts (new), ReminderService.ts (new), scheduler.ts, config/
 **Dependencies:** MP-6D (butuh payment link dari DOKU)
 
-#### MP-6F: Frontend — Terminologi & Contract Form (Frontend) — Kompleksitas: S
+#### MP-6F: Frontend — Terminologi & Contract Form (Frontend) — Kompleksitas: S ✅ COMPLETED
 
-- [ ] Rename semua "Extend Sewa" / "Perpanjang Sewa" → "Bayar Tagihan"
-- [ ] Add battery type selector di contract creation form
-- [ ] Add DP scheme selector (lunas / cicilan 2x)
-- [ ] Update types: BatteryType, InvoiceType, DPScheme enums; Contract/Invoice interfaces
-- [ ] Update API client: extendContract → payBilling, add DP methods
-- [ ] Update contractSchema di schemas.ts
+- [x] Rename semua "Perpanjang Sewa" → "Bayar Tagihan" across all frontend pages
+- [x] Rename "Perpanjangan" → "Tagihan Harian" in receipt/void/mark-paid dialogs
+- [x] Add battery type selector (REGULAR/EXTENDED) di contract creation form
+- [x] Add DP scheme selector (Lunas/Cicilan 2x) di contract creation form
+- [x] DP cost preview with installment breakdown in contract form
+- [x] Update contractSchema: removed durationDays, added batteryType + dpScheme
+- [x] Update API client: added receiveUnit() method
+- [x] Frontend TypeScript compiles clean
 
-**Files:** contracts/[id]/page.tsx, contracts/page.tsx, invoices/page.tsx, types/index.ts, api.ts, schemas.ts
+**Files:** contracts/[id]/page.tsx, contracts/page.tsx, invoices/page.tsx, schemas.ts, api.ts
 **Dependencies:** MP-6B
 
-#### MP-6G: Frontend — Billing & DP UI — Kompleksitas: M
+#### MP-6G: Frontend — Billing & DP UI — Kompleksitas: M ✅ COMPLETED
 
-- [ ] DP section di contract detail (status DP, cicilan progress)
-- [ ] Billing section di contract detail (current billing, rollover history)
-- [ ] Libur Bayar info display
-- [ ] Unit delivery date input/display
-- [ ] DP status column di contract list
-- [ ] Create BillingCard component
+- [x] API client updated: getBillingsByContract, getActiveBillingByContract, payBilling
+- [x] DP section di contract detail (status DP, scheme, amount, paid amount, DP invoices list)
+- [x] Billing section di contract detail (active billing with pay button, billing history)
+- [x] Libur Bayar info display (Setiap Minggu + N hari/bulan)
+- [x] Unit delivery display + "Terima Unit" button with confirmation dialog
+- [x] Battery type display in contract detail ("Tipe Baterai" field)
+- [x] DP status column di contract list (Lunas/Pending badge)
+- [x] ~~Create BillingCard component~~ (integrated directly into contract detail page)
+- [x] Frontend TypeScript compiles clean
 
-**Files:** contracts/[id]/page.tsx, contracts/page.tsx, BillingCard.tsx (new), api.ts
+**Files:** contracts/[id]/page.tsx, contracts/page.tsx, api.ts
 **Dependencies:** MP-6C, MP-6F
 
 #### MP-6H: Frontend — Payment Gateway & Reminder UI — Kompleksitas: S
@@ -1115,6 +1130,200 @@ MP-6A (Domain Models)
               └── MP-6H (FE Payment)
 MP-6I (Tests) — setelah semua backend phases
 ```
+
+---
+
+## 2026-03-03 - Data Model Update: Customer & Contract Fields
+
+### Context
+
+Update data model customer dan kontrak agar sesuai dengan kebutuhan operasional RTO yang sebenarnya. Menambahkan field untuk data pribadi lengkap (TTL, jenis kelamin, aplikasi ojol, penjamin, pasangan, dokumen foto) pada Customer, dan detail unit (warna, tahun, VIN, nomor mesin) pada Contract.
+
+### What was changed
+
+**Backend - Domain:**
+
+1. **Customer Entity** - Added fields:
+   - `birthDate: string | null` (TTL)
+   - `gender: Gender | null` (Laki-laki/Perempuan)
+   - `rideHailingApps: string[]` (Grab, Gojek, Maxim, Indrive, Shopee, dll)
+   - `ktpPhoto: string | null` (foto KTP)
+   - `simPhoto: string | null` (foto SIM)
+   - `kkPhoto: string | null` (foto KK)
+   - `guarantorName: string` (Nama Penjamin)
+   - `guarantorPhone: string` (Telepon Penjamin)
+   - `guarantorKtpPhoto: string | null` (foto KTP Penjamin)
+   - `spouseName: string` (Nama Pasangan, opsional)
+   - `spouseKtpPhoto: string | null` (foto KTP Pasangan, opsional)
+
+2. **Contract Entity** - Added fields:
+   - `color: string` (Warna motor)
+   - `year: number | null` (Tahun motor)
+   - `vinNumber: string` (VIN number)
+   - `engineNumber: string` (Nomor mesin)
+
+3. **New Enum**: `Gender` (MALE, FEMALE)
+
+**Backend - Application:**
+
+1. **CreateCustomerDto** - Added all new customer fields with optional defaults
+2. **UpdateCustomerDto** - Inherits from CreateCustomerDto.partial()
+3. **CreateContractDto** - Added: color, year, vinNumber, engineNumber (all optional)
+4. **UpdateContractDto** - Added: color, year, vinNumber, engineNumber (all optional)
+5. **CustomerService.create()** - Maps all new fields from DTO to entity
+6. **ContractService.create()** - Maps unit detail fields
+7. **ContractService.editContract()** - Handles updating unit detail fields
+
+**Backend - Infrastructure:**
+
+1. **Seed data** - Updated with realistic customer data:
+   - Birth dates, genders, ride-hailing apps, guarantor names/phones
+   - Contract unit details: colors, year 2025, VIN numbers, engine numbers
+
+**Frontend:**
+
+1. **Types** - Added Gender enum, all new Customer/Contract fields
+2. **Customer Form** (`customers/page.tsx`):
+   - Widened dialog (max-w-2xl) with scrollable content
+   - Sections: Data Pribadi, Aplikasi Ojol (toggle buttons), Penjamin, Pasangan
+   - Birth date (date input), gender (select), ride-hailing apps (chip toggles)
+   - Guarantor name/phone, spouse name fields
+   - Note about photo upload (deferred to Phase 8)
+3. **Customer List** - Added Aplikasi (badge chips) and Penjamin columns
+4. **Customer Detail** (`customers/[id]/page.tsx`):
+   - Shows: birth date, gender, apps badges, guarantor section, spouse section
+   - New icons: Calendar, Users, Heart, Car
+5. **Contract Form** (`contracts/page.tsx`):
+   - "Detail Unit" section: warna, tahun, VIN number, nomor mesin
+   - Year converted from string to number on submit
+6. **Contract Detail** (`contracts/[id]/page.tsx`):
+   - "Detail Unit" sub-section showing color, year, VIN, engine number
+   - Edit dialog expanded with unit detail fields
+7. **API Client** - Updated `editContract()` signature with new fields
+8. **Schemas** - Updated customerSchema and contractSchema with new fields
+
+### Modified Files
+
+**Backend:**
+- `packages/backend/src/domain/entities/Customer.ts`
+- `packages/backend/src/domain/entities/Contract.ts`
+- `packages/backend/src/domain/enums/index.ts` (Gender enum)
+- `packages/backend/src/application/dtos/index.ts`
+- `packages/backend/src/application/services/CustomerService.ts`
+- `packages/backend/src/application/services/ContractService.ts`
+- `packages/backend/src/infrastructure/seed.ts`
+- `packages/backend/src/__tests__/CustomerService.test.ts`
+- `packages/backend/src/__tests__/ContractService.test.ts`
+- `packages/backend/src/__tests__/InvoiceService.test.ts`
+- `packages/backend/src/__tests__/BillingService.test.ts`
+
+**Frontend:**
+- `packages/frontend/src/types/index.ts`
+- `packages/frontend/src/lib/schemas.ts`
+- `packages/frontend/src/lib/api.ts`
+- `packages/frontend/src/app/(dashboard)/customers/page.tsx`
+- `packages/frontend/src/app/(dashboard)/customers/[id]/page.tsx`
+- `packages/frontend/src/app/(dashboard)/contracts/page.tsx`
+- `packages/frontend/src/app/(dashboard)/contracts/[id]/page.tsx`
+
+### Tests
+
+- 111 tests passing (5 suites, unchanged count)
+- All existing tests updated with new required entity fields
+- Frontend TypeScript compiles clean
+- Backend TypeScript compiles clean
+
+### Notes
+
+- Photo upload fields (ktpPhoto, simPhoto, kkPhoto, guarantorKtpPhoto, spouseKtpPhoto) are stored as `string | null` (URL/path). Actual file upload mechanism deferred to Phase 8 (File Upload).
+- Customer form shows a note: "Upload foto dokumen akan tersedia setelah fitur upload diimplementasi."
+
+---
+
+## 2026-03-03 - Bug Fixes, UX Improvements & Admin Controls
+
+### Context
+
+Comprehensive round of bug fixes, UX improvements, and admin control features based on operational feedback.
+
+### What was changed
+
+**Bug Fixes (Backend):**
+
+1. **DP status not updating after payment** - `InvoiceService.applyPaymentToContract()` rewritten to handle DP/DP_INSTALLMENT invoice types. Now updates `dpPaidAmount` and `dpFullyPaid` on contract when DP invoices are paid.
+
+2. **Late fee always applied** - `ContractService.extend()` late fee calculation changed from `if (existing.endDate < now)` to `if (existing.status === ContractStatus.OVERDUE && existing.billingStartDate)`. Only applies late fee when contract is genuinely overdue and billing has started.
+
+**DP Validation & BAST (Backend + Frontend):**
+
+1. **DP validation on receive unit** - Backend `receiveUnit()` now checks `dpFullyPaid` flag first, then verifies against individual invoice statuses. Frontend shows warning banner when DP not fully paid.
+
+2. **BAST (Berita Acara Serah Terima)** - Added `bastPhoto: string | null` and `bastNotes: string` to Contract entity. `receiveUnit()` now requires `bastPhoto` (mandatory) and accepts `bastNotes` (optional). Frontend dialog updated with photo URL input and notes textarea.
+
+**Invoice Revert Feature (Backend + Frontend):**
+
+1. **Revert invoice status** - New `PATCH /api/invoices/:id/revert` endpoint. Allows admin to revert PAID or VOID invoices back to PENDING. When reverting from PAID, automatically undoes contract changes (DP tracking, extension days, ownership progress).
+
+2. **Frontend Revert button** - Added "Revert" button on PAID and VOID invoices in both contract detail page and invoices list page. Orange-themed confirmation dialog warns about reverting contract changes.
+
+**Terminology Update (Frontend):**
+
+- All user-visible "Invoice" text changed to "Tagihan" across:
+  - Invoices page: heading, subtitle, search placeholder, empty states, counters
+  - Contract detail page: section headers, dialog titles, toast messages
+  - Customer detail page: section header, table header, empty state
+  - Sidebar navigation: "Invoices" → "Tagihan"
+  - Command palette: search result title and subtitle
+  - All confirmation dialogs: "Void Invoice" → "Void Tagihan", etc.
+
+**Payment Status Summary (Frontend):**
+
+- New prominent payment status card at top of contract detail page
+- Color-coded based on state: DP pending (yellow), unit not received (blue), overdue (red), active billing (blue), all clear (green), completed (green), repossessed (red), cancelled (gray)
+- Shows contextual message and quick stats (progress %, days paid, total paid)
+- Replaces need to scroll down to find payment information
+
+**Edit Customer (Frontend):**
+
+- Added edit button on customer detail page header
+- Full edit dialog with sections: Data Pribadi, Aplikasi Ojol (toggle buttons), Penjamin, Pasangan, Catatan
+- Uses existing `PUT /api/customers/:id` endpoint
+
+### New API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| PATCH | /api/invoices/:id/revert | Revert invoice status to PENDING |
+
+### Modified Files
+
+**Backend:**
+- `packages/backend/src/domain/entities/Contract.ts` (bastPhoto, bastNotes)
+- `packages/backend/src/application/services/ContractService.ts` (late fee fix, BAST in create/receiveUnit)
+- `packages/backend/src/application/services/InvoiceService.ts` (DP fix, revertInvoiceStatus)
+- `packages/backend/src/presentation/controllers/ContractController.ts` (BAST params)
+- `packages/backend/src/presentation/controllers/InvoiceController.ts` (revertStatus handler)
+- `packages/backend/src/presentation/routes/index.ts` (revert route)
+- `packages/backend/src/infrastructure/seed.ts` (BAST fields)
+- `packages/backend/src/__tests__/ContractService.test.ts` (BAST tests, receiveUnit params)
+- `packages/backend/src/__tests__/InvoiceService.test.ts` (BAST fields)
+- `packages/backend/src/__tests__/BillingService.test.ts` (BAST fields)
+
+**Frontend:**
+- `packages/frontend/src/types/index.ts` (bastPhoto, bastNotes on Contract)
+- `packages/frontend/src/lib/api.ts` (receiveUnit params, revertInvoiceStatus)
+- `packages/frontend/src/app/(dashboard)/contracts/[id]/page.tsx` (payment status, BAST dialog, revert, terminology)
+- `packages/frontend/src/app/(dashboard)/invoices/page.tsx` (revert button/dialog, terminology)
+- `packages/frontend/src/app/(dashboard)/customers/[id]/page.tsx` (edit dialog, terminology)
+- `packages/frontend/src/components/Sidebar.tsx` (Tagihan label)
+- `packages/frontend/src/components/CommandPalette.tsx` (Tagihan label)
+
+### Tests
+
+- 112 tests passing (5 suites)
+- New test: BAST photo validation on receiveUnit
+- Updated receiveUnit tests with bastPhoto parameter
+- Frontend and backend TypeScript compile clean
 
 ---
 

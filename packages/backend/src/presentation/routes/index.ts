@@ -7,12 +7,14 @@ import { DashboardController } from '../controllers/DashboardController';
 import { ReportController } from '../controllers/ReportController';
 import { AuditController } from '../controllers/AuditController';
 import { SettingController } from '../controllers/SettingController';
+import { BillingController } from '../controllers/BillingController';
 
 interface RouteControllers {
   authController: AuthController;
   customerController: CustomerController;
   contractController: ContractController;
   invoiceController: InvoiceController;
+  billingController: BillingController;
   dashboardController: DashboardController;
   reportController: ReportController;
   auditController: AuditController;
@@ -47,6 +49,7 @@ export function createRoutes(controllers: RouteControllers): Router {
   router.get('/contracts/:id', authMiddleware, controllers.contractController.getById);
   router.post('/contracts', authMiddleware, controllers.contractController.create);
   router.post('/contracts/:id/extend', authMiddleware, controllers.contractController.extend);
+  router.patch('/contracts/:id/receive-unit', authMiddleware, controllers.contractController.receiveUnit);
   router.patch('/contracts/:id/repossess', authMiddleware, controllers.contractController.repossess);
   router.put('/contracts/:id', authMiddleware, controllers.contractController.editContract);
   router.patch('/contracts/:id/cancel', authMiddleware, controllers.contractController.cancelContract);
@@ -60,10 +63,16 @@ export function createRoutes(controllers: RouteControllers): Router {
   router.post('/invoices/:id/payment', authMiddleware, controllers.invoiceController.simulatePayment);
   router.patch('/invoices/:id/void', authMiddleware, controllers.invoiceController.voidInvoice);
   router.patch('/invoices/:id/mark-paid', authMiddleware, controllers.invoiceController.markPaid);
+  router.patch('/invoices/:id/revert', authMiddleware, controllers.invoiceController.revertStatus);
   router.post('/invoices/bulk-pay', authMiddleware, controllers.invoiceController.bulkMarkPaid);
 
   // Invoices - PDF
   router.get('/invoices/:id/pdf', authMiddleware, controllers.invoiceController.downloadPdf);
+
+  // Billings
+  router.get('/billings/contract/:contractId', authMiddleware, controllers.billingController.getByContractId);
+  router.get('/billings/contract/:contractId/active', authMiddleware, controllers.billingController.getActiveByContractId);
+  router.post('/billings/:id/pay', authMiddleware, controllers.billingController.payBilling);
 
   // Reports
   router.get('/reports', authMiddleware, controllers.reportController.getReport);

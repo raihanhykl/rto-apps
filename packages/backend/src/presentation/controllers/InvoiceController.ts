@@ -93,6 +93,15 @@ export class InvoiceController {
     }
   };
 
+  revertStatus = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const invoice = await this.invoiceService.revertInvoiceStatus(req.params.id, req.user!.id);
+      res.json(invoice);
+    } catch (error) {
+      next(error);
+    }
+  };
+
   bulkMarkPaid = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { invoiceIds } = req.body;

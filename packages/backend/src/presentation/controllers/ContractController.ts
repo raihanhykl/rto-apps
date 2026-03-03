@@ -5,6 +5,19 @@ import { CreateContractDto, UpdateContractStatusDto, ExtendContractDto, UpdateCo
 export class ContractController {
   constructor(private contractService: ContractService) {}
 
+  receiveUnit = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { bastPhoto, bastNotes } = req.body;
+      if (!bastPhoto) {
+        return res.status(400).json({ error: 'Foto BAST wajib dilampirkan' });
+      }
+      const contract = await this.contractService.receiveUnit(req.params.id, req.user!.id, bastPhoto, bastNotes);
+      res.json(contract);
+    } catch (error) {
+      next(error);
+    }
+  };
+
   editContract = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const dto = UpdateContractDto.parse(req.body);
