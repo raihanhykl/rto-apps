@@ -2,25 +2,30 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useAuthStore } from "@/stores/authStore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Zap } from "lucide-react";
+import { loginSchema, LoginFormData } from "@/lib/schemas";
 
 export default function LoginPage() {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const { login, error, clearError } = useAuthStore();
   const router = useRouter();
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const { register, handleSubmit, formState: { errors } } = useForm<LoginFormData>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: { username: "", password: "" },
+  });
+
+  const onSubmit = async (data: LoginFormData) => {
     setLoading(true);
     try {
-      await login(username, password);
+      await login(data.username, data.password);
       router.push("/");
     } catch {
       // error handled by store
@@ -43,7 +48,7 @@ export default function LoginPage() {
           <CardDescription>Masuk ke dashboard admin</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             {error && (
               <div className="bg-destructive/10 text-destructive text-sm p-3 rounded-md">
                 {error}
@@ -53,22 +58,24 @@ export default function LoginPage() {
               <Label htmlFor="username">Username</Label>
               <Input
                 id="username"
-                value={username}
-                onChange={(e) => { clearError(); setUsername(e.target.value); }}
+                {...register("username", { onChange: () => clearError() })}
                 placeholder="Masukkan username"
-                required
               />
+              {errors.username && (
+                <p className="text-destructive text-xs">{errors.username.message}</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
               <Input
                 id="password"
                 type="password"
-                value={password}
-                onChange={(e) => { clearError(); setPassword(e.target.value); }}
+                {...register("password", { onChange: () => clearError() })}
                 placeholder="Masukkan password"
-                required
               />
+              {errors.password && (
+                <p className="text-destructive text-xs">{errors.password.message}</p>
+              )}
             </div>
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? "Memproses..." : "Login"}

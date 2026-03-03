@@ -1,10 +1,12 @@
 import { Invoice } from '../entities';
 import { PaymentStatus } from '../enums';
+import { PaginationParams, PaginatedResult } from './Pagination';
 
 export interface IInvoiceRepository {
   findAll(): Promise<Invoice[]>;
+  findAllPaginated(params: PaginationParams): Promise<PaginatedResult<Invoice>>;
   findById(id: string): Promise<Invoice | null>;
-  findByContractId(contractId: string): Promise<Invoice | null>;
+  findByContractId(contractId: string): Promise<Invoice[]>;
   findByCustomerId(customerId: string): Promise<Invoice[]>;
   findByStatus(status: PaymentStatus): Promise<Invoice[]>;
   create(invoice: Invoice): Promise<Invoice>;

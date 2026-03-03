@@ -1,4 +1,4 @@
-import { IAuditLogRepository } from '../../domain/interfaces';
+import { IAuditLogRepository, PaginationParams, PaginatedResult } from '../../domain/interfaces';
 import { AuditLog } from '../../domain/entities';
 
 export class AuditService {
@@ -6,6 +6,10 @@ export class AuditService {
 
   async getAll(): Promise<AuditLog[]> {
     return this.auditRepo.findAll();
+  }
+
+  async getAllPaginated(params: PaginationParams): Promise<PaginatedResult<AuditLog>> {
+    return this.auditRepo.findAllPaginated(params);
   }
 
   async getByUserId(userId: string): Promise<AuditLog[]> {

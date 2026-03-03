@@ -11,10 +11,10 @@ export type LoginDto = z.infer<typeof LoginDto>;
 // Customer DTOs
 export const CreateCustomerDto = z.object({
   fullName: z.string().min(1, 'Full name is required'),
-  phone: z.string().min(1, 'Phone is required'),
+  phone: z.string().regex(/^(\+62|62|0)8[0-9]{8,12}$/, 'Format nomor telepon tidak valid (contoh: 08xxx atau +628xxx)'),
   email: z.string().email('Invalid email').optional().default(''),
   address: z.string().min(1, 'Address is required'),
-  ktpNumber: z.string().min(16, 'KTP must be 16 digits').max(16, 'KTP must be 16 digits'),
+  ktpNumber: z.string().regex(/^\d{16}$/, 'KTP harus 16 digit angka'),
   notes: z.string().optional().default(''),
 });
 export type CreateCustomerDto = z.infer<typeof CreateCustomerDto>;
@@ -36,6 +36,23 @@ export const UpdateContractStatusDto = z.object({
   status: z.nativeEnum(ContractStatus),
 });
 export type UpdateContractStatusDto = z.infer<typeof UpdateContractStatusDto>;
+
+export const UpdateContractDto = z.object({
+  notes: z.string().optional(),
+  gracePeriodDays: z.number().int().min(1).optional(),
+  ownershipTargetDays: z.number().int().min(1).optional(),
+});
+export type UpdateContractDto = z.infer<typeof UpdateContractDto>;
+
+export const ExtendContractDto = z.object({
+  durationDays: z.number().int().min(1).max(7, 'Maximum 7 days per extension'),
+});
+export type ExtendContractDto = z.infer<typeof ExtendContractDto>;
+
+export const CancelContractDto = z.object({
+  reason: z.string().min(1, 'Cancellation reason is required'),
+});
+export type CancelContractDto = z.infer<typeof CancelContractDto>;
 
 // Payment DTOs
 export const SimulatePaymentDto = z.object({

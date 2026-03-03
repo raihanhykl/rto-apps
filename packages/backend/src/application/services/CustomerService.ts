@@ -1,17 +1,22 @@
-import { ICustomerRepository, IAuditLogRepository } from '../../domain/interfaces';
+import { ICustomerRepository, IContractRepository, IAuditLogRepository, PaginationParams, PaginatedResult } from '../../domain/interfaces';
 import { Customer } from '../../domain/entities';
-import { AuditAction } from '../../domain/enums';
+import { AuditAction, ContractStatus } from '../../domain/enums';
 import { CreateCustomerDto, UpdateCustomerDto } from '../dtos';
 import { v4 as uuidv4 } from 'uuid';
 
 export class CustomerService {
   constructor(
     private customerRepo: ICustomerRepository,
-    private auditRepo: IAuditLogRepository
+    private auditRepo: IAuditLogRepository,
+    private contractRepo?: IContractRepository
   ) {}
 
   async getAll(): Promise<Customer[]> {
     return this.customerRepo.findAll();
+  }
+
+  async getAllPaginated(params: PaginationParams): Promise<PaginatedResult<Customer>> {
+    return this.customerRepo.findAllPaginated(params);
   }
 
   async getById(id: string): Promise<Customer> {
@@ -36,6 +41,8 @@ export class CustomerService {
       address: dto.address,
       ktpNumber: dto.ktpNumber,
       notes: dto.notes || '',
+      isDeleted: false,
+      deletedAt: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -88,7 +95,19 @@ export class CustomerService {
     const existing = await this.customerRepo.findById(id);
     if (!existing) throw new Error('Customer not found');
 
-    await this.customerRepo.delete(id);
+    // Check for active/overdue contracts
+    if (this.contractRepo) {
+      const contracts = await this.contractRepo.findByCustomerId(id);
+      const activeContracts = contracts.filter(
+        c => c.status === ContractStatus.ACTIVE || c.status === ContractStatus.OVERDUE
+      );
+      if (activeContracts.length > 0) {
+        throw new Error(`Cannot delete customer with ${activeContracts.length} active contract(s)`);
+      }
+    }
+
+    // Soft delete
+    await this.customerRepo.update(id, { isDeleted: true, deletedAt: new Date() });
 
     await this.auditRepo.create({
       id: uuidv4(),
@@ -96,7 +115,7 @@ export class CustomerService {
       action: AuditAction.DELETE,
       module: 'customer',
       entityId: id,
-      description: `Deleted customer: ${existing.fullName}`,
+      description: `Soft-deleted customer: ${existing.fullName}`,
       metadata: { customerName: existing.fullName },
       ipAddress: '',
       createdAt: new Date(),

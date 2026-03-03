@@ -9,6 +9,7 @@ export enum ContractStatus {
   COMPLETED = 'COMPLETED',
   OVERDUE = 'OVERDUE',
   CANCELLED = 'CANCELLED',
+  REPOSSESSED = 'REPOSSESSED',
 }
 
 export enum PaymentStatus {
@@ -16,6 +17,7 @@ export enum PaymentStatus {
   PAID = 'PAID',
   FAILED = 'FAILED',
   EXPIRED = 'EXPIRED',
+  VOID = 'VOID',
 }
 
 export const MOTOR_DAILY_RATES: Record<MotorModel, number> = {
@@ -39,6 +41,8 @@ export interface Customer {
   address: string;
   ktpNumber: string;
   notes: string;
+  isDeleted: boolean;
+  deletedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -56,6 +60,15 @@ export interface Contract {
   status: ContractStatus;
   notes: string;
   createdBy: string;
+  // RTO fields
+  ownershipTargetDays: number;
+  totalDaysPaid: number;
+  ownershipProgress: number;
+  gracePeriodDays: number;
+  repossessedAt: string | null;
+  completedAt: string | null;
+  isDeleted: boolean;
+  deletedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -66,12 +79,33 @@ export interface Invoice {
   contractId: string;
   customerId: string;
   amount: number;
+  lateFee: number;
   status: PaymentStatus;
   qrCodeData: string;
   dueDate: string;
   paidAt: string | null;
+  extensionDays: number | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ReportData {
+  generatedAt: string;
+  period: string;
+  contracts: Array<Contract & { customerName: string }>;
+  invoices: Array<Invoice & { customerName: string }>;
+  summary: {
+    totalContracts: number;
+    totalInvoices: number;
+    totalRevenue: number;
+    pendingAmount: number;
+    contractsByStatus: Record<string, number>;
+    revenueByMotor: Record<string, number>;
+    revenueByMonth: Array<{ month: string; revenue: number }>;
+    topCustomers: Array<{ name: string; totalPaid: number; contractCount: number }>;
+    overdueCount: number;
+    averageOwnershipProgress: number;
+  };
 }
 
 export interface AuditLog {
@@ -100,6 +134,7 @@ export interface DashboardStats {
   activeContracts: number;
   completedContracts: number;
   overdueContracts: number;
+  repossessedContracts: number;
   pendingPayments: number;
   totalRevenue: number;
   pendingRevenue: number;
@@ -109,6 +144,18 @@ export interface DashboardStats {
     description: string;
     createdAt: string;
   }>;
+  chartData: {
+    revenueByMonth: Array<{ month: string; revenue: number }>;
+    contractsByStatus: Record<string, number>;
+  };
+}
+
+export interface PaginatedResult<T> {
+  data: T[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 }
 
 export interface LoginResponse {

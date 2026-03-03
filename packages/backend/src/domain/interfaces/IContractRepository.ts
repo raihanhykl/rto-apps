@@ -1,8 +1,10 @@
 import { Contract } from '../entities';
 import { ContractStatus } from '../enums';
+import { PaginationParams, PaginatedResult } from './Pagination';
 
 export interface IContractRepository {
   findAll(): Promise<Contract[]>;
+  findAllPaginated(params: PaginationParams): Promise<PaginatedResult<Contract>>;
   findById(id: string): Promise<Contract | null>;
   findByCustomerId(customerId: string): Promise<Contract[]>;
   findByStatus(status: ContractStatus): Promise<Contract[]>;

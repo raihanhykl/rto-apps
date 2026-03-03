@@ -41,10 +41,16 @@ export function createRoutes(controllers: RouteControllers): Router {
 
   // Contracts
   router.get('/contracts', authMiddleware, controllers.contractController.getAll);
+  router.get('/contracts/overdue-warnings', authMiddleware, controllers.contractController.getOverdueWarnings);
   router.get('/contracts/customer/:customerId', authMiddleware, controllers.contractController.getByCustomerId);
   router.get('/contracts/:id/detail', authMiddleware, controllers.contractController.getDetailById);
   router.get('/contracts/:id', authMiddleware, controllers.contractController.getById);
   router.post('/contracts', authMiddleware, controllers.contractController.create);
+  router.post('/contracts/:id/extend', authMiddleware, controllers.contractController.extend);
+  router.patch('/contracts/:id/repossess', authMiddleware, controllers.contractController.repossess);
+  router.put('/contracts/:id', authMiddleware, controllers.contractController.editContract);
+  router.patch('/contracts/:id/cancel', authMiddleware, controllers.contractController.cancelContract);
+  router.delete('/contracts/:id', authMiddleware, controllers.contractController.softDelete);
   router.patch('/contracts/:id/status', authMiddleware, controllers.contractController.updateStatus);
 
   // Invoices
@@ -52,11 +58,18 @@ export function createRoutes(controllers: RouteControllers): Router {
   router.get('/invoices/:id', authMiddleware, controllers.invoiceController.getById);
   router.get('/invoices/:id/qr', authMiddleware, controllers.invoiceController.getQRCode);
   router.post('/invoices/:id/payment', authMiddleware, controllers.invoiceController.simulatePayment);
+  router.patch('/invoices/:id/void', authMiddleware, controllers.invoiceController.voidInvoice);
+  router.patch('/invoices/:id/mark-paid', authMiddleware, controllers.invoiceController.markPaid);
+  router.post('/invoices/bulk-pay', authMiddleware, controllers.invoiceController.bulkMarkPaid);
+
+  // Invoices - PDF
+  router.get('/invoices/:id/pdf', authMiddleware, controllers.invoiceController.downloadPdf);
 
   // Reports
   router.get('/reports', authMiddleware, controllers.reportController.getReport);
   router.get('/reports/export/json', authMiddleware, controllers.reportController.exportJSON);
   router.get('/reports/export/csv', authMiddleware, controllers.reportController.exportCSV);
+  router.get('/reports/export/xlsv', authMiddleware, controllers.reportController.exportXLSV);
 
   // Audit Logs
   router.get('/audit-logs', authMiddleware, controllers.auditController.getAll);
@@ -64,6 +77,10 @@ export function createRoutes(controllers: RouteControllers): Router {
 
   // Settings
   router.get('/settings', authMiddleware, controllers.settingController.getAll);
+  router.get('/settings/rates', authMiddleware, (_req, res) => {
+    const { MOTOR_DAILY_RATES } = require('../../domain/enums');
+    res.json(MOTOR_DAILY_RATES);
+  });
   router.put('/settings', authMiddleware, controllers.settingController.update);
 
   return router;

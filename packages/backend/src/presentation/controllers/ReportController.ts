@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
-import { ReportService } from '../../application/services';
+import { ReportService, ReportFilters } from '../../application/services/ReportService';
 import { IAuditLogRepository } from '../../domain/interfaces';
-import { AuditAction } from '../../domain/enums';
+import { AuditAction, ContractStatus, MotorModel } from '../../domain/enums';
 import { v4 as uuidv4 } from 'uuid';
 
 export class ReportController {
@@ -10,9 +10,23 @@ export class ReportController {
     private auditRepo: IAuditLogRepository
   ) {}
 
-  getReport = async (_req: Request, res: Response, next: NextFunction) => {
+  private parseFilters(query: any): ReportFilters {
+    const filters: ReportFilters = {};
+    if (query.startDate) filters.startDate = query.startDate as string;
+    if (query.endDate) filters.endDate = query.endDate as string;
+    if (query.status && Object.values(ContractStatus).includes(query.status)) {
+      filters.status = query.status as ContractStatus;
+    }
+    if (query.motorModel && Object.values(MotorModel).includes(query.motorModel)) {
+      filters.motorModel = query.motorModel as MotorModel;
+    }
+    return filters;
+  }
+
+  getReport = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const report = await this.reportService.generateReport();
+      const filters = this.parseFilters(req.query);
+      const report = await this.reportService.generateReport(filters);
       res.json(report);
     } catch (error) {
       next(error);
@@ -21,7 +35,8 @@ export class ReportController {
 
   exportJSON = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const json = await this.reportService.exportJSON();
+      const filters = this.parseFilters(req.query);
+      const json = await this.reportService.exportJSON(filters);
 
       await this.auditRepo.create({
         id: uuidv4(),
@@ -30,7 +45,7 @@ export class ReportController {
         module: 'report',
         entityId: '',
         description: 'Exported report as JSON',
-        metadata: {},
+        metadata: { filters },
         ipAddress: '',
         createdAt: new Date(),
       });
@@ -45,7 +60,8 @@ export class ReportController {
 
   exportCSV = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const csv = await this.reportService.exportCSV();
+      const filters = this.parseFilters(req.query);
+      const csv = await this.reportService.exportCSV(filters);
 
       await this.auditRepo.create({
         id: uuidv4(),
@@ -54,7 +70,7 @@ export class ReportController {
         module: 'report',
         entityId: '',
         description: 'Exported report as CSV',
-        metadata: {},
+        metadata: { filters },
         ipAddress: '',
         createdAt: new Date(),
       });
@@ -62,6 +78,31 @@ export class ReportController {
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename=wedison-report.csv');
       res.send(csv);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  exportXLSV = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const filters = this.parseFilters(req.query);
+      const xlsv = await this.reportService.exportXLSV(filters);
+
+      await this.auditRepo.create({
+        id: uuidv4(),
+        userId: req.user!.id,
+        action: AuditAction.EXPORT,
+        module: 'report',
+        entityId: '',
+        description: 'Exported report as XLSV (Excel-compatible)',
+        metadata: { filters },
+        ipAddress: '',
+        createdAt: new Date(),
+      });
+
+      res.setHeader('Content-Type', 'text/tab-separated-values');
+      res.setHeader('Content-Disposition', 'attachment; filename=wedison-report.xls');
+      res.send(xlsv);
     } catch (error) {
       next(error);
     }

@@ -49,13 +49,13 @@ async function bootstrap() {
 
   // Initialize Services
   const authService = new AuthService(userRepo, auditRepo);
-  const customerService = new CustomerService(customerRepo, auditRepo);
-  const contractService = new ContractService(contractRepo, customerRepo, invoiceRepo, auditRepo);
+  const settingService = new SettingService(settingRepo, auditRepo);
+  const customerService = new CustomerService(customerRepo, auditRepo, contractRepo);
+  const contractService = new ContractService(contractRepo, customerRepo, invoiceRepo, auditRepo, settingService);
   const invoiceService = new InvoiceService(invoiceRepo, contractRepo, auditRepo);
   const dashboardService = new DashboardService(contractRepo, customerRepo, invoiceRepo, auditRepo);
   const reportService = new ReportService(contractRepo, customerRepo, invoiceRepo);
   const auditService = new AuditService(auditRepo);
-  const settingService = new SettingService(settingRepo, auditRepo);
 
   // Seed default data
   await authService.seedDefaultAdmin();
@@ -71,7 +71,7 @@ async function bootstrap() {
   const authController = new AuthController(authService);
   const customerController = new CustomerController(customerService);
   const contractController = new ContractController(contractService);
-  const invoiceController = new InvoiceController(invoiceService);
+  const invoiceController = new InvoiceController(invoiceService, contractService, customerService);
   const dashboardController = new DashboardController(dashboardService);
   const reportController = new ReportController(reportService, auditRepo);
   const auditController = new AuditController(auditService);

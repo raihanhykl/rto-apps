@@ -1,31 +1,53 @@
 import { Customer } from '../../domain/entities';
 import { ICustomerRepository } from '../../domain/interfaces';
+import { PaginationParams, PaginatedResult } from '../../domain/interfaces/Pagination';
 
 export class InMemoryCustomerRepository implements ICustomerRepository {
   private customers: Map<string, Customer> = new Map();
 
   async findAll(): Promise<Customer[]> {
-    return Array.from(this.customers.values()).sort(
-      (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
-    );
+    return Array.from(this.customers.values())
+      .filter(c => !c.isDeleted)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
+
+  async findAllPaginated(params: PaginationParams): Promise<PaginatedResult<Customer>> {
+    let items = Array.from(this.customers.values()).filter(c => !c.isDeleted);
+    if (params.search) {
+      const q = params.search.toLowerCase();
+      items = items.filter(c => c.fullName.toLowerCase().includes(q) || c.phone.includes(q) || c.email.toLowerCase().includes(q) || c.ktpNumber.includes(q));
+    }
+    const sortBy = params.sortBy || 'createdAt';
+    const sortOrder = params.sortOrder || 'desc';
+    items.sort((a, b) => { const aVal = (a as any)[sortBy]; const bVal = (b as any)[sortBy]; if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1; if (aVal > bVal) return sortOrder === 'asc' ? 1 : -1; return 0; });
+    const total = items.length;
+    const page = params.page || 1;
+    const limit = params.limit || 20;
+    const start = (page - 1) * limit;
+    const data = items.slice(start, start + limit);
+    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async findById(id: string): Promise<Customer | null> {
-    return this.customers.get(id) || null;
+    const customer = this.customers.get(id) || null;
+    return customer;
   }
 
   async findByKtpNumber(ktpNumber: string): Promise<Customer | null> {
-    return Array.from(this.customers.values()).find(c => c.ktpNumber === ktpNumber) || null;
+    return Array.from(this.customers.values())
+      .find(c => c.ktpNumber === ktpNumber && !c.isDeleted) || null;
   }
 
   async search(query: string): Promise<Customer[]> {
     const q = query.toLowerCase();
     return Array.from(this.customers.values()).filter(
       c =>
-        c.fullName.toLowerCase().includes(q) ||
-        c.phone.includes(q) ||
-        c.email.toLowerCase().includes(q) ||
-        c.ktpNumber.includes(q)
+        !c.isDeleted && (
+          c.fullName.toLowerCase().includes(q) ||
+          c.phone.includes(q) ||
+          c.email.toLowerCase().includes(q) ||
+          c.ktpNumber.includes(q)
+        )
     );
   }
 
@@ -47,6 +69,6 @@ export class InMemoryCustomerRepository implements ICustomerRepository {
   }
 
   async count(): Promise<number> {
-    return this.customers.size;
+    return Array.from(this.customers.values()).filter(c => !c.isDeleted).length;
   }
 }

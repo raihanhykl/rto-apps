@@ -2,7 +2,7 @@ import { InvoiceService } from '../application/services/InvoiceService';
 import { InMemoryInvoiceRepository } from '../infrastructure/repositories/InMemoryInvoiceRepository';
 import { InMemoryContractRepository } from '../infrastructure/repositories/InMemoryContractRepository';
 import { InMemoryAuditLogRepository } from '../infrastructure/repositories/InMemoryAuditLogRepository';
-import { PaymentStatus, ContractStatus, MotorModel } from '../domain/enums';
+import { PaymentStatus, ContractStatus, MotorModel, DEFAULT_OWNERSHIP_TARGET_DAYS, DEFAULT_GRACE_PERIOD_DAYS } from '../domain/enums';
 import { v4 as uuidv4 } from 'uuid';
 import { Invoice, Contract } from '../domain/entities';
 
@@ -22,7 +22,7 @@ describe('InvoiceService', () => {
     auditRepo = new InMemoryAuditLogRepository();
     invoiceService = new InvoiceService(invoiceRepo, contractRepo, auditRepo);
 
-    // Seed a contract
+    // Seed a contract with RTO fields (totalDaysPaid=0, matching new creation logic)
     const contractId = uuidv4();
     const customerId = uuidv4();
     sampleContract = await contractRepo.create({
@@ -38,11 +38,19 @@ describe('InvoiceService', () => {
       status: ContractStatus.ACTIVE,
       notes: '',
       createdBy: adminId,
+      ownershipTargetDays: DEFAULT_OWNERSHIP_TARGET_DAYS,
+      totalDaysPaid: 0,
+      ownershipProgress: 0,
+      gracePeriodDays: DEFAULT_GRACE_PERIOD_DAYS,
+      repossessedAt: null,
+      completedAt: null,
+      isDeleted: false,
+      deletedAt: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
 
-    // Seed an invoice
+    // Seed initial invoice with extensionDays (matching new creation logic)
     const invoiceId = uuidv4();
     sampleInvoice = await invoiceRepo.create({
       id: invoiceId,
@@ -50,10 +58,12 @@ describe('InvoiceService', () => {
       contractId,
       customerId,
       amount: 165000,
+      lateFee: 0,
       status: PaymentStatus.PENDING,
       qrCodeData: 'WEDISON-PAY-INV-260301-0001-165000',
       dueDate: new Date('2026-03-02'),
       paidAt: null,
+      extensionDays: 3,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -77,6 +87,14 @@ describe('InvoiceService', () => {
     });
   });
 
+  describe('getByContractId', () => {
+    it('should return invoices array for contract', async () => {
+      const invoices = await invoiceService.getByContractId(sampleContract.id);
+      expect(Array.isArray(invoices)).toBe(true);
+      expect(invoices.length).toBe(1);
+    });
+  });
+
   describe('simulatePayment', () => {
     it('should mark invoice as PAID', async () => {
       const updated = await invoiceService.simulatePayment(
@@ -89,14 +107,18 @@ describe('InvoiceService', () => {
       expect(updated.paidAt).not.toBeNull();
     });
 
-    it('should update contract status to COMPLETED when paid', async () => {
+    it('should credit days to contract when initial invoice is paid', async () => {
       await invoiceService.simulatePayment(sampleInvoice.id, PaymentStatus.PAID, adminId);
 
       const contract = await contractRepo.findById(sampleContract.id);
-      expect(contract!.status).toBe(ContractStatus.COMPLETED);
+      // Initial payment credits totalDaysPaid but doesn't change durationDays/totalAmount/endDate
+      expect(contract!.totalDaysPaid).toBe(3);
+      expect(contract!.durationDays).toBe(3); // unchanged
+      expect(contract!.totalAmount).toBe(165000); // unchanged
+      expect(contract!.status).toBe(ContractStatus.ACTIVE);
     });
 
-    it('should mark invoice as FAILED without completing contract', async () => {
+    it('should mark invoice as FAILED without affecting contract', async () => {
       const updated = await invoiceService.simulatePayment(
         sampleInvoice.id,
         PaymentStatus.FAILED,
@@ -107,6 +129,7 @@ describe('InvoiceService', () => {
       expect(updated.paidAt).toBeNull();
 
       const contract = await contractRepo.findById(sampleContract.id);
+      expect(contract!.totalDaysPaid).toBe(0); // unchanged
       expect(contract!.status).toBe(ContractStatus.ACTIVE);
     });
 
@@ -131,6 +154,64 @@ describe('InvoiceService', () => {
       expect(logs.length).toBe(1);
       expect(logs[0].action).toBe('PAYMENT');
       expect(logs[0].module).toBe('invoice');
+    });
+
+    it('should apply extension to contract when extension invoice is paid', async () => {
+      // First pay the initial invoice
+      await invoiceService.simulatePayment(sampleInvoice.id, PaymentStatus.PAID, adminId);
+
+      // Create an extension invoice
+      const extInvoiceId = uuidv4();
+      await invoiceRepo.create({
+        id: extInvoiceId,
+        invoiceNumber: 'INV-260301-0002',
+        contractId: sampleContract.id,
+        customerId: sampleContract.customerId,
+        amount: 55000 * 5,
+        lateFee: 0,
+        status: PaymentStatus.PENDING,
+        qrCodeData: 'WEDISON-PAY-INV-260301-0002-275000',
+        dueDate: new Date('2026-03-05'),
+        paidAt: null,
+        extensionDays: 5,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      await invoiceService.simulatePayment(extInvoiceId, PaymentStatus.PAID, adminId);
+
+      const contract = await contractRepo.findById(sampleContract.id);
+      expect(contract!.totalDaysPaid).toBe(8); // 3 + 5
+      expect(contract!.durationDays).toBe(8); // 3 + 5
+      expect(contract!.totalAmount).toBe(165000 + 275000);
+    });
+
+    it('should NOT apply extension to contract when extension invoice fails', async () => {
+      // Pay initial invoice first
+      await invoiceService.simulatePayment(sampleInvoice.id, PaymentStatus.PAID, adminId);
+
+      const extInvoiceId = uuidv4();
+      await invoiceRepo.create({
+        id: extInvoiceId,
+        invoiceNumber: 'INV-260301-0003',
+        contractId: sampleContract.id,
+        customerId: sampleContract.customerId,
+        amount: 55000 * 5,
+        lateFee: 0,
+        status: PaymentStatus.PENDING,
+        qrCodeData: 'WEDISON-PAY-INV-260301-0003-275000',
+        dueDate: new Date('2026-03-05'),
+        paidAt: null,
+        extensionDays: 5,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      await invoiceService.simulatePayment(extInvoiceId, PaymentStatus.FAILED, adminId);
+
+      const contract = await contractRepo.findById(sampleContract.id);
+      expect(contract!.totalDaysPaid).toBe(3); // only initial payment
+      expect(contract!.durationDays).toBe(3); // unchanged
     });
   });
 
@@ -162,6 +243,97 @@ describe('InvoiceService', () => {
 
     it('should throw if invoice not found', async () => {
       await expect(invoiceService.generateQRCode('non-existent')).rejects.toThrow('Invoice not found');
+    });
+  });
+
+  describe('voidInvoice', () => {
+    it('should void a pending invoice', async () => {
+      const updated = await invoiceService.voidInvoice(sampleInvoice.id, adminId);
+      expect(updated.status).toBe(PaymentStatus.VOID);
+    });
+
+    it('should throw if invoice already paid', async () => {
+      await invoiceService.simulatePayment(sampleInvoice.id, PaymentStatus.PAID, adminId);
+      await expect(
+        invoiceService.voidInvoice(sampleInvoice.id, adminId)
+      ).rejects.toThrow('Cannot void a paid invoice');
+    });
+
+    it('should throw if invoice already voided', async () => {
+      await invoiceService.voidInvoice(sampleInvoice.id, adminId);
+      await expect(
+        invoiceService.voidInvoice(sampleInvoice.id, adminId)
+      ).rejects.toThrow('Invoice already voided');
+    });
+
+    it('should throw if invoice not found', async () => {
+      await expect(
+        invoiceService.voidInvoice('non-existent', adminId)
+      ).rejects.toThrow('Invoice not found');
+    });
+
+    it('should create audit log', async () => {
+      await invoiceService.voidInvoice(sampleInvoice.id, adminId);
+      const logs = await auditRepo.findAll();
+      const voidLog = logs.find(l => l.description.includes('Voided'));
+      expect(voidLog).toBeDefined();
+    });
+  });
+
+  describe('markPaid', () => {
+    it('should mark a pending invoice as paid', async () => {
+      const updated = await invoiceService.markPaid(sampleInvoice.id, adminId);
+      expect(updated.status).toBe(PaymentStatus.PAID);
+      expect(updated.paidAt).not.toBeNull();
+    });
+
+    it('should apply extension when marking extension invoice as paid', async () => {
+      // Pay initial invoice first
+      await invoiceService.simulatePayment(sampleInvoice.id, PaymentStatus.PAID, adminId);
+
+      const extInvoiceId = uuidv4();
+      await invoiceRepo.create({
+        id: extInvoiceId,
+        invoiceNumber: 'INV-260301-0010',
+        contractId: sampleContract.id,
+        customerId: sampleContract.customerId,
+        amount: 55000 * 3,
+        lateFee: 0,
+        status: PaymentStatus.PENDING,
+        qrCodeData: 'WEDISON-PAY-INV-260301-0010',
+        dueDate: new Date('2026-03-05'),
+        paidAt: null,
+        extensionDays: 3,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      await invoiceService.markPaid(extInvoiceId, adminId);
+
+      const contract = await contractRepo.findById(sampleContract.id);
+      expect(contract!.totalDaysPaid).toBe(6); // 3 + 3
+      expect(contract!.durationDays).toBe(6);
+    });
+
+    it('should throw if invoice already paid', async () => {
+      await invoiceService.markPaid(sampleInvoice.id, adminId);
+      await expect(
+        invoiceService.markPaid(sampleInvoice.id, adminId)
+      ).rejects.toThrow('Invoice already paid');
+    });
+
+    it('should throw if invoice is voided', async () => {
+      await invoiceService.voidInvoice(sampleInvoice.id, adminId);
+      await expect(
+        invoiceService.markPaid(sampleInvoice.id, adminId)
+      ).rejects.toThrow('Cannot pay a voided invoice');
+    });
+
+    it('should create audit log with manual flag', async () => {
+      await invoiceService.markPaid(sampleInvoice.id, adminId);
+      const logs = await auditRepo.findAll();
+      const payLog = logs.find(l => l.description.includes('Manual payment'));
+      expect(payLog).toBeDefined();
     });
   });
 });

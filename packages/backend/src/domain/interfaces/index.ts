@@ -4,3 +4,4 @@ export type { IContractRepository } from './IContractRepository';
 export type { IInvoiceRepository } from './IInvoiceRepository';
 export type { IAuditLogRepository } from './IAuditLogRepository';
 export type { ISettingRepository } from './ISettingRepository';
+export type { PaginationParams, PaginatedResult } from './Pagination';

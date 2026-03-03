@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { DashboardSkeleton } from "@/components/skeletons/DashboardSkeleton";
 import { api } from "@/lib/api";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
 import { DashboardStats } from "@/types";
@@ -15,7 +17,18 @@ import {
   Clock,
   CheckCircle2,
   Activity,
+  Ban,
 } from "lucide-react";
+
+const RevenueChart = dynamic(
+  () => import("@/components/charts/RevenueChart").then((m) => m.RevenueChart),
+  { ssr: false, loading: () => <div className="h-[280px] animate-pulse bg-muted rounded" /> }
+);
+
+const StatusDistributionChart = dynamic(
+  () => import("@/components/charts/StatusDistributionChart").then((m) => m.StatusDistributionChart),
+  { ssr: false, loading: () => <div className="h-[280px] animate-pulse bg-muted rounded" /> }
+);
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -37,11 +50,7 @@ export default function DashboardPage() {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
-      </div>
-    );
+    return <DashboardSkeleton />;
   }
 
   if (!stats) {
@@ -80,6 +89,13 @@ export default function DashboardPage() {
       icon: AlertTriangle,
       color: "text-red-600",
       bg: "bg-red-50",
+    },
+    {
+      title: "Repossessed",
+      value: stats.repossessedContracts,
+      icon: Ban,
+      color: "text-gray-600",
+      bg: "bg-gray-50",
     },
     {
       title: "Completed",
@@ -139,6 +155,26 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
         ))}
+      </div>
+
+      {/* Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Pendapatan per Bulan</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <RevenueChart data={stats.chartData.revenueByMonth} />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Distribusi Status Kontrak</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <StatusDistributionChart data={stats.chartData.contractsByStatus} />
+          </CardContent>
+        </Card>
       </div>
 
       {/* Recent Activity */}

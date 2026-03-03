@@ -26,6 +26,7 @@ const statusBadgeVariant = (status: string) => {
     case "COMPLETED": return "success" as const;
     case "OVERDUE": return "destructive" as const;
     case "CANCELLED": return "secondary" as const;
+    case "REPOSSESSED": return "destructive" as const;
     default: return "outline" as const;
   }
 };
@@ -35,6 +36,7 @@ const paymentBadgeVariant = (status: string) => {
     case "PENDING": return "warning" as const;
     case "PAID": return "success" as const;
     case "FAILED": return "destructive" as const;
+    case "VOID": return "secondary" as const;
     default: return "outline" as const;
   }
 };
@@ -87,8 +89,8 @@ export default function CustomerDetailPage() {
     );
   }
 
-  const totalSpent = invoices.filter(i => i.status === "PAID").reduce((s, i) => s + i.amount, 0);
-  const pendingAmount = invoices.filter(i => i.status === "PENDING").reduce((s, i) => s + i.amount, 0);
+  const totalSpent = invoices.filter(i => i.status === "PAID").reduce((s, i) => s + i.amount + (i.lateFee || 0), 0);
+  const pendingAmount = invoices.filter(i => i.status === "PENDING").reduce((s, i) => s + i.amount + (i.lateFee || 0), 0);
 
   return (
     <div className="space-y-6">
@@ -253,7 +255,7 @@ export default function CustomerDetailPage() {
                   {invoices.map((inv) => (
                     <tr key={inv.id} className="border-b last:border-0 hover:bg-muted/30">
                       <td className="p-3 font-mono text-sm">{inv.invoiceNumber}</td>
-                      <td className="p-3 text-sm font-medium">{formatCurrency(inv.amount)}</td>
+                      <td className="p-3 text-sm font-medium">{formatCurrency(inv.amount + (inv.lateFee || 0))}</td>
                       <td className="p-3">
                         <Badge variant={paymentBadgeVariant(inv.status)}>{inv.status}</Badge>
                       </td>

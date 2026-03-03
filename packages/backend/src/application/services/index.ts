@@ -8,3 +8,4 @@ export { ReportService } from './ReportService';
 export type { ReportData } from './ReportService';
 export { AuditService } from './AuditService';
 export { SettingService } from './SettingService';
+export { PdfService } from './PdfService';

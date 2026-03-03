@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { useForm, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,9 +23,13 @@ import {
   DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { Pagination } from "@/components/ui/pagination";
+import { SortableHeader } from "@/components/SortableHeader";
+import { usePagination } from "@/hooks/usePagination";
 import { api } from "@/lib/api";
-import { Contract, Customer, MotorModel, MOTOR_DAILY_RATES } from "@/types";
+import { Contract, Customer, MotorModel } from "@/types";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { contractSchema, ContractFormData } from "@/lib/schemas";
 import { Plus, FileText, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toastSuccess } from "@/stores/toastStore";
@@ -34,6 +40,7 @@ const statusBadgeVariant = (status: string) => {
     case "COMPLETED": return "success" as const;
     case "OVERDUE": return "destructive" as const;
     case "CANCELLED": return "secondary" as const;
+    case "REPOSSESSED": return "destructive" as const;
     default: return "outline" as const;
   }
 };
@@ -46,40 +53,66 @@ export default function ContractsPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
 
-  const [form, setForm] = useState({
-    customerId: "",
-    motorModel: "" as MotorModel | "",
-    durationDays: 1,
-    startDate: new Date().toISOString().split("T")[0],
-    notes: "",
+  const pagination = usePagination({ initialSortBy: "createdAt", initialSortOrder: "desc" });
+
+  const [motorRates, setMotorRates] = useState<Record<string, number>>({});
+
+  const { register, handleSubmit: rhfSubmit, reset, control, watch, formState: { errors } } = useForm<ContractFormData>({
+    resolver: zodResolver(contractSchema),
+    defaultValues: {
+      customerId: "",
+      motorModel: undefined,
+      durationDays: 1,
+      startDate: new Date().toISOString().split("T")[0],
+      notes: "",
+    },
   });
+  const watchMotorModel = watch("motorModel");
+  const watchDurationDays = watch("durationDays");
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
+  const loadContracts = useCallback(async () => {
+    setLoading(true);
     try {
-      const [contractsData, customersData] = await Promise.all([
-        api.getContracts(),
-        api.getCustomers(),
-      ]);
-      setContracts(contractsData);
-      setCustomers(customersData);
+      const result = await api.getContractsPaginated({
+        page: pagination.page,
+        limit: pagination.limit,
+        sortBy: pagination.sortBy,
+        sortOrder: pagination.sortOrder,
+        search: pagination.debouncedSearch || undefined,
+        status: statusFilter !== "ALL" ? statusFilter : undefined,
+      });
+      setContracts(result.data);
+      pagination.updateFromResult(result);
     } catch (error) {
-      console.error("Failed to load data:", error);
+      console.error("Failed to load contracts:", error);
     } finally {
       setLoading(false);
     }
+  }, [pagination.page, pagination.limit, pagination.sortBy, pagination.sortOrder, pagination.debouncedSearch, statusFilter]);
+
+  useEffect(() => {
+    loadContracts();
+  }, [loadContracts]);
+
+  useEffect(() => {
+    // Load customers and rates once for the create dialog
+    Promise.all([api.getCustomers(), api.getMotorRates()]).then(([c, r]) => {
+      setCustomers(c);
+      setMotorRates(r);
+    });
+  }, []);
+
+  const handleStatusFilterChange = (value: string) => {
+    setStatusFilter(value);
+    pagination.setPage(1);
   };
 
   const openCreate = () => {
-    setForm({
+    reset({
       customerId: "",
-      motorModel: "",
+      motorModel: undefined,
       durationDays: 1,
       startDate: new Date().toISOString().split("T")[0],
       notes: "",
@@ -89,29 +122,18 @@ export default function ContractsPage() {
   };
 
   const calculateTotal = () => {
-    if (!form.motorModel) return 0;
-    return MOTOR_DAILY_RATES[form.motorModel as MotorModel] * form.durationDays;
+    if (!watchMotorModel) return 0;
+    return (motorRates[watchMotorModel] || 0) * watchDurationDays;
   };
 
-  const handleSave = async () => {
-    if (!form.customerId || !form.motorModel || !form.startDate) {
-      setFormError("Customer, model motor, dan tanggal mulai wajib diisi.");
-      return;
-    }
-
+  const handleSave = async (data: ContractFormData) => {
     setSaving(true);
     setFormError("");
     try {
-      await api.createContract({
-        customerId: form.customerId,
-        motorModel: form.motorModel,
-        durationDays: form.durationDays,
-        startDate: form.startDate,
-        notes: form.notes,
-      });
+      await api.createContract(data);
       setDialogOpen(false);
-      toastSuccess("Kontrak dibuat", `Kontrak ${form.motorModel} (${form.durationDays} hari) berhasil dibuat.`);
-      loadData();
+      toastSuccess("Kontrak dibuat", `Kontrak ${data.motorModel} (${data.durationDays} hari) berhasil dibuat.`);
+      loadContracts();
     } catch (error: any) {
       setFormError(error.message);
     } finally {
@@ -122,26 +144,6 @@ export default function ContractsPage() {
   const getCustomerName = (customerId: string) => {
     return customers.find((c) => c.id === customerId)?.fullName || "Unknown";
   };
-
-  const filteredContracts = contracts.filter((c) => {
-    const matchesStatus = statusFilter === "ALL" || c.status === statusFilter;
-    if (!searchQuery) return matchesStatus;
-    const q = searchQuery.toLowerCase();
-    const customerName = getCustomerName(c.customerId).toLowerCase();
-    return matchesStatus && (
-      c.contractNumber.toLowerCase().includes(q) ||
-      customerName.includes(q) ||
-      c.motorModel.toLowerCase().includes(q)
-    );
-  });
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">
@@ -157,40 +159,44 @@ export default function ContractsPage() {
       </div>
 
       {/* Search & Filter */}
-      {contracts.length > 0 && (
-        <div className="flex flex-col sm:flex-row gap-2">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Cari no. kontrak, customer, motor..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9"
-            />
-          </div>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ALL">Semua Status</SelectItem>
-              <SelectItem value="ACTIVE">Active</SelectItem>
-              <SelectItem value="COMPLETED">Completed</SelectItem>
-              <SelectItem value="OVERDUE">Overdue</SelectItem>
-              <SelectItem value="CANCELLED">Cancelled</SelectItem>
-            </SelectContent>
-          </Select>
+      <div className="flex flex-col sm:flex-row gap-2">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Cari no. kontrak, customer, motor..."
+            value={pagination.search}
+            onChange={(e) => pagination.setSearch(e.target.value)}
+            className="pl-9"
+          />
         </div>
-      )}
+        <Select value={statusFilter} onValueChange={handleStatusFilterChange}>
+          <SelectTrigger className="w-40">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">Semua Status</SelectItem>
+            <SelectItem value="ACTIVE">Active</SelectItem>
+            <SelectItem value="COMPLETED">Completed</SelectItem>
+            <SelectItem value="OVERDUE">Overdue</SelectItem>
+            <SelectItem value="CANCELLED">Cancelled</SelectItem>
+            <SelectItem value="REPOSSESSED">Repossessed</SelectItem>
+          </SelectContent>
+        </Select>
+        {pagination.total > 0 && (
+          <span className="text-sm text-muted-foreground self-center">{pagination.total} kontrak</span>
+        )}
+      </div>
 
-      {filteredContracts.length === 0 ? (
+      {!loading && contracts.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
             <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <p className="text-muted-foreground">
-              {contracts.length === 0 ? "Belum ada kontrak." : "Tidak ada kontrak yang cocok dengan filter."}
+              {pagination.debouncedSearch || statusFilter !== "ALL"
+                ? "Tidak ada kontrak yang cocok dengan filter."
+                : "Belum ada kontrak."}
             </p>
-            {contracts.length === 0 && customers.length > 0 && (
+            {!pagination.debouncedSearch && statusFilter === "ALL" && customers.length > 0 && (
               <Button className="mt-4" onClick={openCreate}>
                 <Plus className="h-4 w-4 mr-2" />
                 Buat Kontrak Pertama
@@ -205,36 +211,72 @@ export default function ContractsPage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b bg-muted/50">
-                    <th className="text-left p-4 text-sm font-medium">No. Kontrak</th>
+                    <SortableHeader label="No. Kontrak" field="contractNumber" currentSortBy={pagination.sortBy} currentSortOrder={pagination.sortOrder} onSort={pagination.handleSort} />
                     <th className="text-left p-4 text-sm font-medium">Customer</th>
-                    <th className="text-left p-4 text-sm font-medium">Motor</th>
-                    <th className="text-left p-4 text-sm font-medium">Durasi</th>
-                    <th className="text-left p-4 text-sm font-medium">Total</th>
-                    <th className="text-left p-4 text-sm font-medium">Periode</th>
-                    <th className="text-left p-4 text-sm font-medium">Status</th>
+                    <SortableHeader label="Motor" field="motorModel" currentSortBy={pagination.sortBy} currentSortOrder={pagination.sortOrder} onSort={pagination.handleSort} />
+                    <th className="text-left p-4 text-sm font-medium">Progress</th>
+                    <SortableHeader label="Total" field="totalAmount" currentSortBy={pagination.sortBy} currentSortOrder={pagination.sortOrder} onSort={pagination.handleSort} />
+                    <th className="text-left p-4 text-sm font-medium">Periode Aktif</th>
+                    <th className="text-left p-4 text-sm font-medium">Sisa Hari</th>
+                    <SortableHeader label="Status" field="status" currentSortBy={pagination.sortBy} currentSortOrder={pagination.sortOrder} onSort={pagination.handleSort} />
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredContracts.map((contract) => (
-                    <tr key={contract.id} className="border-b last:border-0 hover:bg-muted/30 cursor-pointer" onClick={() => router.push(`/contracts/${contract.id}`)}>
-                      <td className="p-4 font-mono text-sm text-primary">{contract.contractNumber}</td>
-                      <td className="p-4 text-sm">{getCustomerName(contract.customerId)}</td>
-                      <td className="p-4 text-sm">{contract.motorModel}</td>
-                      <td className="p-4 text-sm">{contract.durationDays} hari</td>
-                      <td className="p-4 text-sm font-medium">{formatCurrency(contract.totalAmount)}</td>
-                      <td className="p-4 text-sm text-muted-foreground">
-                        {formatDate(contract.startDate)} - {formatDate(contract.endDate)}
-                      </td>
-                      <td className="p-4">
-                        <Badge variant={statusBadgeVariant(contract.status)}>
-                          {contract.status}
-                        </Badge>
-                      </td>
-                    </tr>
-                  ))}
+                  {loading ? (
+                    Array.from({ length: 5 }).map((_, i) => (
+                      <tr key={i} className="border-b">
+                        {Array.from({ length: 8 }).map((_, j) => (
+                          <td key={j} className="p-4">
+                            <div className="h-4 bg-muted animate-pulse rounded" />
+                          </td>
+                        ))}
+                      </tr>
+                    ))
+                  ) : (
+                    contracts.map((contract) => (
+                      <tr key={contract.id} className="border-b last:border-0 hover:bg-muted/30 cursor-pointer" onClick={() => router.push(`/contracts/${contract.id}`)}>
+                        <td className="p-4 font-mono text-sm text-primary">{contract.contractNumber}</td>
+                        <td className="p-4 text-sm">{getCustomerName(contract.customerId)}</td>
+                        <td className="p-4 text-sm">{contract.motorModel}</td>
+                        <td className="p-4">
+                          <div className="flex items-center gap-2">
+                            <div className="w-16 bg-muted rounded-full h-2 overflow-hidden">
+                              <div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(contract.ownershipProgress, 100)}%` }} />
+                            </div>
+                            <span className="text-xs text-muted-foreground">{contract.ownershipProgress}%</span>
+                          </div>
+                        </td>
+                        <td className="p-4 text-sm font-medium">{formatCurrency(contract.totalAmount)}</td>
+                        <td className="p-4 text-sm text-muted-foreground">
+                          {formatDate(contract.startDate)} - {formatDate(contract.endDate)}
+                        </td>
+                        <td className="p-4 text-sm">
+                          {(() => {
+                            if (contract.status === "COMPLETED" || contract.status === "CANCELLED" || contract.status === "REPOSSESSED") {
+                              return <span className="text-muted-foreground">-</span>;
+                            }
+                            const end = new Date(contract.endDate);
+                            const now = new Date();
+                            const diffMs = end.getTime() - now.getTime();
+                            const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+                            if (diffDays <= 0) {
+                              return <span className="text-destructive font-medium">Lewat {Math.abs(diffDays)} hari</span>;
+                            }
+                            return <span className={diffDays <= 2 ? "text-yellow-600 font-medium" : "font-medium"}>{diffDays} Hari</span>;
+                          })()}
+                        </td>
+                        <td className="p-4">
+                          <Badge variant={statusBadgeVariant(contract.status)}>
+                            {contract.status}
+                          </Badge>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
+            <Pagination page={pagination.page} totalPages={pagination.totalPages} onPageChange={pagination.setPage} />
           </CardContent>
         </Card>
       )}
@@ -253,96 +295,101 @@ export default function ContractsPage() {
             </div>
           )}
 
-          <div className="space-y-4">
+          <form onSubmit={rhfSubmit(handleSave)} className="space-y-4">
             <div className="space-y-2">
               <Label>Customer *</Label>
-              <Select
-                value={form.customerId}
-                onValueChange={(val) => setForm({ ...form, customerId: val })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Pilih customer" />
-                </SelectTrigger>
-                <SelectContent>
-                  {customers.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.fullName} - {c.phone}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Controller
+                name="customerId"
+                control={control}
+                render={({ field }) => (
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Pilih customer" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {customers.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.fullName} - {c.phone}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+              {errors.customerId && <p className="text-destructive text-xs">{errors.customerId.message}</p>}
             </div>
 
             <div className="space-y-2">
               <Label>Model Motor *</Label>
-              <Select
-                value={form.motorModel}
-                onValueChange={(val) => setForm({ ...form, motorModel: val as MotorModel })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Pilih model motor" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={MotorModel.ATHENA}>
-                    Athena - {formatCurrency(55000)}/hari
-                  </SelectItem>
-                  <SelectItem value={MotorModel.VICTORY}>
-                    Victory - {formatCurrency(55000)}/hari
-                  </SelectItem>
-                  <SelectItem value={MotorModel.EDPOWER}>
-                    EdPower - {formatCurrency(75000)}/hari
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+              <Controller
+                name="motorModel"
+                control={control}
+                render={({ field }) => (
+                  <Select value={field.value || ""} onValueChange={field.onChange}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Pilih model motor" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={MotorModel.ATHENA}>
+                        Athena - {formatCurrency(motorRates[MotorModel.ATHENA] || 0)}/hari
+                      </SelectItem>
+                      <SelectItem value={MotorModel.VICTORY}>
+                        Victory - {formatCurrency(motorRates[MotorModel.VICTORY] || 0)}/hari
+                      </SelectItem>
+                      <SelectItem value={MotorModel.EDPOWER}>
+                        EdPower - {formatCurrency(motorRates[MotorModel.EDPOWER] || 0)}/hari
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+              {errors.motorModel && <p className="text-destructive text-xs">{errors.motorModel.message}</p>}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Durasi (hari) *</Label>
-                <Select
-                  value={form.durationDays.toString()}
-                  onValueChange={(val) => setForm({ ...form, durationDays: parseInt(val) })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {[1, 2, 3, 4, 5, 6, 7].map((d) => (
-                      <SelectItem key={d} value={d.toString()}>
-                        {d} hari
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Controller
+                  name="durationDays"
+                  control={control}
+                  render={({ field }) => (
+                    <Select value={field.value.toString()} onValueChange={(val) => field.onChange(parseInt(val))}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[1, 2, 3, 4, 5, 6, 7].map((d) => (
+                          <SelectItem key={d} value={d.toString()}>
+                            {d} hari
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+                {errors.durationDays && <p className="text-destructive text-xs">{errors.durationDays.message}</p>}
               </div>
               <div className="space-y-2">
                 <Label>Tanggal Mulai *</Label>
-                <Input
-                  type="date"
-                  value={form.startDate}
-                  onChange={(e) => setForm({ ...form, startDate: e.target.value })}
-                />
+                <Input type="date" {...register("startDate")} />
+                {errors.startDate && <p className="text-destructive text-xs">{errors.startDate.message}</p>}
               </div>
             </div>
 
             <div className="space-y-2">
               <Label>Catatan</Label>
-              <Input
-                value={form.notes}
-                onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                placeholder="Catatan tambahan (opsional)"
-              />
+              <Input {...register("notes")} placeholder="Catatan tambahan (opsional)" />
             </div>
 
-            {form.motorModel && (
+            {watchMotorModel && (
               <div className="bg-muted/50 rounded-lg p-4">
                 <div className="flex justify-between text-sm">
                   <span>Rate per hari</span>
-                  <span>{formatCurrency(MOTOR_DAILY_RATES[form.motorModel as MotorModel])}</span>
+                  <span>{formatCurrency(motorRates[watchMotorModel] || 0)}</span>
                 </div>
                 <div className="flex justify-between text-sm mt-1">
                   <span>Durasi</span>
-                  <span>{form.durationDays} hari</span>
+                  <span>{watchDurationDays} hari</span>
                 </div>
                 <div className="border-t mt-2 pt-2 flex justify-between font-bold">
                   <span>Total</span>
@@ -350,16 +397,16 @@ export default function ContractsPage() {
                 </div>
               </div>
             )}
-          </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>
-              Batal
-            </Button>
-            <Button onClick={handleSave} disabled={saving}>
-              {saving ? "Menyimpan..." : "Buat Kontrak"}
-            </Button>
-          </DialogFooter>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
+                Batal
+              </Button>
+              <Button type="submit" disabled={saving}>
+                {saving ? "Menyimpan..." : "Buat Kontrak"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

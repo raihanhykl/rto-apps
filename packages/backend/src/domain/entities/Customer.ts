@@ -6,6 +6,8 @@ export interface Customer {
   address: string;
   ktpNumber: string;
   notes: string;
+  isDeleted: boolean;
+  deletedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }

@@ -9,6 +9,7 @@ export enum ContractStatus {
   COMPLETED = 'COMPLETED',
   OVERDUE = 'OVERDUE',
   CANCELLED = 'CANCELLED',
+  REPOSSESSED = 'REPOSSESSED',
 }
 
 export enum PaymentStatus {
@@ -16,6 +17,7 @@ export enum PaymentStatus {
   PAID = 'PAID',
   FAILED = 'FAILED',
   EXPIRED = 'EXPIRED',
+  VOID = 'VOID',
 }
 
 export enum AuditAction {
@@ -41,3 +43,13 @@ export const MOTOR_DAILY_RATES: Record<MotorModel, number> = {
 };
 
 export const MAX_RENTAL_DAYS = 7;
+export const DEFAULT_OWNERSHIP_TARGET_DAYS = 1825; // 5 years
+export const DEFAULT_GRACE_PERIOD_DAYS = 7;
+
+export const VALID_STATUS_TRANSITIONS: Record<ContractStatus, ContractStatus[]> = {
+  [ContractStatus.ACTIVE]: [ContractStatus.OVERDUE, ContractStatus.COMPLETED, ContractStatus.CANCELLED, ContractStatus.REPOSSESSED],
+  [ContractStatus.OVERDUE]: [ContractStatus.ACTIVE, ContractStatus.COMPLETED, ContractStatus.CANCELLED, ContractStatus.REPOSSESSED],
+  [ContractStatus.COMPLETED]: [],
+  [ContractStatus.CANCELLED]: [],
+  [ContractStatus.REPOSSESSED]: [],
+};

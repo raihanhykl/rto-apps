@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useEffect, useState, useCallback } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,9 +16,13 @@ import {
   DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { Pagination } from "@/components/ui/pagination";
+import { SortableHeader } from "@/components/SortableHeader";
+import { usePagination } from "@/hooks/usePagination";
 import { api } from "@/lib/api";
 import { Customer } from "@/types";
 import { formatDate } from "@/lib/utils";
+import { customerSchema, CustomerFormData } from "@/lib/schemas";
 import { Plus, Search, Pencil, Trash2, Users, Eye } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toastSuccess, toastError } from "@/stores/toastStore";
@@ -25,54 +31,53 @@ export default function CustomersPage() {
   const router = useRouter();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [deletingCustomer, setDeletingCustomer] = useState<Customer | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // Form state
-  const [form, setForm] = useState({
-    fullName: "",
-    phone: "",
-    email: "",
-    address: "",
-    ktpNumber: "",
-    notes: "",
+  const pagination = usePagination({ initialSortBy: "createdAt", initialSortOrder: "desc" });
+
+  const { register, handleSubmit: rhfSubmit, reset, formState: { errors } } = useForm<CustomerFormData>({
+    resolver: zodResolver(customerSchema),
+    defaultValues: { fullName: "", phone: "", email: "", address: "", ktpNumber: "", notes: "" },
   });
   const [formError, setFormError] = useState("");
 
-  useEffect(() => {
-    loadCustomers();
-  }, []);
-
-  const loadCustomers = async (q?: string) => {
+  const loadCustomers = useCallback(async () => {
+    setLoading(true);
     try {
-      const data = await api.getCustomers(q);
-      setCustomers(data);
+      const result = await api.getCustomersPaginated({
+        page: pagination.page,
+        limit: pagination.limit,
+        sortBy: pagination.sortBy,
+        sortOrder: pagination.sortOrder,
+        search: pagination.debouncedSearch || undefined,
+      });
+      setCustomers(result.data);
+      pagination.updateFromResult(result);
     } catch (error) {
       console.error("Failed to load customers:", error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [pagination.page, pagination.limit, pagination.sortBy, pagination.sortOrder, pagination.debouncedSearch]);
 
-  const handleSearch = () => {
-    setLoading(true);
-    loadCustomers(search || undefined);
-  };
+  useEffect(() => {
+    loadCustomers();
+  }, [loadCustomers]);
 
   const openCreate = () => {
     setEditingCustomer(null);
-    setForm({ fullName: "", phone: "", email: "", address: "", ktpNumber: "", notes: "" });
+    reset({ fullName: "", phone: "", email: "", address: "", ktpNumber: "", notes: "" });
     setFormError("");
     setDialogOpen(true);
   };
 
   const openEdit = (customer: Customer) => {
     setEditingCustomer(customer);
-    setForm({
+    reset({
       fullName: customer.fullName,
       phone: customer.phone,
       email: customer.email,
@@ -84,25 +89,16 @@ export default function CustomersPage() {
     setDialogOpen(true);
   };
 
-  const handleSave = async () => {
-    if (!form.fullName || !form.phone || !form.address || !form.ktpNumber) {
-      setFormError("Nama, telepon, alamat, dan KTP wajib diisi.");
-      return;
-    }
-    if (form.ktpNumber.length !== 16) {
-      setFormError("Nomor KTP harus 16 digit.");
-      return;
-    }
-
+  const handleSave = async (data: CustomerFormData) => {
     setSaving(true);
     setFormError("");
     try {
       if (editingCustomer) {
-        await api.updateCustomer(editingCustomer.id, form);
-        toastSuccess("Customer diupdate", `Data ${form.fullName} berhasil diperbarui.`);
+        await api.updateCustomer(editingCustomer.id, data);
+        toastSuccess("Customer diupdate", `Data ${data.fullName} berhasil diperbarui.`);
       } else {
-        await api.createCustomer(form);
-        toastSuccess("Customer ditambahkan", `${form.fullName} berhasil ditambahkan.`);
+        await api.createCustomer(data);
+        toastSuccess("Customer ditambahkan", `${data.fullName} berhasil ditambahkan.`);
       }
       setDialogOpen(false);
       loadCustomers();
@@ -127,14 +123,6 @@ export default function CustomersPage() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -154,27 +142,30 @@ export default function CustomersPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Cari nama, telepon, KTP..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+            value={pagination.search}
+            onChange={(e) => pagination.setSearch(e.target.value)}
             className="pl-9"
           />
         </div>
-        <Button variant="secondary" onClick={handleSearch}>
-          Cari
-        </Button>
+        {pagination.total > 0 && (
+          <span className="text-sm text-muted-foreground self-center">{pagination.total} customer</span>
+        )}
       </div>
 
       {/* Customer List */}
-      {customers.length === 0 ? (
+      {!loading && customers.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
             <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <p className="text-muted-foreground">Belum ada customer.</p>
-            <Button className="mt-4" onClick={openCreate}>
-              <Plus className="h-4 w-4 mr-2" />
-              Tambah Customer Pertama
-            </Button>
+            <p className="text-muted-foreground">
+              {pagination.debouncedSearch ? "Tidak ada customer yang cocok." : "Belum ada customer."}
+            </p>
+            {!pagination.debouncedSearch && (
+              <Button className="mt-4" onClick={openCreate}>
+                <Plus className="h-4 w-4 mr-2" />
+                Tambah Customer Pertama
+              </Button>
+            )}
           </CardContent>
         </Card>
       ) : (
@@ -184,62 +175,75 @@ export default function CustomersPage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b bg-muted/50">
-                    <th className="text-left p-4 text-sm font-medium">Nama</th>
-                    <th className="text-left p-4 text-sm font-medium">Telepon</th>
+                    <SortableHeader label="Nama" field="fullName" currentSortBy={pagination.sortBy} currentSortOrder={pagination.sortOrder} onSort={pagination.handleSort} />
+                    <SortableHeader label="Telepon" field="phone" currentSortBy={pagination.sortBy} currentSortOrder={pagination.sortOrder} onSort={pagination.handleSort} />
                     <th className="text-left p-4 text-sm font-medium">KTP</th>
                     <th className="text-left p-4 text-sm font-medium">Alamat</th>
-                    <th className="text-left p-4 text-sm font-medium">Tanggal</th>
+                    <SortableHeader label="Tanggal" field="createdAt" currentSortBy={pagination.sortBy} currentSortOrder={pagination.sortOrder} onSort={pagination.handleSort} />
                     <th className="text-right p-4 text-sm font-medium">Aksi</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {customers.map((customer) => (
-                    <tr key={customer.id} className="border-b last:border-0 hover:bg-muted/30">
-                      <td className="p-4">
-                        <p className="font-medium">{customer.fullName}</p>
-                        {customer.email && (
-                          <p className="text-xs text-muted-foreground">{customer.email}</p>
-                        )}
-                      </td>
-                      <td className="p-4 text-sm">{customer.phone}</td>
-                      <td className="p-4 text-sm font-mono">{customer.ktpNumber}</td>
-                      <td className="p-4 text-sm max-w-[200px] truncate">{customer.address}</td>
-                      <td className="p-4 text-sm text-muted-foreground">
-                        {formatDate(customer.createdAt)}
-                      </td>
-                      <td className="p-4 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => router.push(`/customers/${customer.id}`)}
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => openEdit(customer)}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => {
-                              setDeletingCustomer(customer);
-                              setDeleteDialogOpen(true);
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {loading ? (
+                    Array.from({ length: 5 }).map((_, i) => (
+                      <tr key={i} className="border-b">
+                        {Array.from({ length: 6 }).map((_, j) => (
+                          <td key={j} className="p-4">
+                            <div className="h-4 bg-muted animate-pulse rounded" />
+                          </td>
+                        ))}
+                      </tr>
+                    ))
+                  ) : (
+                    customers.map((customer) => (
+                      <tr key={customer.id} className="border-b last:border-0 hover:bg-muted/30">
+                        <td className="p-4">
+                          <p className="font-medium">{customer.fullName}</p>
+                          {customer.email && (
+                            <p className="text-xs text-muted-foreground">{customer.email}</p>
+                          )}
+                        </td>
+                        <td className="p-4 text-sm">{customer.phone}</td>
+                        <td className="p-4 text-sm font-mono">{customer.ktpNumber}</td>
+                        <td className="p-4 text-sm max-w-[200px] truncate">{customer.address}</td>
+                        <td className="p-4 text-sm text-muted-foreground">
+                          {formatDate(customer.createdAt)}
+                        </td>
+                        <td className="p-4 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => router.push(`/customers/${customer.id}`)}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => openEdit(customer)}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => {
+                                setDeletingCustomer(customer);
+                                setDeleteDialogOpen(true);
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
+            <Pagination page={pagination.page} totalPages={pagination.totalPages} onPageChange={pagination.setPage} />
           </CardContent>
         </Card>
       )}
@@ -262,70 +266,48 @@ export default function CustomersPage() {
             </div>
           )}
 
-          <div className="space-y-4">
+          <form onSubmit={rhfSubmit(handleSave)} className="space-y-4">
             <div className="space-y-2">
               <Label>Nama Lengkap *</Label>
-              <Input
-                value={form.fullName}
-                onChange={(e) => setForm({ ...form, fullName: e.target.value })}
-                placeholder="Nama lengkap"
-              />
+              <Input {...register("fullName")} placeholder="Nama lengkap" />
+              {errors.fullName && <p className="text-destructive text-xs">{errors.fullName.message}</p>}
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Telepon *</Label>
-                <Input
-                  value={form.phone}
-                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                  placeholder="08xx..."
-                />
+                <Input {...register("phone")} placeholder="08xx..." />
+                {errors.phone && <p className="text-destructive text-xs">{errors.phone.message}</p>}
               </div>
               <div className="space-y-2">
                 <Label>Email</Label>
-                <Input
-                  type="email"
-                  value={form.email}
-                  onChange={(e) => setForm({ ...form, email: e.target.value })}
-                  placeholder="email@example.com"
-                />
+                <Input type="email" {...register("email")} placeholder="email@example.com" />
+                {errors.email && <p className="text-destructive text-xs">{errors.email.message}</p>}
               </div>
             </div>
             <div className="space-y-2">
               <Label>No. KTP *</Label>
-              <Input
-                value={form.ktpNumber}
-                onChange={(e) => setForm({ ...form, ktpNumber: e.target.value.replace(/\D/g, '').slice(0, 16) })}
-                placeholder="16 digit nomor KTP"
-                maxLength={16}
-              />
+              <Input {...register("ktpNumber")} placeholder="16 digit nomor KTP" maxLength={16} />
+              {errors.ktpNumber && <p className="text-destructive text-xs">{errors.ktpNumber.message}</p>}
             </div>
             <div className="space-y-2">
               <Label>Alamat *</Label>
-              <Textarea
-                value={form.address}
-                onChange={(e) => setForm({ ...form, address: e.target.value })}
-                placeholder="Alamat lengkap"
-                rows={2}
-              />
+              <Textarea {...register("address")} placeholder="Alamat lengkap" rows={2} />
+              {errors.address && <p className="text-destructive text-xs">{errors.address.message}</p>}
             </div>
             <div className="space-y-2">
               <Label>Catatan</Label>
-              <Input
-                value={form.notes}
-                onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                placeholder="Catatan tambahan (opsional)"
-              />
+              <Input {...register("notes")} placeholder="Catatan tambahan (opsional)" />
             </div>
-          </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>
-              Batal
-            </Button>
-            <Button onClick={handleSave} disabled={saving}>
-              {saving ? "Menyimpan..." : editingCustomer ? "Update" : "Simpan"}
-            </Button>
-          </DialogFooter>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
+                Batal
+              </Button>
+              <Button type="submit" disabled={saving}>
+                {saving ? "Menyimpan..." : editingCustomer ? "Update" : "Simpan"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 

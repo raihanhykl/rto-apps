@@ -7,7 +7,17 @@ export class CustomerController {
 
   getAll = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { search } = req.query;
+      const { page, limit, sortBy, sortOrder, search } = req.query;
+      if (page) {
+        const result = await this.customerService.getAllPaginated({
+          page: parseInt(page as string) || 1,
+          limit: parseInt(limit as string) || 20,
+          sortBy: sortBy as string,
+          sortOrder: sortOrder as 'asc' | 'desc',
+          search: search as string,
+        });
+        return res.json(result);
+      }
       const customers = search
         ? await this.customerService.search(search as string)
         : await this.customerService.getAll();

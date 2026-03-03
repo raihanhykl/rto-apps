@@ -1,6 +1,7 @@
 import { Invoice } from '../../domain/entities';
 import { IInvoiceRepository } from '../../domain/interfaces';
 import { PaymentStatus } from '../../domain/enums';
+import { PaginationParams, PaginatedResult } from '../../domain/interfaces/Pagination';
 
 export class InMemoryInvoiceRepository implements IInvoiceRepository {
   private invoices: Map<string, Invoice> = new Map();
@@ -11,12 +12,32 @@ export class InMemoryInvoiceRepository implements IInvoiceRepository {
     );
   }
 
+  async findAllPaginated(params: PaginationParams): Promise<PaginatedResult<Invoice>> {
+    let items = Array.from(this.invoices.values());
+    if (params.search) { const q = params.search.toLowerCase(); items = items.filter(i => i.invoiceNumber.toLowerCase().includes(q)); }
+    if (params.status && params.status !== 'ALL') { items = items.filter(i => i.status === params.status); }
+    if (params.customerId) { items = items.filter(i => i.customerId === params.customerId); }
+    if (params.startDate) { const s = new Date(params.startDate); items = items.filter(i => i.createdAt >= s); }
+    if (params.endDate) { const e = new Date(params.endDate); e.setDate(e.getDate() + 1); items = items.filter(i => i.createdAt < e); }
+    const sortBy = params.sortBy || 'createdAt';
+    const sortOrder = params.sortOrder || 'desc';
+    items.sort((a, b) => { const aVal = (a as any)[sortBy]; const bVal = (b as any)[sortBy]; if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1; if (aVal > bVal) return sortOrder === 'asc' ? 1 : -1; return 0; });
+    const total = items.length;
+    const page = params.page || 1;
+    const limit = params.limit || 20;
+    const startIdx = (page - 1) * limit;
+    const data = items.slice(startIdx, startIdx + limit);
+    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+  }
+
   async findById(id: string): Promise<Invoice | null> {
     return this.invoices.get(id) || null;
   }
 
-  async findByContractId(contractId: string): Promise<Invoice | null> {
-    return Array.from(this.invoices.values()).find(i => i.contractId === contractId) || null;
+  async findByContractId(contractId: string): Promise<Invoice[]> {
+    return Array.from(this.invoices.values())
+      .filter(i => i.contractId === contractId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   }
 
   async findByCustomerId(customerId: string): Promise<Invoice[]> {
@@ -55,6 +76,6 @@ export class InMemoryInvoiceRepository implements IInvoiceRepository {
   async sumByStatus(status: PaymentStatus): Promise<number> {
     return Array.from(this.invoices.values())
       .filter(i => i.status === status)
-      .reduce((sum, i) => sum + i.amount, 0);
+      .reduce((sum, i) => sum + i.amount + (i.lateFee || 0), 0);
   }
 }

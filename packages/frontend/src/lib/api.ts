@@ -51,8 +51,11 @@ class ApiClient {
 
     // Handle download responses
     const contentType = res.headers.get('content-type');
-    if (contentType?.includes('text/csv')) {
+    if (contentType?.includes('text/csv') || contentType?.includes('text/tab-separated-values')) {
       return (await res.text()) as unknown as T;
+    }
+    if (contentType?.includes('application/pdf')) {
+      return (await res.blob()) as unknown as T;
     }
 
     return res.json();
@@ -85,6 +88,16 @@ class ApiClient {
     return this.request<any[]>(`/customers${query}`);
   }
 
+  async getCustomersPaginated(params: { page?: number; limit?: number; sortBy?: string; sortOrder?: 'asc' | 'desc'; search?: string }) {
+    const query = new URLSearchParams();
+    query.set('page', String(params.page || 1));
+    query.set('limit', String(params.limit || 20));
+    if (params.sortBy) query.set('sortBy', params.sortBy);
+    if (params.sortOrder) query.set('sortOrder', params.sortOrder);
+    if (params.search) query.set('search', params.search);
+    return this.request<any>(`/customers?${query.toString()}`);
+  }
+
   async getCustomer(id: string) {
     return this.request<any>(`/customers/${id}`);
   }
@@ -110,6 +123,17 @@ class ApiClient {
   // Contracts
   async getContracts() {
     return this.request<any[]>('/contracts');
+  }
+
+  async getContractsPaginated(params: { page?: number; limit?: number; sortBy?: string; sortOrder?: 'asc' | 'desc'; search?: string; status?: string }) {
+    const query = new URLSearchParams();
+    query.set('page', String(params.page || 1));
+    query.set('limit', String(params.limit || 20));
+    if (params.sortBy) query.set('sortBy', params.sortBy);
+    if (params.sortOrder) query.set('sortOrder', params.sortOrder);
+    if (params.search) query.set('search', params.search);
+    if (params.status) query.set('status', params.status);
+    return this.request<any>(`/contracts?${query.toString()}`);
   }
 
   async getContract(id: string) {
@@ -142,9 +166,58 @@ class ApiClient {
     });
   }
 
+  async extendContract(id: string, durationDays: number) {
+    return this.request<any>(`/contracts/${id}/extend`, {
+      method: 'POST',
+      body: JSON.stringify({ durationDays }),
+    });
+  }
+
+  async editContract(id: string, data: { notes?: string; gracePeriodDays?: number; ownershipTargetDays?: number }) {
+    return this.request<any>(`/contracts/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async cancelContract(id: string, reason: string) {
+    return this.request<any>(`/contracts/${id}/cancel`, {
+      method: 'PATCH',
+      body: JSON.stringify({ reason }),
+    });
+  }
+
+  async repossessContract(id: string) {
+    return this.request<any>(`/contracts/${id}/repossess`, {
+      method: 'PATCH',
+    });
+  }
+
+  async deleteContract(id: string) {
+    return this.request<any>(`/contracts/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getOverdueWarnings() {
+    return this.request<any[]>('/contracts/overdue-warnings');
+  }
+
   // Invoices
   async getInvoices() {
     return this.request<any[]>('/invoices');
+  }
+
+  async getInvoicesPaginated(params: { page?: number; limit?: number; sortBy?: string; sortOrder?: 'asc' | 'desc'; search?: string; status?: string; customerId?: string }) {
+    const query = new URLSearchParams();
+    query.set('page', String(params.page || 1));
+    query.set('limit', String(params.limit || 20));
+    if (params.sortBy) query.set('sortBy', params.sortBy);
+    if (params.sortOrder) query.set('sortOrder', params.sortOrder);
+    if (params.search) query.set('search', params.search);
+    if (params.status) query.set('status', params.status);
+    if (params.customerId) query.set('customerId', params.customerId);
+    return this.request<any>(`/invoices?${query.toString()}`);
   }
 
   async getInvoice(id: string) {
@@ -162,17 +235,69 @@ class ApiClient {
     });
   }
 
+  async voidInvoice(id: string) {
+    return this.request<any>(`/invoices/${id}/void`, {
+      method: 'PATCH',
+    });
+  }
+
+  async markInvoicePaid(id: string) {
+    return this.request<any>(`/invoices/${id}/mark-paid`, {
+      method: 'PATCH',
+    });
+  }
+
+  async bulkMarkPaid(invoiceIds: string[]) {
+    return this.request<{ success: string[]; failed: Array<{ id: string; error: string }> }>('/invoices/bulk-pay', {
+      method: 'POST',
+      body: JSON.stringify({ invoiceIds }),
+    });
+  }
+
+  // Invoice PDF
+  async downloadInvoicePdf(id: string) {
+    return this.request<Blob>(`/invoices/${id}/pdf`);
+  }
+
   // Reports
-  async getReport() {
-    return this.request<any>('/reports');
+  async getReport(filters?: { startDate?: string; endDate?: string; status?: string; motorModel?: string }) {
+    const query = new URLSearchParams();
+    if (filters?.startDate) query.set('startDate', filters.startDate);
+    if (filters?.endDate) query.set('endDate', filters.endDate);
+    if (filters?.status) query.set('status', filters.status);
+    if (filters?.motorModel) query.set('motorModel', filters.motorModel);
+    const queryStr = query.toString() ? `?${query.toString()}` : '';
+    return this.request<any>(`/reports${queryStr}`);
   }
 
-  async exportReportJSON() {
-    return this.request<string>('/reports/export/json');
+  async exportReportJSON(filters?: { startDate?: string; endDate?: string; status?: string; motorModel?: string }) {
+    const query = new URLSearchParams();
+    if (filters?.startDate) query.set('startDate', filters.startDate);
+    if (filters?.endDate) query.set('endDate', filters.endDate);
+    if (filters?.status) query.set('status', filters.status);
+    if (filters?.motorModel) query.set('motorModel', filters.motorModel);
+    const queryStr = query.toString() ? `?${query.toString()}` : '';
+    return this.request<string>(`/reports/export/json${queryStr}`);
   }
 
-  async exportReportCSV() {
-    return this.request<string>('/reports/export/csv');
+  async exportReportCSV(filters?: { startDate?: string; endDate?: string; status?: string; motorModel?: string }) {
+    const query = new URLSearchParams();
+    if (filters?.startDate) query.set('startDate', filters.startDate);
+    if (filters?.endDate) query.set('endDate', filters.endDate);
+    if (filters?.status) query.set('status', filters.status);
+    if (filters?.motorModel) query.set('motorModel', filters.motorModel);
+    const queryStr = query.toString() ? `?${query.toString()}` : '';
+    return this.request<string>(`/reports/export/csv${queryStr}`);
+  }
+
+  async exportReportXLSV(filters?: { startDate?: string; endDate?: string; status?: string; motorModel?: string }) {
+    const query = new URLSearchParams();
+    if (filters?.startDate) query.set('startDate', filters.startDate);
+    if (filters?.endDate) query.set('endDate', filters.endDate);
+    if (filters?.status) query.set('status', filters.status);
+    if (filters?.motorModel) query.set('motorModel', filters.motorModel);
+    const queryStr = query.toString() ? `?${query.toString()}` : '';
+    return this.request<string>(`/reports/export/xlsv${queryStr}`);
   }
 
   // Audit Logs
@@ -184,6 +309,17 @@ class ApiClient {
     return this.request<any[]>(`/audit-logs${queryStr}`);
   }
 
+  async getAuditLogsPaginated(params: { page?: number; limit?: number; sortBy?: string; sortOrder?: 'asc' | 'desc'; search?: string; module?: string }) {
+    const query = new URLSearchParams();
+    query.set('page', String(params.page || 1));
+    query.set('limit', String(params.limit || 20));
+    if (params.sortBy) query.set('sortBy', params.sortBy);
+    if (params.sortOrder) query.set('sortOrder', params.sortOrder);
+    if (params.search) query.set('search', params.search);
+    if (params.module) query.set('module', params.module);
+    return this.request<any>(`/audit-logs?${query.toString()}`);
+  }
+
   async getRecentAuditLogs(limit: number = 50) {
     return this.request<any[]>(`/audit-logs/recent?limit=${limit}`);
   }
@@ -191,6 +327,10 @@ class ApiClient {
   // Settings
   async getSettings() {
     return this.request<any[]>('/settings');
+  }
+
+  async getMotorRates() {
+    return this.request<Record<string, number>>('/settings/rates');
   }
 
   async updateSetting(data: { key: string; value: string; description?: string }) {

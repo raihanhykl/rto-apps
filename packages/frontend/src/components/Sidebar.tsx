@@ -16,6 +16,7 @@ import {
   LogOut,
   Menu,
   X,
+  Search,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
 import { useRouter } from "next/navigation";
@@ -69,8 +70,25 @@ export function Sidebar() {
         <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full ml-auto">RTO</span>
       </div>
 
+      {/* Quick Search Hint */}
+      <div className="px-3 pt-4 pb-2">
+        <button
+          onClick={() => {
+            const event = new KeyboardEvent("keydown", { key: "k", ctrlKey: true });
+            window.dispatchEvent(event);
+          }}
+          className="w-full flex items-center gap-2 rounded-md border border-input bg-muted/50 px-3 py-2 text-sm text-muted-foreground hover:bg-accent transition-colors cursor-pointer"
+        >
+          <Search className="h-4 w-4" />
+          <span className="flex-1 text-left">Cari...</span>
+          <kbd className="hidden sm:inline-flex h-5 items-center gap-1 rounded border bg-background px-1.5 font-mono text-[10px] font-medium">
+            Ctrl K
+          </kbd>
+        </button>
+      </div>
+
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto py-4 px-3">
+      <nav className="flex-1 overflow-y-auto py-2 px-3">
         <ul className="space-y-1">
           {navItems.map((item) => {
             const isActive = pathname === item.href ||
