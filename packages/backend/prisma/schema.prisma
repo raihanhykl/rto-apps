@@ -1,0 +1,276 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============ ENUMS ============
+
+enum MotorModel {
+  ATHENA
+  VICTORY
+  EDPOWER
+}
+
+enum BatteryType {
+  REGULAR
+  EXTENDED
+}
+
+enum ContractStatus {
+  ACTIVE
+  COMPLETED
+  OVERDUE
+  CANCELLED
+  REPOSSESSED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  EXPIRED
+  VOID
+}
+
+enum InvoiceType {
+  DP
+  DP_INSTALLMENT
+  DAILY_BILLING
+  MANUAL_PAYMENT
+}
+
+enum BillingStatus {
+  ACTIVE
+  PAID
+  EXPIRED
+  CANCELLED
+}
+
+enum DPScheme {
+  FULL
+  INSTALLMENT
+}
+
+enum Gender {
+  MALE
+  FEMALE
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  PAYMENT
+  EXPORT
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  VIEWER
+}
+
+// ============ MODELS ============
+
+model User {
+  id        String   @id @default(uuid())
+  username  String   @unique
+  password  String
+  fullName  String   @map("full_name")
+  role      UserRole @default(ADMIN)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+model Customer {
+  id                String    @id @default(uuid())
+  fullName          String    @map("full_name")
+  phone             String
+  email             String
+  address           String
+  birthDate         String?   @map("birth_date")
+  gender            Gender?
+  rideHailingApps   String[]  @map("ride_hailing_apps")
+  ktpNumber         String    @unique @map("ktp_number")
+  ktpPhoto          String?   @map("ktp_photo")
+  simPhoto          String?   @map("sim_photo")
+  kkPhoto           String?   @map("kk_photo")
+  guarantorName     String    @default("") @map("guarantor_name")
+  guarantorPhone    String    @default("") @map("guarantor_phone")
+  guarantorKtpPhoto String?   @map("guarantor_ktp_photo")
+  spouseName        String    @default("") @map("spouse_name")
+  spouseKtpPhoto    String?   @map("spouse_ktp_photo")
+  notes             String    @default("")
+  isDeleted         Boolean   @default(false) @map("is_deleted")
+  deletedAt         DateTime? @map("deleted_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  contracts Contract[]
+  invoices  Invoice[]
+  billings  Billing[]
+
+  @@index([isDeleted])
+  @@map("customers")
+}
+
+model Contract {
+  id              String         @id @default(uuid())
+  contractNumber  String         @unique @map("contract_number")
+  customerId      String         @map("customer_id")
+  motorModel      MotorModel     @map("motor_model")
+  batteryType     BatteryType    @map("battery_type")
+  dailyRate       Float          @map("daily_rate")
+  durationDays    Int            @map("duration_days")
+  totalAmount     Float          @map("total_amount")
+  startDate       DateTime       @map("start_date")
+  endDate         DateTime       @map("end_date")
+  status          ContractStatus @default(ACTIVE)
+  notes           String         @default("")
+  createdBy       String         @map("created_by")
+
+  // Unit details
+  color        String @default("")
+  year         Int?
+  vinNumber    String @default("") @map("vin_number")
+  engineNumber String @default("") @map("engine_number")
+
+  // DP fields
+  dpAmount     Float    @map("dp_amount")
+  dpScheme     DPScheme @map("dp_scheme")
+  dpPaidAmount Float    @default(0) @map("dp_paid_amount")
+  dpFullyPaid  Boolean  @default(false) @map("dp_fully_paid")
+
+  // Unit delivery & billing
+  unitReceivedDate    DateTime? @map("unit_received_date")
+  billingStartDate    DateTime? @map("billing_start_date")
+  bastPhoto           String?   @map("bast_photo")
+  bastNotes           String    @default("") @map("bast_notes")
+  holidayDaysPerMonth Int       @default(2) @map("holiday_days_per_month")
+
+  // RTO fields
+  ownershipTargetDays Int       @default(1278) @map("ownership_target_days")
+  totalDaysPaid       Int       @default(0) @map("total_days_paid")
+  ownershipProgress   Float     @default(0) @map("ownership_progress")
+  gracePeriodDays     Int       @default(7) @map("grace_period_days")
+  repossessedAt       DateTime? @map("repossessed_at")
+  completedAt         DateTime? @map("completed_at")
+  isDeleted           Boolean   @default(false) @map("is_deleted")
+  deletedAt           DateTime? @map("deleted_at")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  customer Customer  @relation(fields: [customerId], references: [id])
+  invoices Invoice[]
+  billings Billing[]
+
+  @@index([customerId])
+  @@index([status])
+  @@index([isDeleted])
+  @@map("contracts")
+}
+
+model Invoice {
+  id            String        @id @default(uuid())
+  invoiceNumber String        @unique @map("invoice_number")
+  contractId    String        @map("contract_id")
+  customerId    String        @map("customer_id")
+  amount        Float
+  lateFee       Float         @default(0) @map("late_fee")
+  type          InvoiceType
+  status        PaymentStatus @default(PENDING)
+  qrCodeData    String        @default("") @map("qr_code_data")
+  dueDate       DateTime      @map("due_date")
+  paidAt        DateTime?     @map("paid_at")
+  extensionDays Int?          @map("extension_days")
+
+  // DOKU
+  dokuPaymentUrl  String? @map("doku_payment_url")
+  dokuReferenceId String? @map("doku_reference_id")
+
+  // Billing period
+  billingPeriodStart DateTime? @map("billing_period_start")
+  billingPeriodEnd   DateTime? @map("billing_period_end")
+  billingId          String?   @map("billing_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  contract Contract @relation(fields: [contractId], references: [id])
+  customer Customer @relation(fields: [customerId], references: [id])
+
+  @@index([contractId])
+  @@index([customerId])
+  @@index([status])
+  @@map("invoices")
+}
+
+model Billing {
+  id                String        @id @default(uuid())
+  billingNumber     String        @unique @map("billing_number")
+  contractId        String        @map("contract_id")
+  customerId        String        @map("customer_id")
+  amount            Float
+  dailyRate         Float         @map("daily_rate")
+  daysCount         Int           @map("days_count")
+  status            BillingStatus @default(ACTIVE)
+  dokuPaymentUrl    String?       @map("doku_payment_url")
+  dokuReferenceId   String?       @map("doku_reference_id")
+  periodStart       DateTime      @map("period_start")
+  periodEnd         DateTime      @map("period_end")
+  expiredAt         DateTime?     @map("expired_at")
+  paidAt            DateTime?     @map("paid_at")
+  invoiceId         String?       @map("invoice_id")
+  previousBillingId String?       @map("previous_billing_id")
+  isDeleted         Boolean       @default(false) @map("is_deleted")
+  deletedAt         DateTime?     @map("deleted_at")
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+
+  contract        Contract @relation(fields: [contractId], references: [id])
+  customer        Customer @relation(fields: [customerId], references: [id])
+  previousBilling Billing? @relation("BillingChain", fields: [previousBillingId], references: [id])
+  nextBillings    Billing[] @relation("BillingChain")
+
+  @@index([contractId])
+  @@index([customerId])
+  @@index([status])
+  @@index([isDeleted])
+  @@map("billings")
+}
+
+model AuditLog {
+  id          String      @id @default(uuid())
+  userId      String      @map("user_id")
+  action      AuditAction
+  module      String
+  entityId    String      @map("entity_id")
+  description String
+  metadata    Json        @default("{}")
+  ipAddress   String      @default("") @map("ip_address")
+  createdAt   DateTime    @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([module])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model Setting {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       String
+  description String   @default("")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("settings")
+}

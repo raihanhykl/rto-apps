@@ -1,12 +1,13 @@
+import { schedule, ScheduledTask } from 'node-cron';
 import { BillingService } from '../application/services/BillingService';
 import { ContractService } from '../application/services/ContractService';
 
 /**
- * Simple scheduler that runs daily tasks.
- * Uses setInterval instead of node-cron to avoid extra dependency.
+ * Scheduler that runs daily tasks using node-cron.
+ * Executes at 00:01 every day (Asia/Jakarta timezone).
  */
 export class Scheduler {
-  private intervalId: ReturnType<typeof setInterval> | null = null;
+  private task: ScheduledTask | null = null;
   private isRunning = false;
 
   constructor(
@@ -15,31 +16,33 @@ export class Scheduler {
   ) {}
 
   /**
-   * Start the scheduler. Runs daily tasks immediately, then every 24 hours.
+   * Start the scheduler.
+   * Runs daily tasks immediately on startup, then at 00:01 every day.
    */
   start(): void {
     if (this.isRunning) return;
     this.isRunning = true;
 
-    console.log('⏰ Scheduler started');
+    console.log('⏰ Scheduler started (cron: every day at 00:01 WIB)');
 
     // Run immediately on startup
     this.runDailyTasks().catch(err => console.error('Scheduler initial run error:', err));
 
-    // Run every 24 hours
-    const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
-    this.intervalId = setInterval(() => {
+    // Schedule daily at 00:01 Asia/Jakarta
+    this.task = schedule('1 0 * * *', () => {
       this.runDailyTasks().catch(err => console.error('Scheduler error:', err));
-    }, TWENTY_FOUR_HOURS);
+    }, {
+      timezone: 'Asia/Jakarta',
+    });
   }
 
   /**
    * Stop the scheduler.
    */
   stop(): void {
-    if (this.intervalId) {
-      clearInterval(this.intervalId);
-      this.intervalId = null;
+    if (this.task) {
+      this.task.stop();
+      this.task = null;
     }
     this.isRunning = false;
     console.log('⏰ Scheduler stopped');

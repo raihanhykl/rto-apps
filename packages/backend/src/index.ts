@@ -9,6 +9,13 @@ import {
   InMemoryAuditLogRepository,
   InMemorySettingRepository,
   InMemoryBillingRepository,
+  PrismaUserRepository,
+  PrismaCustomerRepository,
+  PrismaContractRepository,
+  PrismaInvoiceRepository,
+  PrismaAuditLogRepository,
+  PrismaSettingRepository,
+  PrismaBillingRepository,
 } from './infrastructure/repositories';
 import {
   AuthService,
@@ -35,6 +42,13 @@ import { createAuthMiddleware } from './infrastructure/middleware/authMiddleware
 import { errorHandler } from './infrastructure/middleware/errorHandler';
 import { seedDummyData } from './infrastructure/seed';
 import { Scheduler } from './infrastructure/scheduler';
+import { IUserRepository } from './domain/interfaces/IUserRepository';
+import { ICustomerRepository } from './domain/interfaces/ICustomerRepository';
+import { IContractRepository } from './domain/interfaces/IContractRepository';
+import { IInvoiceRepository } from './domain/interfaces/IInvoiceRepository';
+import { IAuditLogRepository } from './domain/interfaces/IAuditLogRepository';
+import { ISettingRepository } from './domain/interfaces/ISettingRepository';
+import { IBillingRepository } from './domain/interfaces/IBillingRepository';
 
 async function bootstrap() {
   const app = express();
@@ -43,14 +57,39 @@ async function bootstrap() {
   app.use(cors({ origin: config.corsOrigin, credentials: true }));
   app.use(express.json());
 
-  // Initialize Repositories (In-Memory)
-  const userRepo = new InMemoryUserRepository();
-  const customerRepo = new InMemoryCustomerRepository();
-  const contractRepo = new InMemoryContractRepository();
-  const invoiceRepo = new InMemoryInvoiceRepository();
-  const auditRepo = new InMemoryAuditLogRepository();
-  const settingRepo = new InMemorySettingRepository();
-  const billingRepo = new InMemoryBillingRepository();
+  // Initialize Repositories
+  const usePrisma = !!process.env.DATABASE_URL;
+
+  let userRepo: IUserRepository;
+  let customerRepo: ICustomerRepository;
+  let contractRepo: IContractRepository;
+  let invoiceRepo: IInvoiceRepository;
+  let auditRepo: IAuditLogRepository;
+  let settingRepo: ISettingRepository;
+  let billingRepo: IBillingRepository;
+
+  if (usePrisma) {
+    const { prisma } = await import('./infrastructure/prisma/client');
+    await prisma.$connect();
+    console.log('Connected to PostgreSQL');
+
+    userRepo = new PrismaUserRepository(prisma);
+    customerRepo = new PrismaCustomerRepository(prisma);
+    contractRepo = new PrismaContractRepository(prisma);
+    invoiceRepo = new PrismaInvoiceRepository(prisma);
+    auditRepo = new PrismaAuditLogRepository(prisma);
+    settingRepo = new PrismaSettingRepository(prisma);
+    billingRepo = new PrismaBillingRepository(prisma);
+  } else {
+    console.log('Using In-Memory repositories');
+    userRepo = new InMemoryUserRepository();
+    customerRepo = new InMemoryCustomerRepository();
+    contractRepo = new InMemoryContractRepository();
+    invoiceRepo = new InMemoryInvoiceRepository();
+    auditRepo = new InMemoryAuditLogRepository();
+    settingRepo = new InMemorySettingRepository();
+    billingRepo = new InMemoryBillingRepository();
+  }
 
   // Initialize Services
   const authService = new AuthService(userRepo, auditRepo);
@@ -63,14 +102,16 @@ async function bootstrap() {
   const reportService = new ReportService(contractRepo, customerRepo, invoiceRepo);
   const auditService = new AuditService(auditRepo);
 
-  // Seed default data
+  // Seed default data (idempotent - works with both InMemory and Prisma)
   await authService.seedDefaultAdmin();
   await settingService.seedDefaults();
 
-  // Seed dummy data for development
-  const adminUser = await userRepo.findByUsername('admin');
-  if (adminUser) {
-    await seedDummyData(customerRepo, contractRepo, invoiceRepo, auditRepo, adminUser.id);
+  // Seed dummy data only for InMemory mode (development)
+  if (!usePrisma) {
+    const adminUser = await userRepo.findByUsername('admin');
+    if (adminUser) {
+      await seedDummyData(customerRepo, contractRepo, invoiceRepo, auditRepo, adminUser.id);
+    }
   }
 
   // Start scheduler for daily billing
@@ -116,11 +157,25 @@ async function bootstrap() {
   app.use(errorHandler);
 
   app.listen(config.port, () => {
-    console.log(`🚀 WEDISON RTO Backend running on port ${config.port}`);
-    console.log(`📋 Environment: ${config.nodeEnv}`);
-    console.log(`🔗 API: http://localhost:${config.port}/api`);
-    console.log(`\n📌 Default admin: admin / admin123`);
+    console.log(`WEDISON RTO Backend running on port ${config.port}`);
+    console.log(`Environment: ${config.nodeEnv}`);
+    console.log(`Database: ${usePrisma ? 'PostgreSQL (Prisma)' : 'In-Memory'}`);
+    console.log(`API: http://localhost:${config.port}/api`);
+    console.log(`Default admin: admin / admin123`);
   });
+
+  // Graceful shutdown
+  if (usePrisma) {
+    const shutdown = async () => {
+      console.log('Shutting down...');
+      scheduler.stop();
+      const { prisma } = await import('./infrastructure/prisma/client');
+      await prisma.$disconnect();
+      process.exit(0);
+    };
+    process.on('SIGTERM', shutdown);
+    process.on('SIGINT', shutdown);
+  }
 }
 
 bootstrap().catch(console.error);

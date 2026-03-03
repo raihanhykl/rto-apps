@@ -26,7 +26,7 @@
 | State | Zustand |
 | Forms | React Hook Form + Zod |
 | Backend | Express.js, TypeScript, Clean Architecture |
-| Data | In-Memory (Repository Pattern, ready for PostgreSQL/Prisma) |
+| Data | PostgreSQL + Prisma (production), In-Memory (dev/test) |
 | Monorepo | npm workspaces |
 
 ## Architecture
@@ -1559,15 +1559,15 @@ Fokus: Keamanan yang proper sebelum masuk produksi.
   - IP address logging
   - Filter audit log berdasarkan user dan action type
 
-### Phase 8: Database Migration & Production Readiness
+### Phase 8: Database Migration & Production Readiness ✅ COMPLETED (Prisma)
 
 Fokus: Migrasi ke database nyata dan persiapan production.
 
-- [ ] **PostgreSQL + Prisma migration**
-- [ ] **File upload (KTP images)**
-- [ ] **Environment configuration**
-- [ ] **Error monitoring & logging**
-- [ ] **Database backup strategy**
+- [x] **PostgreSQL + Prisma migration**
+- [x] **Environment configuration** (DATABASE_URL, CORS_ORIGIN, NODE_ENV)
+- [ ] **File upload (KTP images)** — deferred
+- [ ] **Error monitoring & logging** — deferred
+- [ ] **Database backup strategy** — deferred
 
 ### Phase 9: Deployment
 
@@ -1577,3 +1577,111 @@ Fokus: CI/CD dan deployment.
 - [ ] **Production deployment (VPS/Cloud)**
 - [ ] **SSL/HTTPS setup**
 - [ ] **Domain configuration**
+
+---
+
+## 2026-03-03 - Phase 8: PostgreSQL + Prisma Migration
+
+### Context
+
+Backend was using in-memory `Map`-based repositories. All data lost on restart — blocker for deployment. Migrated to PostgreSQL with Prisma ORM while preserving Clean Architecture (only infrastructure layer changes).
+
+### What was built
+
+**Prisma Schema** (`packages/backend/prisma/schema.prisma`):
+- 7 models: User, Customer, Contract, Invoice, Billing, AuditLog, Setting
+- 10 enums: MotorModel, BatteryType, ContractStatus, PaymentStatus, InvoiceType, BillingStatus, DPScheme, Gender, AuditAction, UserRole
+- All relations (Customer→Contract→Invoice/Billing, Billing self-ref for merged billings)
+- Indexes on all FKs, status fields, unique constraints
+- Snake_case column/table names via `@map`/`@@map`
+- `String[]` for rideHailingApps (native PG array), `Json` for metadata (JSONB)
+
+**Prisma Client Singleton** (`packages/backend/src/infrastructure/prisma/client.ts`):
+- Global singleton to prevent connection pool exhaustion during dev hot-reloads
+- Conditional logging (verbose in dev, error-only in production)
+
+**7 Prisma Repository Implementations**:
+- `PrismaSettingRepository` — findAll, findByKey, upsert, delete
+- `PrismaUserRepository` — findAll, findById, findByUsername, CRUD
+- `PrismaAuditLogRepository` — findAllPaginated (search/module/date filter), findRecent, create, count
+- `PrismaCustomerRepository` — findAllPaginated (search fullName/phone/email/ktp), search, soft-delete, count
+- `PrismaContractRepository` — findAllPaginated (search/status/date filter), findByStatus, countByStatus
+- `PrismaInvoiceRepository` — findAllPaginated (search/status/customerId filter), sumByStatus (aggregate)
+- `PrismaBillingRepository` — findActiveByContractId, findByContractId, soft-delete, self-ref
+
+**Each repo follows the pattern:**
+- Implements same interface as InMemory counterpart
+- `toEntity()` method for Prisma→domain type casting (enum compatibility)
+- Parallel count+query for pagination
+- `as any` casts for Prisma↔domain enum compatibility
+
+**Conditional Repo Initialization** (`packages/backend/src/index.ts`):
+- `DATABASE_URL` env var present → Prisma repos + PostgreSQL connection
+- No `DATABASE_URL` → InMemory repos (local dev, tests)
+- Graceful shutdown with `prisma.$disconnect()` on SIGTERM/SIGINT
+- Seed dummy data only in InMemory mode
+
+**Build Scripts** (`packages/backend/package.json`):
+- `build`: `npx prisma generate && tsc`
+- `postinstall`: `npx prisma generate || true`
+- `db:push`: `npx prisma db push`
+- `db:migrate:deploy`: `npx prisma migrate deploy`
+- `db:seed`: `npx ts-node prisma/seed.ts`
+
+**Prisma Seed Script** (`packages/backend/prisma/seed.ts`):
+- Same data as `infrastructure/seed.ts` but uses PrismaClient directly
+- Seeds: admin user, default settings, 8 customers, 9 contracts with DP/billing scenarios
+- Idempotent: checks existing data before seeding
+
+### New Files
+
+| File | Description |
+|------|-------------|
+| `packages/backend/prisma/schema.prisma` | Prisma schema (7 models, 10 enums, relations, indexes) |
+| `packages/backend/prisma/seed.ts` | Database seed script for production |
+| `packages/backend/src/infrastructure/prisma/client.ts` | Prisma client singleton |
+| `packages/backend/src/infrastructure/repositories/PrismaUserRepository.ts` | User repo |
+| `packages/backend/src/infrastructure/repositories/PrismaCustomerRepository.ts` | Customer repo |
+| `packages/backend/src/infrastructure/repositories/PrismaContractRepository.ts` | Contract repo |
+| `packages/backend/src/infrastructure/repositories/PrismaInvoiceRepository.ts` | Invoice repo |
+| `packages/backend/src/infrastructure/repositories/PrismaBillingRepository.ts` | Billing repo |
+| `packages/backend/src/infrastructure/repositories/PrismaAuditLogRepository.ts` | AuditLog repo |
+| `packages/backend/src/infrastructure/repositories/PrismaSettingRepository.ts` | Setting repo |
+
+### Modified Files
+
+| File | Change |
+|------|--------|
+| `packages/backend/package.json` | Added @prisma/client, prisma, build scripts |
+| `packages/backend/src/index.ts` | Conditional Prisma/InMemory init, graceful shutdown |
+| `packages/backend/src/infrastructure/config/index.ts` | Added databaseUrl |
+| `packages/backend/src/infrastructure/repositories/index.ts` | Added Prisma repo exports |
+
+### NOT Modified (Clean Architecture preserved)
+
+- All domain entities, interfaces, enums — UNCHANGED
+- All application services, DTOs — UNCHANGED
+- All presentation controllers, routes — UNCHANGED
+- All tests — UNCHANGED (continue using InMemory repos)
+- All frontend code — UNCHANGED
+
+### Deployment Guide
+
+**Backend (Railway):**
+1. Create Railway project + PostgreSQL addon (auto-provides `DATABASE_URL`)
+2. Set env vars: `CORS_ORIGIN=https://your-app.vercel.app`, `NODE_ENV=production`
+3. Build: `npm install && npm run build`
+4. Start: `npx prisma db push && node dist/index.js`
+5. Initial seed: `npx prisma db seed` (one-time)
+
+**Frontend (Vercel):**
+1. Root directory: `packages/frontend`
+2. Set env var: `NEXT_PUBLIC_API_URL=https://your-backend.railway.app/api`
+3. No code changes needed
+
+### Tests
+
+- 129 tests passing (5 suites, unchanged)
+- Backend TypeScript compiles clean
+- Backend build (`prisma generate + tsc`) succeeds
+- Dev server starts correctly in InMemory mode
