@@ -26,6 +26,7 @@
 | State | Zustand |
 | Forms | React Hook Form + Zod |
 | Backend | Express.js, TypeScript, Clean Architecture |
+| Scheduler | node-cron (daily billing at 00:01 WIB) |
 | Data | PostgreSQL + Prisma (production), In-Memory (dev/test) |
 | Monorepo | npm workspaces |
 
@@ -1034,7 +1035,7 @@ Fokus: Pengalaman pengguna yang lebih baik dan UI yang lebih lengkap.
 - [x] Libur Bayar logic (Minggu auto-holiday + configurable holidays per month spread evenly)
 - [x] Holiday billings: zero amount, auto-PAID, credits 1 free day to ownership
 - [x] Rollover: expired billing → new billing with accumulated amount + days
-- [x] Create scheduler.ts: setInterval-based daily task runner (no external dependency)
+- [x] Create scheduler.ts: node-cron daily task runner (00:01 WIB)
 - [x] Scheduler runs: rolloverExpiredBillings → generateDailyBilling → checkAndUpdateOverdueContracts
 - [x] InMemoryBillingRepository registered in repos index
 - [x] BillingController with routes: GET /billings/contract/:id, GET /billings/contract/:id/active, POST /billings/:id/pay
@@ -1685,3 +1686,20 @@ Backend was using in-memory `Map`-based repositories. All data lost on restart �
 - Backend TypeScript compiles clean
 - Backend build (`prisma generate + tsc`) succeeds
 - Dev server starts correctly in InMemory mode
+
+---
+
+## 2026-03-04 - Scheduler Upgrade: node-cron
+
+### Context
+
+Replaced `setInterval` (24-hour interval) with `node-cron` for the daily billing scheduler. `setInterval` was imprecise — billing would run 24 hours after server start instead of at a consistent time.
+
+### What was changed
+
+- **`packages/backend/src/infrastructure/scheduler.ts`**: Replaced `setInterval` with `node-cron` `schedule()`. Daily tasks now run at **00:01 WIB** (Asia/Jakarta timezone) consistently, regardless of when the server starts. Still runs immediately on startup for catch-up.
+
+### Dependencies Added
+
+- `node-cron` (backend) — Cron scheduler
+- `@types/node-cron` (backend, devDependency) — TypeScript types
