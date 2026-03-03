@@ -16,6 +16,7 @@ export interface Billing {
   expiredAt: Date | null; // when billing was expired (rollover)
   paidAt: Date | null;
   invoiceId: string | null; // reference to generated invoice (when PAID)
+  previousBillingId: string | null; // reference to previous billing (for merged manual billings)
   isDeleted: boolean;
   deletedAt: Date | null;
   createdAt: Date;

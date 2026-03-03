@@ -185,6 +185,7 @@ export interface Billing {
   expiredAt: string | null;
   paidAt: string | null;
   invoiceId: string | null;
+  previousBillingId: string | null;
   isDeleted: boolean;
   deletedAt: string | null;
   createdAt: string;

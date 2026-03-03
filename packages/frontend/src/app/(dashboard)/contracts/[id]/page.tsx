@@ -41,6 +41,8 @@ import {
   Zap,
   CalendarOff,
   Undo2,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import {
   Dialog,
@@ -51,6 +53,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { toastSuccess, toastError } from "@/stores/toastStore";
+import PaymentCalendar from "@/components/PaymentCalendar";
 
 const statusBadgeVariant = (status: string) => {
   switch (status) {
@@ -83,6 +86,9 @@ const paymentBadgeVariant = (status: string) => {
     default: return "outline" as const;
   }
 };
+
+const TIMELINE_PAGE_SIZE = 5;
+const TAGIHAN_PAGE_SIZE = 5;
 
 export default function ContractDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -119,6 +125,14 @@ export default function ContractDetailPage() {
   const [receiveUnitDialogOpen, setReceiveUnitDialogOpen] = useState(false);
   const [bastPhoto, setBastPhoto] = useState("");
   const [bastNotes, setBastNotes] = useState("");
+  const [calendarKey, setCalendarKey] = useState(0);
+
+  // Collapsible sections
+  const [timelineOpen, setTimelineOpen] = useState(false);
+  const [tagihanOpen, setTagihanOpen] = useState(true);
+  // Pagination
+  const [timelinePage, setTimelinePage] = useState(1);
+  const [tagihanPage, setTagihanPage] = useState(1);
 
   useEffect(() => {
     if (id) loadData();
@@ -140,13 +154,19 @@ export default function ContractDetailPage() {
         setBillings(billingsData || []);
         setActiveBilling(activeBillingData);
       } catch {
-        // Billing data is optional, don't fail the page
+        // Billing data is optional
       }
     } catch (error) {
       console.error("Failed to load contract detail:", error);
     } finally {
       setLoading(false);
     }
+  };
+
+  /** Re-fetch all data + refresh calendar */
+  const refreshAll = async () => {
+    await loadData();
+    setCalendarKey((k) => k + 1);
   };
 
   const showQR = async (invoice: Invoice) => {
@@ -165,7 +185,7 @@ export default function ContractDetailPage() {
     try {
       await api.simulatePayment(invoiceId, status);
       toastSuccess("Pembayaran", `Tagihan berhasil di-${status === "PAID" ? "bayar" : "gagalkan"}.`);
-      await loadData();
+      await refreshAll();
     } catch (error: any) {
       toastError("Gagal", error.message);
     } finally {
@@ -176,10 +196,10 @@ export default function ContractDetailPage() {
   const handleExtend = async () => {
     setProcessing(true);
     try {
-      await api.extendContract(id, parseInt(extendDays));
-      toastSuccess("Bayar Tagihan", `Tagihan ${extendDays} hari berhasil dibuat.`);
+      await api.createManualBilling(id, parseInt(extendDays));
+      toastSuccess("Bayar Tagihan", `Tagihan manual ${extendDays} hari berhasil dibuat.`);
       setExtendDialogOpen(false);
-      await loadData();
+      await refreshAll();
     } catch (error: any) {
       toastError("Gagal", error.message);
     } finally {
@@ -193,7 +213,7 @@ export default function ContractDetailPage() {
       await api.repossessContract(id);
       toastSuccess("Penarikan", "Motor berhasil ditarik (repossessed).");
       setRepossessDialogOpen(false);
-      await loadData();
+      await refreshAll();
     } catch (error: any) {
       toastError("Gagal", error.message);
     } finally {
@@ -227,7 +247,7 @@ export default function ContractDetailPage() {
       });
       toastSuccess("Berhasil", "Kontrak berhasil diperbarui.");
       setEditDialogOpen(false);
-      await loadData();
+      await refreshAll();
     } catch (error: any) {
       toastError("Gagal", error.message);
     } finally {
@@ -246,7 +266,7 @@ export default function ContractDetailPage() {
       toastSuccess("Dibatalkan", "Kontrak berhasil dibatalkan.");
       setCancelDialogOpen(false);
       setCancelReason("");
-      await loadData();
+      await refreshAll();
     } catch (error: any) {
       toastError("Gagal", error.message);
     } finally {
@@ -262,7 +282,7 @@ export default function ContractDetailPage() {
       toastSuccess("Berhasil", `Tagihan ${voidInvoiceTarget.invoiceNumber} berhasil di-void.`);
       setVoidDialogOpen(false);
       setVoidInvoiceTarget(null);
-      await loadData();
+      await refreshAll();
     } catch (error: any) {
       toastError("Gagal", error.message);
     } finally {
@@ -278,7 +298,7 @@ export default function ContractDetailPage() {
       toastSuccess("Berhasil", `Tagihan ${markPaidTarget.invoiceNumber} ditandai lunas.`);
       setMarkPaidDialogOpen(false);
       setMarkPaidTarget(null);
-      await loadData();
+      await refreshAll();
     } catch (error: any) {
       toastError("Gagal", error.message);
     } finally {
@@ -294,7 +314,7 @@ export default function ContractDetailPage() {
       toastSuccess("Berhasil", `Tagihan ${revertTarget.invoiceNumber} dikembalikan ke PENDING.`);
       setRevertDialogOpen(false);
       setRevertTarget(null);
-      await loadData();
+      await refreshAll();
     } catch (error: any) {
       toastError("Gagal", error.message);
     } finally {
@@ -314,7 +334,7 @@ export default function ContractDetailPage() {
       setReceiveUnitDialogOpen(false);
       setBastPhoto("");
       setBastNotes("");
-      await loadData();
+      await refreshAll();
     } catch (error: any) {
       toastError("Gagal", error.message);
     } finally {
@@ -327,7 +347,20 @@ export default function ContractDetailPage() {
     try {
       await api.payBilling(billingId);
       toastSuccess("Berhasil", "Billing berhasil dibayar.");
-      await loadData();
+      await refreshAll();
+    } catch (error: any) {
+      toastError("Gagal", error.message);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleCancelBilling = async (billingId: string) => {
+    setProcessing(true);
+    try {
+      await api.cancelBilling(billingId);
+      toastSuccess("Berhasil", "Billing berhasil dibatalkan.");
+      await refreshAll();
     } catch (error: any) {
       toastError("Gagal", error.message);
     } finally {
@@ -357,6 +390,18 @@ export default function ContractDetailPage() {
   const canExtend = contract.status === "ACTIVE" || contract.status === "OVERDUE";
   const canRepossess = contract.status === "ACTIVE" || contract.status === "OVERDUE";
   const canCancel = contract.status === "ACTIVE" || contract.status === "OVERDUE";
+
+  // Sorted data for timeline and tagihan
+  const paidInvoices = invoices
+    .filter((inv) => inv.status === "PAID")
+    .sort((a, b) => new Date(a.paidAt || a.createdAt).getTime() - new Date(b.paidAt || b.createdAt).getTime());
+  const timelineTotalPages = Math.ceil(paidInvoices.length / TIMELINE_PAGE_SIZE);
+  const timelineSlice = paidInvoices.slice((timelinePage - 1) * TIMELINE_PAGE_SIZE, timelinePage * TIMELINE_PAGE_SIZE);
+
+  const tagihanTotalPages = Math.ceil(invoices.length / TAGIHAN_PAGE_SIZE);
+  const tagihanSlice = invoices.slice((tagihanPage - 1) * TAGIHAN_PAGE_SIZE, tagihanPage * TAGIHAN_PAGE_SIZE);
+
+  const dpInvoices = invoices.filter((inv) => inv.type === "DP" || inv.type === "DP_INSTALLMENT");
 
   return (
     <div className="space-y-6">
@@ -409,7 +454,6 @@ export default function ContractDetailPage() {
       }>
         <CardContent className="p-4">
           <div className="flex flex-col md:flex-row md:items-center gap-4">
-            {/* Status Icon & Text */}
             <div className="flex items-center gap-3 flex-1">
               {contract.status === "COMPLETED" ? (
                 <>
@@ -517,6 +561,9 @@ export default function ContractDetailPage() {
         </CardContent>
       </Card>
 
+      {/* Payment Calendar */}
+      <PaymentCalendar contractId={id} billingStartDate={contract.billingStartDate} refreshKey={calendarKey} />
+
       {/* Ownership Progress */}
       <Card>
         <CardHeader>
@@ -582,196 +629,36 @@ export default function ContractDetailPage() {
         </CardContent>
       </Card>
 
-      {/* DP Status Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <CreditCard className="h-5 w-5" /> Status Down Payment (DP)
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div>
-              <p className="text-xs text-muted-foreground">Skema DP</p>
-              <p className="font-bold text-lg mt-1">
-                {contract.dpScheme === "FULL" ? "Lunas" : "Cicilan 2x"}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Total DP</p>
-              <p className="font-bold text-lg mt-1">{formatCurrency(contract.dpAmount)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Terbayar</p>
-              <p className="font-bold text-lg mt-1">{formatCurrency(contract.dpPaidAmount)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Status</p>
-              <Badge variant={contract.dpFullyPaid ? "success" : "warning"} className="mt-1">
-                {contract.dpFullyPaid ? "Lunas" : "Belum Lunas"}
-              </Badge>
-            </div>
-          </div>
-          {/* DP Invoice List */}
-          {(() => {
-            const dpInvoices = invoices.filter(inv => inv.type === "DP" || inv.type === "DP_INSTALLMENT");
-            if (dpInvoices.length === 0) return null;
-            return (
-              <div className="mt-4 pt-4 border-t space-y-2">
-                <p className="text-xs text-muted-foreground font-medium">Tagihan DP</p>
-                {dpInvoices.map((inv, idx) => (
-                  <div key={inv.id} className="flex items-center justify-between text-sm bg-muted/30 rounded-lg p-3">
-                    <div className="flex items-center gap-3">
-                      <span className="font-mono text-xs">{inv.invoiceNumber}</span>
-                      {inv.type === "DP_INSTALLMENT" && (
-                        <span className="text-xs text-muted-foreground">Cicilan {idx + 1}</span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="font-medium">{formatCurrency(inv.amount)}</span>
-                      <Badge variant={paymentBadgeVariant(inv.status)} className="text-xs">
-                        {inv.status}
-                      </Badge>
-                    </div>
-                  </div>
-                ))}
+      {/* Active Billing */}
+      {activeBilling && (
+        <Card className="border-blue-200 dark:border-blue-800">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground font-medium">Tagihan Aktif</p>
+                <span className="font-mono text-xs">{activeBilling.billingNumber}</span>
+                {activeBilling.previousBillingId && (
+                  <span className="ml-2 text-xs text-orange-600 font-medium">(Gabungan)</span>
+                )}
+                <p className="text-xl font-bold mt-1">{formatCurrency(activeBilling.amount)}</p>
+                <p className="text-xs text-muted-foreground">
+                  {activeBilling.daysCount} hari tertunggak — {formatDate(activeBilling.periodStart)} s/d {formatDate(activeBilling.periodEnd)}
+                </p>
               </div>
-            );
-          })()}
-        </CardContent>
-      </Card>
-
-      {/* Unit Delivery & Billing Status */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Package className="h-5 w-5" /> Pengiriman Unit & Billing
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Unit Delivery */}
-            <div className="space-y-3">
-              <p className="text-xs text-muted-foreground font-medium">Pengiriman Unit</p>
-              {contract.unitReceivedDate ? (
-                <div className="bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-900 rounded-lg p-3">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-green-600" />
-                    <span className="text-sm font-medium text-green-700 dark:text-green-400">Unit Diterima</span>
-                  </div>
-                  <p className="text-xs text-green-600 dark:text-green-500 mt-1">
-                    {formatDate(contract.unitReceivedDate)}
-                  </p>
-                  {contract.billingStartDate && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Billing dimulai: {formatDate(contract.billingStartDate)}
-                    </p>
-                  )}
-                </div>
-              ) : (
-                <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-lg p-3">
-                  <div className="flex items-center gap-2">
-                    <Package className="h-4 w-4 text-amber-600" />
-                    <span className="text-sm font-medium text-amber-700 dark:text-amber-400">Menunggu Pengiriman</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    DP harus dibayar sebelum unit bisa dikirim.
-                  </p>
-                  {contract.status === "ACTIVE" && (
-                    <Button
-                      size="sm"
-                      className="mt-2"
-                      onClick={() => setReceiveUnitDialogOpen(true)}
-                    >
-                      <Package className="h-3.5 w-3.5 mr-1" /> Terima Unit
-                    </Button>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Current Billing */}
-            <div className="space-y-3">
-              <p className="text-xs text-muted-foreground font-medium">Billing Harian Aktif</p>
-              {activeBilling ? (
-                <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-lg p-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="font-mono text-xs">{activeBilling.billingNumber}</span>
-                      <p className="text-lg font-bold mt-1">{formatCurrency(activeBilling.amount)}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {activeBilling.daysCount} hari tertunggak
-                      </p>
-                    </div>
-                    <Button
-                      size="sm"
-                      disabled={processing}
-                      onClick={() => handlePayBilling(activeBilling.id)}
-                    >
-                      <Zap className="h-3.5 w-3.5 mr-1" /> Bayar
-                    </Button>
-                  </div>
-                </div>
-              ) : contract.unitReceivedDate ? (
-                <div className="bg-muted/30 rounded-lg p-3 text-center">
-                  <p className="text-sm text-muted-foreground">Tidak ada billing aktif</p>
-                </div>
-              ) : (
-                <div className="bg-muted/30 rounded-lg p-3 text-center">
-                  <p className="text-sm text-muted-foreground">Billing dimulai setelah unit diterima</p>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Libur Bayar Info */}
-          <div className="mt-4 pt-4 border-t">
-            <div className="flex items-center gap-2 text-sm">
-              <CalendarOff className="h-4 w-4 text-muted-foreground" />
-              <span className="text-muted-foreground">Libur Bayar:</span>
-              <span className="font-medium">Setiap Minggu + {contract.holidayDaysPerMonth} hari/bulan</span>
-            </div>
-            <p className="text-xs text-muted-foreground mt-1 ml-6">
-              Hari libur tetap dihitung sebagai progress kepemilikan tanpa biaya.
-            </p>
-          </div>
-
-          {/* Billing History */}
-          {billings.length > 0 && (
-            <div className="mt-4 pt-4 border-t">
-              <p className="text-xs text-muted-foreground font-medium mb-2">Riwayat Billing ({billings.length})</p>
-              <div className="space-y-1 max-h-48 overflow-y-auto">
-                {billings.slice(0, 20).map((b) => (
-                  <div key={b.id} className="flex items-center justify-between text-xs bg-muted/20 rounded px-3 py-2">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono">{b.billingNumber}</span>
-                      <Badge
-                        variant={
-                          b.status === "PAID" ? "success" :
-                          b.status === "ACTIVE" ? "default" :
-                          b.status === "EXPIRED" ? "warning" :
-                          "secondary"
-                        }
-                        className="text-[10px]"
-                      >
-                        {b.status}
-                      </Badge>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      {b.daysCount === 0 ? (
-                        <span className="text-muted-foreground">Libur</span>
-                      ) : (
-                        <span>{b.daysCount} hari</span>
-                      )}
-                      <span className="font-medium">{formatCurrency(b.amount)}</span>
-                    </div>
-                  </div>
-                ))}
+              <div className="flex gap-2">
+                <Button disabled={processing} onClick={() => handlePayBilling(activeBilling.id)}>
+                  <Zap className="h-4 w-4 mr-2" /> Bayar Sekarang
+                </Button>
+                {activeBilling.previousBillingId && (
+                  <Button variant="outline" disabled={processing} onClick={() => handleCancelBilling(activeBilling.id)}>
+                    Batalkan
+                  </Button>
+                )}
               </div>
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Contract Info */}
@@ -848,6 +735,17 @@ export default function ContractDetailPage() {
                 </div>
               </div>
             )}
+            {/* Libur Bayar Info */}
+            <div className="mt-4 pt-4 border-t">
+              <div className="flex items-center gap-2 text-sm">
+                <CalendarOff className="h-4 w-4 text-muted-foreground" />
+                <span className="text-muted-foreground">Libur Bayar:</span>
+                <span className="font-medium">Setiap Minggu + {contract.holidayDaysPerMonth} hari/bulan</span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1 ml-6">
+                Hari libur tetap dihitung sebagai progress kepemilikan tanpa biaya.
+              </p>
+            </div>
             {contract.notes && (
               <div className="mt-4 pt-4 border-t">
                 <p className="text-xs text-muted-foreground">Catatan</p>
@@ -889,182 +787,369 @@ export default function ContractDetailPage() {
         </Card>
       </div>
 
-      {/* Payment Timeline */}
-      {invoices.filter(inv => inv.status === "PAID").length > 0 && (
+      {/* Payment Timeline (Collapsible + Paginated) */}
+      {paidInvoices.length > 0 && (
         <Card>
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <History className="h-5 w-5" /> Timeline Pembayaran
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="relative pl-6 space-y-6">
-              <div className="absolute left-2 top-1 bottom-1 w-0.5 bg-muted" />
-              {invoices
-                .filter(inv => inv.status === "PAID")
-                .sort((a, b) => new Date(a.paidAt || a.createdAt).getTime() - new Date(b.paidAt || b.createdAt).getTime())
-                .map((inv, idx) => (
-                  <div key={inv.id} className="relative">
-                    <div className="absolute -left-[17px] top-1 h-3 w-3 rounded-full bg-green-500 border-2 border-background" />
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <p className="text-sm font-medium">
-                          {idx === 0 && inv.extensionDays
-                            ? `Kontrak awal (${inv.extensionDays} hari)`
-                            : inv.extensionDays
-                            ? `Bayar Tagihan ${inv.extensionDays} hari`
-                            : `Pembayaran ${inv.invoiceNumber}`
-                          }
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {inv.paidAt ? formatDateTime(inv.paidAt) : formatDateTime(inv.createdAt)}
-                        </p>
-                      </div>
-                      <span className="text-sm font-bold text-green-600 whitespace-nowrap">
-                        {formatCurrency(inv.amount + (inv.lateFee || 0))}
-                      </span>
-                    </div>
-                  </div>
-                ))}
+          <CardHeader className="cursor-pointer" onClick={() => setTimelineOpen(!timelineOpen)}>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <History className="h-5 w-5" /> Timeline Pembayaran ({paidInvoices.length})
+              </CardTitle>
+              {timelineOpen ? <ChevronUp className="h-5 w-5 text-muted-foreground" /> : <ChevronDown className="h-5 w-5 text-muted-foreground" />}
             </div>
-          </CardContent>
+          </CardHeader>
+          {timelineOpen && (
+            <CardContent>
+              <div className="relative pl-6 space-y-6">
+                <div className="absolute left-2 top-1 bottom-1 w-0.5 bg-muted" />
+                {timelineSlice.map((inv, idx) => {
+                  const globalIdx = (timelinePage - 1) * TIMELINE_PAGE_SIZE + idx;
+                  return (
+                    <div key={inv.id} className="relative">
+                      <div className="absolute -left-[17px] top-1 h-3 w-3 rounded-full bg-green-500 border-2 border-background" />
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <p className="text-sm font-medium">
+                            {globalIdx === 0 && inv.extensionDays
+                              ? `Kontrak awal (${inv.extensionDays} hari)`
+                              : inv.type === "DP" || inv.type === "DP_INSTALLMENT"
+                              ? `Down Payment${inv.type === "DP_INSTALLMENT" ? " (Cicilan)" : ""}`
+                              : inv.extensionDays
+                              ? `Bayar Tagihan ${inv.extensionDays} hari`
+                              : `Pembayaran ${inv.invoiceNumber}`
+                            }
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {inv.paidAt ? formatDateTime(inv.paidAt) : formatDateTime(inv.createdAt)}
+                          </p>
+                        </div>
+                        <span className="text-sm font-bold text-green-600 whitespace-nowrap">
+                          {formatCurrency(inv.amount + (inv.lateFee || 0))}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {/* Pagination */}
+              {timelineTotalPages > 1 && (
+                <div className="flex items-center justify-center gap-2 mt-4 pt-4 border-t">
+                  <Button variant="outline" size="sm" disabled={timelinePage <= 1} onClick={() => setTimelinePage(timelinePage - 1)}>
+                    Sebelumnya
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    {timelinePage} / {timelineTotalPages}
+                  </span>
+                  <Button variant="outline" size="sm" disabled={timelinePage >= timelineTotalPages} onClick={() => setTimelinePage(timelinePage + 1)}>
+                    Selanjutnya
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          )}
         </Card>
       )}
 
-      {/* Invoices Section */}
+      {/* Riwayat Tagihan (Collapsible + Paginated) */}
+      <Card>
+        <CardHeader className="cursor-pointer" onClick={() => setTagihanOpen(!tagihanOpen)}>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <CreditCard className="h-5 w-5" /> Riwayat Tagihan ({invoices.length})
+            </CardTitle>
+            {tagihanOpen ? <ChevronUp className="h-5 w-5 text-muted-foreground" /> : <ChevronDown className="h-5 w-5 text-muted-foreground" />}
+          </div>
+        </CardHeader>
+        {tagihanOpen && (
+          <CardContent>
+            {invoices.length === 0 ? (
+              <p className="text-muted-foreground text-center py-4">Belum ada tagihan.</p>
+            ) : (
+              <div className="space-y-4">
+                {tagihanSlice.map((invoice) => (
+                  <div key={invoice.id} className="border rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-3">
+                        <span className="font-mono text-sm font-medium">{invoice.invoiceNumber}</span>
+                        <Badge variant={paymentBadgeVariant(invoice.status)}>
+                          {invoice.status}
+                        </Badge>
+                        {(invoice.type === "DP" || invoice.type === "DP_INSTALLMENT") && (
+                          <Badge variant="outline" className="text-xs">DP</Badge>
+                        )}
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-lg">
+                          {formatCurrency(invoice.amount + (invoice.lateFee || 0))}
+                        </p>
+                        {(invoice.lateFee || 0) > 0 && (
+                          <p className="text-xs text-muted-foreground">
+                            Pokok: {formatCurrency(invoice.amount)} + Denda: {formatCurrency(invoice.lateFee || 0)}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 text-sm text-muted-foreground mb-3">
+                      <div className="flex items-center gap-1">
+                        <Clock className="h-3.5 w-3.5" /> Due: {formatDate(invoice.dueDate)}
+                      </div>
+                      <div>
+                        {invoice.paidAt ? `Dibayar: ${formatDate(invoice.paidAt)}` : "Belum dibayar"}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button variant="outline" size="sm" onClick={() => showQR(invoice)}>
+                        {invoice.status === "PAID" ? (
+                          <><CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Bukti</>
+                        ) : (
+                          <><QrCode className="h-3.5 w-3.5 mr-1" /> QR</>
+                        )}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={async () => {
+                          try {
+                            const blob = await api.downloadInvoicePdf(invoice.id);
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement("a");
+                            a.href = url;
+                            a.download = `invoice-${invoice.invoiceNumber}.pdf`;
+                            a.click();
+                            URL.revokeObjectURL(url);
+                          } catch (err: any) {
+                            toastError("Gagal", err?.message || "Gagal mengunduh PDF.");
+                          }
+                        }}
+                        title="Download PDF"
+                      >
+                        <FileDown className="h-3.5 w-3.5 mr-1" /> PDF
+                      </Button>
+                      {invoice.status === "PENDING" && (
+                        <>
+                          <Button
+                            variant="success"
+                            size="sm"
+                            disabled={processing}
+                            onClick={() => simulatePayment(invoice.id, "PAID")}
+                          >
+                            <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Bayar
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            disabled={processing}
+                            onClick={() => simulatePayment(invoice.id, "FAILED")}
+                          >
+                            <XCircle className="h-3.5 w-3.5 mr-1" /> Gagal
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={processing}
+                            onClick={() => { setVoidInvoiceTarget(invoice); setVoidDialogOpen(true); }}
+                          >
+                            <FileX className="h-3.5 w-3.5 mr-1" /> Void
+                          </Button>
+                        </>
+                      )}
+                      {invoice.status === "FAILED" && (
+                        <>
+                          <Button
+                            variant="success"
+                            size="sm"
+                            disabled={processing}
+                            onClick={() => { setMarkPaidTarget(invoice); setMarkPaidDialogOpen(true); }}
+                          >
+                            <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Tandai Lunas
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={processing}
+                            onClick={() => { setVoidInvoiceTarget(invoice); setVoidDialogOpen(true); }}
+                          >
+                            <FileX className="h-3.5 w-3.5 mr-1" /> Void
+                          </Button>
+                        </>
+                      )}
+                      {(invoice.status === "PAID" || invoice.status === "VOID") && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={processing}
+                          onClick={() => { setRevertTarget(invoice); setRevertDialogOpen(true); }}
+                        >
+                          <Undo2 className="h-3.5 w-3.5 mr-1" /> Revert
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {/* Pagination */}
+                {tagihanTotalPages > 1 && (
+                  <div className="flex items-center justify-center gap-2 pt-2">
+                    <Button variant="outline" size="sm" disabled={tagihanPage <= 1} onClick={() => setTagihanPage(tagihanPage - 1)}>
+                      Sebelumnya
+                    </Button>
+                    <span className="text-xs text-muted-foreground">
+                      {tagihanPage} / {tagihanTotalPages}
+                    </span>
+                    <Button variant="outline" size="sm" disabled={tagihanPage >= tagihanTotalPages} onClick={() => setTagihanPage(tagihanPage + 1)}>
+                      Selanjutnya
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        )}
+      </Card>
+
+      {/* Down Payment & Unit Delivery (merged, at bottom) */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
-            <CreditCard className="h-5 w-5" /> Riwayat Tagihan ({invoices.length})
+            <Package className="h-5 w-5" /> Down Payment & Pengiriman Unit
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {invoices.length === 0 ? (
-            <p className="text-muted-foreground text-center py-4">Belum ada tagihan.</p>
-          ) : (
-            <div className="space-y-4">
-              {invoices.map((invoice) => (
-                <div key={invoice.id} className="border rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-3">
-                      <span className="font-mono text-sm font-medium">{invoice.invoiceNumber}</span>
-                      <Badge variant={paymentBadgeVariant(invoice.status)}>
-                        {invoice.status}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* DP Info */}
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground font-medium uppercase">Down Payment</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-xs text-muted-foreground">Skema DP</p>
+                  <p className="font-medium mt-0.5">{contract.dpScheme === "FULL" ? "Lunas" : "Cicilan 2x"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Total DP</p>
+                  <p className="font-medium mt-0.5">{formatCurrency(contract.dpAmount)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Terbayar</p>
+                  <p className="font-medium mt-0.5">{formatCurrency(contract.dpPaidAmount)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Status</p>
+                  <Badge variant={contract.dpFullyPaid ? "success" : "warning"} className="mt-0.5">
+                    {contract.dpFullyPaid ? "Lunas" : "Belum Lunas"}
+                  </Badge>
+                </div>
+              </div>
+              {/* DP Invoices */}
+              {dpInvoices.length > 0 && (
+                <div className="space-y-1.5 pt-2">
+                  {dpInvoices.map((inv, idx) => (
+                    <div key={inv.id} className="flex items-center justify-between text-sm bg-muted/30 rounded-lg p-2.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs">{inv.invoiceNumber}</span>
+                        {inv.type === "DP_INSTALLMENT" && (
+                          <span className="text-xs text-muted-foreground">Cicilan {idx + 1}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-sm">{formatCurrency(inv.amount)}</span>
+                        <Badge variant={paymentBadgeVariant(inv.status)} className="text-xs">
+                          {inv.status}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Unit Delivery */}
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground font-medium uppercase">Pengiriman Unit</p>
+              {contract.unitReceivedDate ? (
+                <div className="bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-900 rounded-lg p-3">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    <span className="text-sm font-medium text-green-700 dark:text-green-400">Unit Diterima</span>
+                  </div>
+                  <p className="text-xs text-green-600 dark:text-green-500 mt-1">
+                    {formatDate(contract.unitReceivedDate)}
+                  </p>
+                  {contract.billingStartDate && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Billing dimulai: {formatDate(contract.billingStartDate)}
+                    </p>
+                  )}
+                  {contract.bastPhoto && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      BAST: Foto tersimpan
+                    </p>
+                  )}
+                  {contract.bastNotes && (
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Catatan: {contract.bastNotes}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-lg p-3">
+                  <div className="flex items-center gap-2">
+                    <Package className="h-4 w-4 text-amber-600" />
+                    <span className="text-sm font-medium text-amber-700 dark:text-amber-400">Menunggu Pengiriman</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    DP harus dibayar sebelum unit bisa dikirim.
+                  </p>
+                  {contract.status === "ACTIVE" && (
+                    <Button
+                      size="sm"
+                      className="mt-2"
+                      onClick={() => setReceiveUnitDialogOpen(true)}
+                    >
+                      <Package className="h-3.5 w-3.5 mr-1" /> Terima Unit
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Billing History */}
+          {billings.length > 0 && (
+            <div className="mt-4 pt-4 border-t">
+              <p className="text-xs text-muted-foreground font-medium mb-2">Riwayat Billing ({billings.length})</p>
+              <div className="space-y-1 max-h-48 overflow-y-auto">
+                {billings.slice(0, 20).map((b) => (
+                  <div key={b.id} className="flex items-center justify-between text-xs bg-muted/20 rounded px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono">{b.billingNumber}</span>
+                      <Badge
+                        variant={
+                          b.status === "PAID" ? "success" :
+                          b.status === "ACTIVE" ? "default" :
+                          b.status === "EXPIRED" ? "warning" :
+                          "secondary"
+                        }
+                        className="text-[10px]"
+                      >
+                        {b.status}
                       </Badge>
                     </div>
-                    <div className="text-right">
-                      <p className="font-bold text-lg">
-                        {formatCurrency(invoice.amount + (invoice.lateFee || 0))}
-                      </p>
-                      {(invoice.lateFee || 0) > 0 && (
-                        <p className="text-xs text-muted-foreground">
-                          Pokok: {formatCurrency(invoice.amount)} + Denda: {formatCurrency(invoice.lateFee || 0)}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4 text-sm text-muted-foreground mb-3">
-                    <div className="flex items-center gap-1">
-                      <Clock className="h-3.5 w-3.5" /> Due: {formatDate(invoice.dueDate)}
-                    </div>
-                    <div>
-                      {invoice.paidAt ? `Dibayar: ${formatDate(invoice.paidAt)}` : "Belum dibayar"}
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button variant="outline" size="sm" onClick={() => showQR(invoice)}>
-                      {invoice.status === "PAID" ? (
-                        <><CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Bukti</>
+                    <div className="flex items-center gap-3">
+                      {b.daysCount === 0 ? (
+                        <span className="text-muted-foreground">Libur</span>
                       ) : (
-                        <><QrCode className="h-3.5 w-3.5 mr-1" /> QR</>
+                        <span>{b.daysCount} hari</span>
                       )}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={async () => {
-                        try {
-                          const blob = await api.downloadInvoicePdf(invoice.id);
-                          const url = URL.createObjectURL(blob);
-                          const a = document.createElement("a");
-                          a.href = url;
-                          a.download = `invoice-${invoice.invoiceNumber}.pdf`;
-                          a.click();
-                          URL.revokeObjectURL(url);
-                        } catch (err: any) {
-                          toastError("Gagal", err?.message || "Gagal mengunduh PDF.");
-                        }
-                      }}
-                      title="Download PDF"
-                    >
-                      <FileDown className="h-3.5 w-3.5 mr-1" /> PDF
-                    </Button>
-                    {invoice.status === "PENDING" && (
-                      <>
-                        <Button
-                          variant="success"
-                          size="sm"
-                          disabled={processing}
-                          onClick={() => simulatePayment(invoice.id, "PAID")}
-                        >
-                          <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
-                          Bayar
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          disabled={processing}
-                          onClick={() => simulatePayment(invoice.id, "FAILED")}
-                        >
-                          <XCircle className="h-3.5 w-3.5 mr-1" /> Gagal
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={processing}
-                          onClick={() => { setVoidInvoiceTarget(invoice); setVoidDialogOpen(true); }}
-                        >
-                          <FileX className="h-3.5 w-3.5 mr-1" /> Void
-                        </Button>
-                      </>
-                    )}
-                    {invoice.status === "FAILED" && (
-                      <>
-                        <Button
-                          variant="success"
-                          size="sm"
-                          disabled={processing}
-                          onClick={() => { setMarkPaidTarget(invoice); setMarkPaidDialogOpen(true); }}
-                        >
-                          <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Tandai Lunas
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={processing}
-                          onClick={() => { setVoidInvoiceTarget(invoice); setVoidDialogOpen(true); }}
-                        >
-                          <FileX className="h-3.5 w-3.5 mr-1" /> Void
-                        </Button>
-                      </>
-                    )}
-                    {(invoice.status === "PAID" || invoice.status === "VOID") && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={processing}
-                        onClick={() => { setRevertTarget(invoice); setRevertDialogOpen(true); }}
-                      >
-                        <Undo2 className="h-3.5 w-3.5 mr-1" /> Revert
-                      </Button>
-                    )}
+                      <span className="font-medium">{formatCurrency(b.amount)}</span>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           )}
         </CardContent>
       </Card>
+
+      {/* ======= DIALOGS ======= */}
 
       {/* QR / Receipt Dialog */}
       <Dialog open={qrDialogOpen} onOpenChange={setQrDialogOpen}>
@@ -1244,58 +1329,31 @@ export default function ContractDetailPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Warna</Label>
-                <Input
-                  value={editColor}
-                  onChange={(e) => setEditColor(e.target.value)}
-                  placeholder="Warna motor"
-                />
+                <Input value={editColor} onChange={(e) => setEditColor(e.target.value)} placeholder="Warna motor" />
               </div>
               <div className="space-y-2">
                 <Label>Tahun</Label>
-                <Input
-                  type="number"
-                  value={editYear}
-                  onChange={(e) => setEditYear(e.target.value)}
-                  placeholder="2025"
-                />
+                <Input type="number" value={editYear} onChange={(e) => setEditYear(e.target.value)} placeholder="2025" />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>VIN Number</Label>
-                <Input
-                  value={editVinNumber}
-                  onChange={(e) => setEditVinNumber(e.target.value)}
-                  placeholder="Nomor VIN"
-                />
+                <Input value={editVinNumber} onChange={(e) => setEditVinNumber(e.target.value)} placeholder="Nomor VIN" />
               </div>
               <div className="space-y-2">
                 <Label>Nomor Mesin</Label>
-                <Input
-                  value={editEngineNumber}
-                  onChange={(e) => setEditEngineNumber(e.target.value)}
-                  placeholder="Nomor mesin"
-                />
+                <Input value={editEngineNumber} onChange={(e) => setEditEngineNumber(e.target.value)} placeholder="Nomor mesin" />
               </div>
             </div>
             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider pt-2">Pengaturan</h3>
             <div className="space-y-2">
               <Label>Grace Period (hari)</Label>
-              <Input
-                type="number"
-                min={0}
-                value={editGracePeriod}
-                onChange={(e) => setEditGracePeriod(e.target.value)}
-              />
+              <Input type="number" min={0} value={editGracePeriod} onChange={(e) => setEditGracePeriod(e.target.value)} />
             </div>
             <div className="space-y-2">
               <Label>Target Kepemilikan (hari)</Label>
-              <Input
-                type="number"
-                min={1}
-                value={editOwnershipTarget}
-                onChange={(e) => setEditOwnershipTarget(e.target.value)}
-              />
+              <Input type="number" min={1} value={editOwnershipTarget} onChange={(e) => setEditOwnershipTarget(e.target.value)} />
               <p className="text-xs text-muted-foreground">
                 Progress saat ini: {contract.totalDaysPaid} / {editOwnershipTarget || contract.ownershipTargetDays} hari
                 ({editOwnershipTarget ? ((contract.totalDaysPaid / parseInt(editOwnershipTarget || "1")) * 100).toFixed(1) : contract.ownershipProgress}%)
@@ -1303,18 +1361,11 @@ export default function ContractDetailPage() {
             </div>
             <div className="space-y-2">
               <Label>Catatan</Label>
-              <Textarea
-                value={editNotes}
-                onChange={(e) => setEditNotes(e.target.value)}
-                placeholder="Catatan kontrak..."
-                rows={3}
-              />
+              <Textarea value={editNotes} onChange={(e) => setEditNotes(e.target.value)} placeholder="Catatan kontrak..." rows={3} />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
-              Batal
-            </Button>
+            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>Batal</Button>
             <Button onClick={handleEdit} disabled={processing}>
               {processing ? "Menyimpan..." : "Simpan"}
             </Button>
@@ -1341,23 +1392,12 @@ export default function ContractDetailPage() {
             </div>
             <div className="space-y-2">
               <Label>Alasan Pembatalan <span className="text-destructive">*</span></Label>
-              <Textarea
-                value={cancelReason}
-                onChange={(e) => setCancelReason(e.target.value)}
-                placeholder="Masukkan alasan pembatalan..."
-                rows={3}
-              />
+              <Textarea value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} placeholder="Masukkan alasan pembatalan..." rows={3} />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setCancelDialogOpen(false); setCancelReason(""); }}>
-              Kembali
-            </Button>
-            <Button
-              className="bg-orange-600 hover:bg-orange-700 text-white"
-              onClick={handleCancel}
-              disabled={processing || !cancelReason.trim()}
-            >
+            <Button variant="outline" onClick={() => { setCancelDialogOpen(false); setCancelReason(""); }}>Kembali</Button>
+            <Button className="bg-orange-600 hover:bg-orange-700 text-white" onClick={handleCancel} disabled={processing || !cancelReason.trim()}>
               {processing ? "Memproses..." : "Ya, Batalkan"}
             </Button>
           </DialogFooter>
@@ -1383,9 +1423,7 @@ export default function ContractDetailPage() {
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setVoidDialogOpen(false); setVoidInvoiceTarget(null); }}>
-              Batal
-            </Button>
+            <Button variant="outline" onClick={() => { setVoidDialogOpen(false); setVoidInvoiceTarget(null); }}>Batal</Button>
             <Button variant="destructive" onClick={handleVoidInvoice} disabled={processing}>
               {processing ? "Memproses..." : "Ya, Void Tagihan"}
             </Button>
@@ -1424,29 +1462,16 @@ export default function ContractDetailPage() {
             )}
             <div>
               <Label className="text-sm font-medium">Foto BAST <span className="text-red-500">*</span></Label>
-              <Input
-                value={bastPhoto}
-                onChange={(e) => setBastPhoto(e.target.value)}
-                placeholder="URL foto bukti serah terima..."
-                className="mt-1"
-              />
+              <Input value={bastPhoto} onChange={(e) => setBastPhoto(e.target.value)} placeholder="URL foto bukti serah terima..." className="mt-1" />
               <p className="text-xs text-muted-foreground mt-1">Masukkan URL foto Berita Acara Serah Terima (BAST)</p>
             </div>
             <div>
               <Label className="text-sm font-medium">Catatan BAST</Label>
-              <Textarea
-                value={bastNotes}
-                onChange={(e) => setBastNotes(e.target.value)}
-                placeholder="Catatan tambahan serah terima (opsional)..."
-                className="mt-1"
-                rows={3}
-              />
+              <Textarea value={bastNotes} onChange={(e) => setBastNotes(e.target.value)} placeholder="Catatan tambahan serah terima (opsional)..." className="mt-1" rows={3} />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setReceiveUnitDialogOpen(false)}>
-              Batal
-            </Button>
+            <Button variant="outline" onClick={() => setReceiveUnitDialogOpen(false)}>Batal</Button>
             <Button onClick={handleReceiveUnit} disabled={processing || !bastPhoto.trim()}>
               {processing ? "Memproses..." : "Ya, Terima Unit"}
             </Button>
@@ -1473,9 +1498,7 @@ export default function ContractDetailPage() {
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setMarkPaidDialogOpen(false); setMarkPaidTarget(null); }}>
-              Batal
-            </Button>
+            <Button variant="outline" onClick={() => { setMarkPaidDialogOpen(false); setMarkPaidTarget(null); }}>Batal</Button>
             <Button variant="success" onClick={handleMarkPaid} disabled={processing}>
               {processing ? "Memproses..." : "Ya, Tandai Lunas"}
             </Button>
@@ -1504,9 +1527,7 @@ export default function ContractDetailPage() {
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setRevertDialogOpen(false); setRevertTarget(null); }}>
-              Batal
-            </Button>
+            <Button variant="outline" onClick={() => { setRevertDialogOpen(false); setRevertTarget(null); }}>Batal</Button>
             <Button variant="destructive" onClick={handleRevertInvoice} disabled={processing}>
               {processing ? "Memproses..." : "Ya, Revert"}
             </Button>

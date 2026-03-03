@@ -72,7 +72,10 @@ export function createRoutes(controllers: RouteControllers): Router {
   // Billings
   router.get('/billings/contract/:contractId', authMiddleware, controllers.billingController.getByContractId);
   router.get('/billings/contract/:contractId/active', authMiddleware, controllers.billingController.getActiveByContractId);
+  router.get('/billings/contract/:contractId/calendar', authMiddleware, controllers.billingController.getCalendarData);
+  router.post('/billings/contract/:contractId/manual', authMiddleware, controllers.billingController.createManualBilling);
   router.post('/billings/:id/pay', authMiddleware, controllers.billingController.payBilling);
+  router.patch('/billings/:id/cancel', authMiddleware, controllers.billingController.cancelBilling);
 
   // Reports
   router.get('/reports', authMiddleware, controllers.reportController.getReport);

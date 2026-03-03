@@ -68,14 +68,14 @@ describe('InvoiceService', () => {
     const invoiceId = uuidv4();
     sampleInvoice = await invoiceRepo.create({
       id: invoiceId,
-      invoiceNumber: 'INV-260301-0001',
+      invoiceNumber: 'PMT-260301-0001',
       contractId,
       customerId,
       amount: 165000,
       lateFee: 0,
       type: InvoiceType.MANUAL_PAYMENT,
       status: PaymentStatus.PENDING,
-      qrCodeData: 'WEDISON-PAY-INV-260301-0001-165000',
+      qrCodeData: 'WEDISON-PAY-PMT-260301-0001-165000',
       dueDate: new Date('2026-03-02'),
       paidAt: null,
       extensionDays: 3,
@@ -99,7 +99,7 @@ describe('InvoiceService', () => {
   describe('getById', () => {
     it('should return invoice by id', async () => {
       const invoice = await invoiceService.getById(sampleInvoice.id);
-      expect(invoice.invoiceNumber).toBe('INV-260301-0001');
+      expect(invoice.invoiceNumber).toBe('PMT-260301-0001');
     });
 
     it('should throw if invoice not found', async () => {
@@ -184,14 +184,14 @@ describe('InvoiceService', () => {
       const extInvoiceId = uuidv4();
       await invoiceRepo.create({
         id: extInvoiceId,
-        invoiceNumber: 'INV-260301-0002',
+        invoiceNumber: 'PMT-260301-0002',
         contractId: sampleContract.id,
         customerId: sampleContract.customerId,
         amount: 55000 * 5,
         lateFee: 0,
         type: InvoiceType.MANUAL_PAYMENT,
         status: PaymentStatus.PENDING,
-        qrCodeData: 'WEDISON-PAY-INV-260301-0002-275000',
+        qrCodeData: 'WEDISON-PAY-PMT-260301-0002-275000',
         dueDate: new Date('2026-03-05'),
         paidAt: null,
         extensionDays: 5,
@@ -219,14 +219,14 @@ describe('InvoiceService', () => {
       const extInvoiceId = uuidv4();
       await invoiceRepo.create({
         id: extInvoiceId,
-        invoiceNumber: 'INV-260301-0003',
+        invoiceNumber: 'PMT-260301-0003',
         contractId: sampleContract.id,
         customerId: sampleContract.customerId,
         amount: 55000 * 5,
         lateFee: 0,
         type: InvoiceType.MANUAL_PAYMENT,
         status: PaymentStatus.PENDING,
-        qrCodeData: 'WEDISON-PAY-INV-260301-0003-275000',
+        qrCodeData: 'WEDISON-PAY-PMT-260301-0003-275000',
         dueDate: new Date('2026-03-05'),
         paidAt: null,
         extensionDays: 5,
@@ -326,14 +326,14 @@ describe('InvoiceService', () => {
       const extInvoiceId = uuidv4();
       await invoiceRepo.create({
         id: extInvoiceId,
-        invoiceNumber: 'INV-260301-0010',
+        invoiceNumber: 'PMT-260301-0010',
         contractId: sampleContract.id,
         customerId: sampleContract.customerId,
         amount: 55000 * 3,
         lateFee: 0,
         type: InvoiceType.MANUAL_PAYMENT,
         status: PaymentStatus.PENDING,
-        qrCodeData: 'WEDISON-PAY-INV-260301-0010',
+        qrCodeData: 'WEDISON-PAY-PMT-260301-0010',
         dueDate: new Date('2026-03-05'),
         paidAt: null,
         extensionDays: 3,

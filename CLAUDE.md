@@ -101,6 +101,8 @@ npm run dev:frontend
 | GET/POST | /api/billings | List/Generate billings |
 | GET | /api/billings/:id | Get billing detail |
 | POST | /api/billings/:id/pay | Pay billing → generate invoice |
+| POST | /api/billings/contract/:contractId/manual | Create manual billing (1-7 days) |
+| PATCH | /api/billings/:id/cancel | Cancel billing (revert if merged) |
 | POST | /api/webhooks/doku | DOKU payment webhook (public) |
 | GET | /api/reports | Get report data (supports filters) |
 | GET | /api/reports/export/json | Export report as JSON |
@@ -873,6 +875,8 @@ Ketentuan per kontrak:
 | GET/POST | /api/billings | List/Generate billings |
 | GET | /api/billings/:id | Get billing detail |
 | POST | /api/billings/:id/pay | Pay billing → generate invoice |
+| POST | /api/billings/contract/:contractId/manual | Create manual billing (1-7 days) |
+| PATCH | /api/billings/:id/cancel | Cancel billing (revert if merged) |
 | POST | /api/webhooks/doku | DOKU payment webhook (public) |
 
 ---
@@ -1324,6 +1328,205 @@ Comprehensive round of bug fixes, UX improvements, and admin control features ba
 - New test: BAST photo validation on receiveUnit
 - Updated receiveUnit tests with bastPhoto parameter
 - Frontend and backend TypeScript compile clean
+
+---
+
+## 2026-03-03 - Billing Accumulation, Calendar & State Refresh Fixes
+
+### Context
+
+Fix 3 bugs terkait billing overdue, kalender pembayaran, dan frontend state refresh.
+
+### What was changed
+
+**Bug 1: Billing Overdue Tidak Terakumulasi**
+
+- **Problem**: Kontrak overdue dengan beberapa hari tunggakan hanya menampilkan billing 1 hari (58K), padahal seharusnya billing menumpuk berdasarkan jumlah hari yang belum dibayar.
+- **Root cause**: `generateDailyBilling()` hanya memproses kontrak ACTIVE (tidak OVERDUE), dan selalu membuat billing 1 hari saja. Juga ada double-rollover bug di mana `rolloverExpiredBillings()` dan `generateDailyBilling()` sama-sama melakukan rollover.
+- **Fix**:
+  - `generateDailyBilling()` sekarang memproses kontrak ACTIVE dan OVERDUE
+  - Menghitung accumulated unpaid working days dari `endDate + 1` sampai `tomorrow`
+  - Menghapus rollover logic dari `generateDailyBilling()` — sekarang hanya `rolloverExpiredBillings()` yang menangani rollover
+  - Billing baru dibuat dengan amount = unpaidWorkingDays × dailyRate
+
+**Bug 2: Kalender Pembayaran Highlight Tanggal Salah**
+
+- **Problem**: Ketika ada billing aktif hari ini (misal tgl 3), yang di-highlight kuning di kalender justru tgl 4 (besok), bukan tgl 3.
+- **Root cause**: Billing model prepaid — billing diterbitkan hari ini untuk usage besok. `getCalendarData()` hanya menandai range `periodStart..periodEnd` (besok) sebagai pending, tidak termasuk hari ini.
+- **Fix**: Menambahkan pengecekan `date.getTime() === today.getTime()` di `getCalendarData()` sehingga hari ini juga ditandai pending ketika ada billing aktif.
+
+**Bug 3: Frontend State Tidak Update Setelah Perubahan**
+
+- **Problem**: PaymentCalendar component tidak refresh setelah mutasi (bayar billing, terima unit, dll) tanpa reload halaman.
+- **Root cause**: PaymentCalendar fetch data independen via `useEffect` pada `[contractId, year, month]`, tidak terpicu oleh parent `loadData()`.
+- **Fix**:
+  - Menambahkan `refreshKey` prop pada PaymentCalendar (increment counter triggers re-fetch)
+  - Menambahkan `calendarKey` state + `refreshAll()` helper di contract detail page
+  - Mengganti semua `await loadData()` di 9 mutation handler dengan `await refreshAll()`
+
+### Modified Files
+
+**Backend:**
+- `packages/backend/src/application/services/BillingService.ts` (generateDailyBilling rewrite, getCalendarData fix)
+- `packages/backend/src/__tests__/BillingService.test.ts` (updated tests, 2 new test cases)
+
+**Frontend:**
+- `packages/frontend/src/components/PaymentCalendar.tsx` (refreshKey prop)
+- `packages/frontend/src/app/(dashboard)/contracts/[id]/page.tsx` (calendarKey state, refreshAll helper)
+
+### Tests
+
+- 114 tests passing (5 suites, up from 112)
+- 2 new tests: accumulated billing for overdue contracts, billing generation for OVERDUE contracts
+- Updated existing billing tests to match new accumulated billing behavior
+
+---
+
+## 2026-03-03 - Payment Calendar Color Logic Fix
+
+### Context
+
+Perbaikan logika warna kalender pembayaran agar tanggal-tanggal yang sudah lewat dalam billing aktif (dari rollover/akumulasi) ditampilkan sebagai merah (overdue), bukan kuning (pending).
+
+### Aturan Warna Kalender
+
+| Warna | Status | Keterangan |
+|-------|--------|------------|
+| Hijau | `paid` | Sudah dibayar |
+| Kuning | `pending` | Tagihan sudah keluar, belum dibayar (hari ini/mendatang) |
+| Merah | `overdue` | Tagihan lewat dan tidak dibayarkan (tanggal yang sudah terlewat) |
+| Biru | `holiday` | Libur bayar (Minggu) |
+| Abu-abu | `not_issued` | Tagihan belum keluar |
+
+### What was changed
+
+**Backend (`BillingService.getCalendarData()`):**
+
+- Tanggal dalam periode billing aktif sekarang dibedakan berdasarkan waktu:
+  - `date < today` → `overdue` (merah) — hari-hari akumulasi/rollover yang belum dibayar
+  - `date >= today` → `pending` (kuning) — tagihan hari ini yang menunggu pembayaran
+  - `date.getDay() === 0` → `holiday` (biru) — Minggu tetap libur bayar meskipun dalam periode billing
+
+### Modified Files
+
+- `packages/backend/src/application/services/BillingService.ts` (getCalendarData logic)
+
+### Tests
+
+- 114 tests passing (5 suites, unchanged)
+
+---
+
+## 2026-03-03 - Calendar Coverage & Sunday-Aware EndDate Fix
+
+### Context
+
+Bug: Setelah membayar billing 3 hari (tgl 2, 3, 4), tanggal 4 muncul ABU-ABU (not_issued) padahal seharusnya HIJAU (paid). Root cause: perhitungan `coveredEndDate` dan `endDate` tidak memperhitungkan hari Minggu yang ada di antara range.
+
+### What was changed
+
+**1. `creditDayToContract()` — Sunday-aware endDate advancement:**
+
+- Sebelumnya: `endDate += days` (calendar days langsung) → tidak skip Minggu
+- Sesudah: Untuk working day credits, iterasi hari per hari dan skip hari Minggu
+- Holiday credits tetap advance 1 calendar day langsung
+- Contoh: endDate=Feb 28, 3 working days → skip Mar 1 (Sun) → endDate=Mar 4
+
+**2. `getCalendarData()` — Gunakan endDate langsung:**
+
+- Sebelumnya: `coveredEndDate = billingStart + totalDaysPaid - 1` (formula yang tidak akurat ketika ada Minggu di range)
+- Sesudah: `coveredEndDate = contract.endDate` (langsung dari contract, yang sudah di-maintain oleh creditDayToContract)
+- endDate selalu akurat karena di-update setiap kali ada pembayaran
+
+**3. Seed data consistency:**
+
+- `billingStartDate`: Diperbaiki dari `daysAgo(startDaysAgo - 1)` → `daysAgo(startDaysAgo - 2)` (H+1 setelah terima unit, bukan H+0)
+- `endDate`: Diperbaiki dari `startDate + totalDaysPaid` (calendar days) → `advanceWorkingDays(startDate, totalDaysPaid)` (skip Sundays)
+- Ditambahkan helper function `advanceWorkingDays()` di seed.ts
+
+### Modified Files
+
+- `packages/backend/src/application/services/BillingService.ts` (creditDayToContract, getCalendarData)
+- `packages/backend/src/infrastructure/seed.ts` (billingStartDate, endDate, advanceWorkingDays helper)
+
+### Tests
+
+- 114 tests passing (5 suites, unchanged)
+
+---
+
+## 2026-03-03 - Libur Bayar Logic Fix & Manual Billing as Active Billing
+
+### Context
+
+Two bugs fixed:
+1. **Libur Bayar**: Previously ALL Sundays were treated as holidays. Now only designated Sundays (based on `holidayDaysPerMonth` per contract, default 2) are Libur Bayar. Non-designated Sundays are regular working days requiring payment.
+2. **Manual Billing**: "Bayar Tagihan" (1-7 days) now creates an ACTIVE Billing entity visible in "Tagihan Aktif", instead of a PENDING Invoice. Supports merge (void old + create combined) and cancel/revert behavior.
+
+### What was changed
+
+**Bug 1 — Libur Bayar (Backend):**
+
+1. **`BillingService.getSundayHolidays(year, month, holidayDaysPerMonth)`** — New pure function. Finds all Sundays in a month, picks `holidayDaysPerMonth` evenly distributed using index-based algorithm.
+2. **`BillingService.isLiburBayar(contract, date)`** — New method. Returns true only if date is a Sunday AND is a designated Libur Bayar for that contract.
+3. **Replaced all `isHoliday()` calls** throughout BillingService:
+   - `generateDailyBilling()` — accumulated billing and standard holiday check
+   - `rolloverBilling()` — holiday rollover check
+   - `creditDayToContract()` — endDate advancement now skips only Libur Bayar Sundays (not all Sundays)
+   - `getCalendarData()` — calendar marks only Libur Bayar Sundays as blue (holiday)
+4. **Removed**: `isHoliday()`, `shouldBeConfigurableHoliday()`, `getUsedHolidayDaysThisMonth()`
+5. **seed.ts** — Updated `advanceWorkingDays()` to use `isLiburBayar` algorithm (matching `getSundayHolidays`)
+
+**Bug 2 — Manual Billing (Backend):**
+
+1. **`Billing.previousBillingId`** — New field on Billing entity for merge/cancel tracking
+2. **`BillingService.createManualBilling(contractId, days, adminId)`**:
+   - Creates ACTIVE billing for N days with amount = days * dailyRate
+   - If active billing exists: cancels old, creates merged billing (old amount + new), sets previousBillingId
+   - Period calculated from contract.endDate forward, skipping Libur Bayar Sundays
+3. **`BillingService.cancelBilling(billingId, adminId)`**:
+   - If billing has previousBillingId: reactivates previous billing (status → ACTIVE)
+   - Cancels current billing (status → CANCELLED)
+4. **BillingController** — Added `createManualBilling` and `cancelBilling` handlers
+5. **Routes** — Added `POST /billings/contract/:contractId/manual` and `PATCH /billings/:id/cancel`
+
+**Frontend:**
+
+1. **API client** — Added `createManualBilling(contractId, days)` and `cancelBilling(billingId)`
+2. **Contract detail page**:
+   - `handleExtend()` now calls `api.createManualBilling()` instead of `api.extendContract()`
+   - Added `handleCancelBilling()` handler
+   - Active billing card shows "(Gabungan)" label when merged
+   - Cancel button appears on merged billings (when `previousBillingId` exists)
+3. **Frontend types** — Added `previousBillingId: string | null` to Billing interface
+
+### New API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | /api/billings/contract/:contractId/manual | Create manual billing (1-7 days) |
+| PATCH | /api/billings/:id/cancel | Cancel billing (revert if merged) |
+
+### Modified Files
+
+**Backend:**
+- `packages/backend/src/domain/entities/Billing.ts` (previousBillingId)
+- `packages/backend/src/application/services/BillingService.ts` (getSundayHolidays, isLiburBayar, createManualBilling, cancelBilling, replaced all isHoliday calls)
+- `packages/backend/src/presentation/controllers/BillingController.ts` (createManualBilling, cancelBilling handlers)
+- `packages/backend/src/presentation/routes/index.ts` (new routes)
+- `packages/backend/src/infrastructure/seed.ts` (getSundayHolidays, isLiburBayar, advanceWorkingDays with Libur Bayar)
+- `packages/backend/src/__tests__/BillingService.test.ts` (getSundayHolidays, isLiburBayar, createManualBilling, cancelBilling tests)
+
+**Frontend:**
+- `packages/frontend/src/types/index.ts` (previousBillingId)
+- `packages/frontend/src/lib/api.ts` (createManualBilling, cancelBilling)
+- `packages/frontend/src/app/(dashboard)/contracts/[id]/page.tsx` (handleExtend → createManualBilling, cancel button, merged label)
+
+### Tests
+
+- 129 tests passing (5 suites, up from 114)
+- New tests: getSundayHolidays (3), isLiburBayar (3), createManualBilling (6), cancelBilling (5)
+- Updated: holiday billing test uses fixed dates for designated Libur Bayar Sundays
 
 ---
 

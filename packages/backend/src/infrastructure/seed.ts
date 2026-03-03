@@ -32,7 +32,52 @@ function generateInvoiceNumber(idx: number): string {
   const date = new Date();
   const y = date.getFullYear().toString().slice(-2);
   const m = (date.getMonth() + 1).toString().padStart(2, '0');
-  return `INV-${y}${m}${(idx + 1).toString().padStart(2, '0')}-${(2000 + idx).toString()}`;
+  return `PMT-${y}${m}${(idx + 1).toString().padStart(2, '0')}-${(2000 + idx).toString()}`;
+}
+
+/**
+ * Get designated Libur Bayar Sundays for a given month.
+ * Picks holidayDaysPerMonth Sundays evenly distributed.
+ * Must match BillingService.getSundayHolidays() algorithm.
+ */
+function getSundayHolidays(year: number, month: number, holidayDaysPerMonth: number): Set<number> {
+  const sundays: number[] = [];
+  const daysInMonth = new Date(year, month, 0).getDate();
+  for (let d = 1; d <= daysInMonth; d++) {
+    if (new Date(year, month - 1, d).getDay() === 0) {
+      sundays.push(d);
+    }
+  }
+  const N = sundays.length;
+  const K = Math.min(holidayDaysPerMonth, N);
+  const result = new Set<number>();
+  for (let i = 0; i < K; i++) {
+    const idx = Math.floor(i * N / K + N / (2 * K));
+    result.add(sundays[idx]);
+  }
+  return result;
+}
+
+function isLiburBayar(date: Date, holidayDaysPerMonth: number): boolean {
+  if (date.getDay() !== 0) return false;
+  const holidays = getSundayHolidays(date.getFullYear(), date.getMonth() + 1, holidayDaysPerMonth);
+  return holidays.has(date.getDate());
+}
+
+/**
+ * Advance a date by N working days, skipping Libur Bayar Sundays.
+ * Used for endDate calculation to match creditDayToContract() behavior.
+ */
+function advanceWorkingDays(startDate: Date, workingDays: number, holidayDaysPerMonth: number = DEFAULT_HOLIDAY_DAYS_PER_MONTH): Date {
+  const result = new Date(startDate);
+  let remaining = workingDays;
+  while (remaining > 0) {
+    result.setDate(result.getDate() + 1);
+    if (!isLiburBayar(result, holidayDaysPerMonth)) {
+      remaining--;
+    }
+  }
+  return result;
 }
 
 let invoiceIdx = 0;
@@ -129,10 +174,12 @@ export async function seedDummyData(
     const dpAmount = DP_AMOUNTS[rateKey] || 0;
     const startDate = daysAgo(scenario.startDaysAgo);
 
-    // Calculate endDate based on billing start + totalDaysPaid
+    // Calculate endDate by advancing working days (skipping Sundays)
+    // to match creditDayToContract() behavior
     const endDate = new Date(startDate);
-    if (scenario.unitReceived) {
-      endDate.setDate(endDate.getDate() + scenario.totalDaysPaid);
+    if (scenario.unitReceived && scenario.totalDaysPaid > 0) {
+      const advancedDate = advanceWorkingDays(startDate, scenario.totalDaysPaid);
+      endDate.setTime(advancedDate.getTime());
     }
 
     const progress = parseFloat(((scenario.totalDaysPaid / DEFAULT_OWNERSHIP_TARGET_DAYS) * 100).toFixed(2));
@@ -161,7 +208,7 @@ export async function seedDummyData(
       dpPaidAmount: scenario.dpPaid ? dpAmount : (scenario.dpScheme === DPScheme.INSTALLMENT ? Math.ceil(dpAmount / 2) : 0),
       dpFullyPaid: scenario.dpPaid,
       unitReceivedDate: scenario.unitReceived ? daysAgo(scenario.startDaysAgo - 1) : null,
-      billingStartDate: scenario.unitReceived ? daysAgo(scenario.startDaysAgo - 1) : null,
+      billingStartDate: scenario.unitReceived ? daysAgo(scenario.startDaysAgo - 2) : null,
       bastPhoto: scenario.unitReceived ? 'https://storage.example.com/bast/sample.jpg' : null,
       bastNotes: scenario.unitReceived ? 'Unit diterima dalam kondisi baik' : '',
       holidayDaysPerMonth: DEFAULT_HOLIDAY_DAYS_PER_MONTH,

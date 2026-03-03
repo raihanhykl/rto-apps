@@ -276,9 +276,28 @@ class ApiClient {
     return this.request<any>(`/billings/contract/${contractId}/active`);
   }
 
+  async getCalendarData(contractId: string, year: number, month: number) {
+    return this.request<Array<{ date: string; status: string; amount?: number }>>(
+      `/billings/contract/${contractId}/calendar?year=${year}&month=${month}`
+    );
+  }
+
   async payBilling(id: string) {
     return this.request<any>(`/billings/${id}/pay`, {
       method: 'POST',
+    });
+  }
+
+  async createManualBilling(contractId: string, days: number) {
+    return this.request<any>(`/billings/contract/${contractId}/manual`, {
+      method: 'POST',
+      body: JSON.stringify({ days }),
+    });
+  }
+
+  async cancelBilling(billingId: string) {
+    return this.request<any>(`/billings/${billingId}/cancel`, {
+      method: 'PATCH',
     });
   }
 

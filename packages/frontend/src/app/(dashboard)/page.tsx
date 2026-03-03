@@ -22,12 +22,21 @@ import {
 
 const RevenueChart = dynamic(
   () => import("@/components/charts/RevenueChart").then((m) => m.RevenueChart),
-  { ssr: false, loading: () => <div className="h-[280px] animate-pulse bg-muted rounded" /> }
+  {
+    ssr: false,
+    loading: () => <div className="h-[280px] animate-pulse bg-muted rounded" />,
+  },
 );
 
 const StatusDistributionChart = dynamic(
-  () => import("@/components/charts/StatusDistributionChart").then((m) => m.StatusDistributionChart),
-  { ssr: false, loading: () => <div className="h-[280px] animate-pulse bg-muted rounded" /> }
+  () =>
+    import("@/components/charts/StatusDistributionChart").then(
+      (m) => m.StatusDistributionChart,
+    ),
+  {
+    ssr: false,
+    loading: () => <div className="h-[280px] animate-pulse bg-muted rounded" />,
+  },
 );
 
 export default function DashboardPage() {
@@ -144,7 +153,9 @@ export default function DashboardPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">{stat.title}</p>
-                  <p className={`text-2xl font-bold mt-1 ${stat.isAmount ? 'text-lg' : ''}`}>
+                  <p
+                    className={`text-2xl font-bold mt-1 ${stat.isAmount ? "text-lg" : ""}`}
+                  >
                     {stat.value}
                   </p>
                 </div>

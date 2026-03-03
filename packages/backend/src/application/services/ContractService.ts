@@ -690,6 +690,6 @@ export class ContractService {
     const m = (date.getMonth() + 1).toString().padStart(2, '0');
     const d = date.getDate().toString().padStart(2, '0');
     const seq = ContractService.invoiceCounter.toString().padStart(4, '0');
-    return `INV-${y}${m}${d}-${seq}`;
+    return `PMT-${y}${m}${d}-${seq}`;
   }
 }
