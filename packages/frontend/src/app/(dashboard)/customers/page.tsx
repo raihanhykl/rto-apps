@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Card, CardContent } from "@/components/ui/card";
@@ -9,13 +9,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -27,6 +20,7 @@ import {
 import { Pagination } from "@/components/ui/pagination";
 import { SortableHeader } from "@/components/SortableHeader";
 import { usePagination } from "@/hooks/usePagination";
+import { useCustomersPaginated, useInvalidate } from "@/hooks/useApi";
 import { api } from "@/lib/api";
 import { Customer } from "@/types";
 import { formatDate } from "@/lib/utils";
@@ -39,8 +33,7 @@ const RIDE_HAILING_OPTIONS = ["Grab", "Gojek", "Maxim", "Indrive", "Shopee"];
 
 export default function CustomersPage() {
   const router = useRouter();
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [loading, setLoading] = useState(true);
+  const invalidate = useInvalidate();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
@@ -48,6 +41,19 @@ export default function CustomersPage() {
   const [saving, setSaving] = useState(false);
 
   const pagination = usePagination({ initialSortBy: "createdAt", initialSortOrder: "desc" });
+
+  const { data: customersData, isLoading: loading } = useCustomersPaginated({
+    page: pagination.page,
+    limit: pagination.limit,
+    sortBy: pagination.sortBy,
+    sortOrder: pagination.sortOrder,
+    search: pagination.debouncedSearch || undefined,
+  });
+  const customers = (customersData?.data as Customer[]) || [];
+
+  useEffect(() => {
+    if (customersData) pagination.updateFromResult(customersData);
+  }, [customersData]);
 
   const { register, handleSubmit: rhfSubmit, reset, setValue, watch, formState: { errors } } = useForm<CustomerFormData>({
     resolver: zodResolver(customerSchema),
@@ -60,29 +66,6 @@ export default function CustomersPage() {
   });
   const [formError, setFormError] = useState("");
   const watchApps = watch("rideHailingApps");
-
-  const loadCustomers = useCallback(async () => {
-    setLoading(true);
-    try {
-      const result = await api.getCustomersPaginated({
-        page: pagination.page,
-        limit: pagination.limit,
-        sortBy: pagination.sortBy,
-        sortOrder: pagination.sortOrder,
-        search: pagination.debouncedSearch || undefined,
-      });
-      setCustomers(result.data);
-      pagination.updateFromResult(result);
-    } catch (error) {
-      console.error("Failed to load customers:", error);
-    } finally {
-      setLoading(false);
-    }
-  }, [pagination.page, pagination.limit, pagination.sortBy, pagination.sortOrder, pagination.debouncedSearch]);
-
-  useEffect(() => {
-    loadCustomers();
-  }, [loadCustomers]);
 
   const openCreate = () => {
     setEditingCustomer(null);
@@ -142,7 +125,7 @@ export default function CustomersPage() {
         toastSuccess("Customer ditambahkan", `${data.fullName} berhasil ditambahkan.`);
       }
       setDialogOpen(false);
-      loadCustomers();
+      invalidate("/customers", "/dashboard");
     } catch (error: any) {
       setFormError(error.message);
     } finally {
@@ -157,7 +140,7 @@ export default function CustomersPage() {
       await api.deleteCustomer(deletingCustomer.id);
       setDeleteDialogOpen(false);
       setDeletingCustomer(null);
-      loadCustomers();
+      invalidate("/customers", "/dashboard");
       toastSuccess("Customer dihapus", `${name} berhasil dihapus.`);
     } catch (error: any) {
       toastError("Gagal menghapus", error.message);

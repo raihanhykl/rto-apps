@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Card, CardContent } from "@/components/ui/card";
@@ -26,6 +26,7 @@ import {
 import { Pagination } from "@/components/ui/pagination";
 import { SortableHeader } from "@/components/SortableHeader";
 import { usePagination } from "@/hooks/usePagination";
+import { useContractsPaginated, useCustomersList, useMotorRates, useInvalidate } from "@/hooks/useApi";
 import { api } from "@/lib/api";
 import { Contract, Customer, MotorModel, BatteryType, DPScheme, DP_AMOUNTS, MOTOR_DAILY_RATES } from "@/types";
 import { formatCurrency, formatDate } from "@/lib/utils";
@@ -47,9 +48,7 @@ const statusBadgeVariant = (status: string) => {
 
 export default function ContractsPage() {
   const router = useRouter();
-  const [contracts, setContracts] = useState<Contract[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [loading, setLoading] = useState(true);
+  const invalidate = useInvalidate();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
@@ -57,7 +56,22 @@ export default function ContractsPage() {
 
   const pagination = usePagination({ initialSortBy: "createdAt", initialSortOrder: "desc" });
 
-  const [motorRates, setMotorRates] = useState<Record<string, number>>({});
+  const { data: contractsData, isLoading: loading } = useContractsPaginated({
+    page: pagination.page,
+    limit: pagination.limit,
+    sortBy: pagination.sortBy,
+    sortOrder: pagination.sortOrder,
+    search: pagination.debouncedSearch || undefined,
+    status: statusFilter !== "ALL" ? statusFilter : undefined,
+  });
+  const contracts = (contractsData?.data as Contract[]) || [];
+
+  useEffect(() => {
+    if (contractsData) pagination.updateFromResult(contractsData);
+  }, [contractsData]);
+
+  const { data: customers = [] as Customer[] } = useCustomersList();
+  const { data: motorRates = {} as Record<string, number> } = useMotorRates();
 
   const { register, handleSubmit: rhfSubmit, reset, control, watch, formState: { errors } } = useForm<ContractFormData>({
     resolver: zodResolver(contractSchema),
@@ -73,38 +87,6 @@ export default function ContractsPage() {
   const watchMotorModel = watch("motorModel");
   const watchBatteryType = watch("batteryType");
   const watchDpScheme = watch("dpScheme");
-
-  const loadContracts = useCallback(async () => {
-    setLoading(true);
-    try {
-      const result = await api.getContractsPaginated({
-        page: pagination.page,
-        limit: pagination.limit,
-        sortBy: pagination.sortBy,
-        sortOrder: pagination.sortOrder,
-        search: pagination.debouncedSearch || undefined,
-        status: statusFilter !== "ALL" ? statusFilter : undefined,
-      });
-      setContracts(result.data);
-      pagination.updateFromResult(result);
-    } catch (error) {
-      console.error("Failed to load contracts:", error);
-    } finally {
-      setLoading(false);
-    }
-  }, [pagination.page, pagination.limit, pagination.sortBy, pagination.sortOrder, pagination.debouncedSearch, statusFilter]);
-
-  useEffect(() => {
-    loadContracts();
-  }, [loadContracts]);
-
-  useEffect(() => {
-    // Load customers and rates once for the create dialog
-    Promise.all([api.getCustomers(), api.getMotorRates()]).then(([c, r]) => {
-      setCustomers(c);
-      setMotorRates(r);
-    });
-  }, []);
 
   const handleStatusFilterChange = (value: string) => {
     setStatusFilter(value);
@@ -154,7 +136,7 @@ export default function ContractsPage() {
       await api.createContract(payload);
       setDialogOpen(false);
       toastSuccess("Kontrak dibuat", `Kontrak ${data.motorModel} ${data.batteryType} (DP: ${data.dpScheme}) berhasil dibuat.`);
-      loadContracts();
+      invalidate("/contracts", "/customers", "/dashboard");
     } catch (error: any) {
       setFormError(error.message);
     } finally {

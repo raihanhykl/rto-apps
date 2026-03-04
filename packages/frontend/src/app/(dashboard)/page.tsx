@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { DashboardSkeleton } from "@/components/skeletons/DashboardSkeleton";
-import { api } from "@/lib/api";
-import { formatCurrency, formatDateTime } from "@/lib/utils";
+import { useDashboardStats } from "@/hooks/useApi";
 import { DashboardStats } from "@/types";
+import { formatCurrency, formatDateTime } from "@/lib/utils";
 import {
   Users,
   FileText,
@@ -40,23 +39,7 @@ const StatusDistributionChart = dynamic(
 );
 
 export default function DashboardPage() {
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    loadStats();
-  }, []);
-
-  const loadStats = async () => {
-    try {
-      const data = await api.getDashboardStats();
-      setStats(data);
-    } catch (error) {
-      console.error("Failed to load dashboard stats:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data: stats, isLoading: loading } = useDashboardStats() as { data: DashboardStats | undefined; isLoading: boolean };
 
   if (loading) {
     return <DashboardSkeleton />;

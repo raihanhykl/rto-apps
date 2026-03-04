@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
-import { api } from "@/lib/api";
+import { useCustomersList, useContractsList } from "@/hooks/useApi";
 import {
   Search,
   Users,
@@ -51,14 +51,19 @@ const getIcon = (result: SearchResult) => {
 export function CommandPalette() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<SearchResult[]>(PAGES);
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // SWR hooks - only fetch when palette is open and query exists
+  const { data: customers } = useCustomersList(open && debouncedQuery ? debouncedQuery : undefined);
+  const { data: contracts } = useContractsList();
+
   const close = useCallback(() => {
     setOpen(false);
     setQuery("");
+    setDebouncedQuery("");
     setSelectedIndex(0);
   }, []);
 
@@ -82,59 +87,57 @@ export function CommandPalette() {
     }
   }, [open]);
 
+  // Debounce query for API search
   useEffect(() => {
     if (!query.trim()) {
-      setResults(PAGES);
-      setSelectedIndex(0);
+      setDebouncedQuery("");
       return;
     }
+    const timer = setTimeout(() => setDebouncedQuery(query), 200);
+    return () => clearTimeout(timer);
+  }, [query]);
 
-    const q = query.toLowerCase();
-    const pageResults = PAGES.filter(
+  // Derive results from SWR data
+  const results = (() => {
+    if (!debouncedQuery.trim()) return PAGES;
+
+    const q = debouncedQuery.toLowerCase();
+    const items: SearchResult[] = PAGES.filter(
       (p) => p.title.toLowerCase().includes(q) || (p.subtitle || "").toLowerCase().includes(q)
     );
 
-    const fetchData = async () => {
-      const items: SearchResult[] = [...pageResults];
-      try {
-        const [customers, contracts] = await Promise.all([
-          api.getCustomers(query),
-          api.getContracts(),
-        ]);
-        customers.slice(0, 5).forEach((c: any) => {
+    if (customers) {
+      (customers as any[]).slice(0, 5).forEach((c: any) => {
+        items.push({
+          type: "customer",
+          id: c.id,
+          title: c.fullName,
+          subtitle: c.phone,
+          href: `/customers/${c.id}`,
+        });
+      });
+    }
+
+    if (contracts) {
+      (contracts as any[])
+        .filter((c: any) =>
+          c.contractNumber.toLowerCase().includes(q) ||
+          c.motorModel.toLowerCase().includes(q)
+        )
+        .slice(0, 5)
+        .forEach((c: any) => {
           items.push({
-            type: "customer",
+            type: "contract",
             id: c.id,
-            title: c.fullName,
-            subtitle: c.phone,
-            href: `/customers/${c.id}`,
+            title: c.contractNumber,
+            subtitle: `${c.motorModel} - ${c.status}`,
+            href: `/contracts/${c.id}`,
           });
         });
-        contracts
-          .filter((c: any) =>
-            c.contractNumber.toLowerCase().includes(q) ||
-            c.motorModel.toLowerCase().includes(q)
-          )
-          .slice(0, 5)
-          .forEach((c: any) => {
-            items.push({
-              type: "contract",
-              id: c.id,
-              title: c.contractNumber,
-              subtitle: `${c.motorModel} - ${c.status}`,
-              href: `/contracts/${c.id}`,
-            });
-          });
-      } catch {
-        // ignore
-      }
-      setResults(items);
-      setSelectedIndex(0);
-    };
+    }
 
-    const timer = setTimeout(fetchData, 200);
-    return () => clearTimeout(timer);
-  }, [query]);
+    return items;
+  })();
 
   const navigate = (result: SearchResult) => {
     router.push(result.href);

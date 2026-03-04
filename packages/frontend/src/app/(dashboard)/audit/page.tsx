@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -14,7 +14,7 @@ import {
 import { Pagination } from "@/components/ui/pagination";
 import { SortableHeader } from "@/components/SortableHeader";
 import { usePagination } from "@/hooks/usePagination";
-import { api } from "@/lib/api";
+import { useAuditLogsPaginated } from "@/hooks/useApi";
 import { AuditLog } from "@/types";
 import { formatDateTime } from "@/lib/utils";
 import { ClipboardList, Search } from "lucide-react";
@@ -33,35 +33,23 @@ const actionColor = (action: string) => {
 };
 
 export default function AuditPage() {
-  const [logs, setLogs] = useState<AuditLog[]>([]);
-  const [loading, setLoading] = useState(true);
   const [moduleFilter, setModuleFilter] = useState("ALL");
 
   const pagination = usePagination({ initialSortBy: "createdAt", initialSortOrder: "desc" });
 
-  const loadLogs = useCallback(async () => {
-    setLoading(true);
-    try {
-      const result = await api.getAuditLogsPaginated({
-        page: pagination.page,
-        limit: pagination.limit,
-        sortBy: pagination.sortBy,
-        sortOrder: pagination.sortOrder,
-        search: pagination.debouncedSearch || undefined,
-        module: moduleFilter !== "ALL" ? moduleFilter : undefined,
-      });
-      setLogs(result.data);
-      pagination.updateFromResult(result);
-    } catch (error) {
-      console.error("Failed to load audit logs:", error);
-    } finally {
-      setLoading(false);
-    }
-  }, [pagination.page, pagination.limit, pagination.sortBy, pagination.sortOrder, pagination.debouncedSearch, moduleFilter]);
+  const { data: logsData, isLoading: loading } = useAuditLogsPaginated({
+    page: pagination.page,
+    limit: pagination.limit,
+    sortBy: pagination.sortBy,
+    sortOrder: pagination.sortOrder,
+    search: pagination.debouncedSearch || undefined,
+    module: moduleFilter !== "ALL" ? moduleFilter : undefined,
+  });
+  const logs = (logsData?.data as AuditLog[]) || [];
 
   useEffect(() => {
-    loadLogs();
-  }, [loadLogs]);
+    if (logsData) pagination.updateFromResult(logsData);
+  }, [logsData]);
 
   const handleModuleFilterChange = (value: string) => {
     setModuleFilter(value);
