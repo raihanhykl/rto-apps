@@ -547,8 +547,9 @@ describe('BillingService', () => {
       const logs = await auditRepo.findAll();
       // 1 for create + 1 for cancel
       expect(logs.length).toBe(2);
-      expect(logs[1].action).toBe('UPDATE');
-      expect(logs[1].module).toBe('billing');
+      const cancelLog = logs.find(l => l.action === 'UPDATE');
+      expect(cancelLog).toBeDefined();
+      expect(cancelLog!.module).toBe('billing');
     });
   });
 

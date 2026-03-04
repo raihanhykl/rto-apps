@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +23,7 @@ import {
 import { Pagination } from "@/components/ui/pagination";
 import { SortableHeader } from "@/components/SortableHeader";
 import { usePagination } from "@/hooks/usePagination";
+import { useInvoicesPaginated, useContractsList, useInvalidate } from "@/hooks/useApi";
 import { api } from "@/lib/api";
 import { Invoice, Contract } from "@/types";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils";
@@ -50,9 +51,7 @@ const statusBadgeVariant = (status: string) => {
 };
 
 export default function InvoicesPage() {
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [contracts, setContracts] = useState<Contract[]>([]);
-  const [loading, setLoading] = useState(true);
+  const invalidate = useInvalidate();
   const [processing, setProcessing] = useState(false);
   const [qrDialogOpen, setQrDialogOpen] = useState(false);
   const [qrCode, setQrCode] = useState("");
@@ -67,33 +66,21 @@ export default function InvoicesPage() {
 
   const pagination = usePagination({ initialSortBy: "createdAt", initialSortOrder: "desc" });
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [result, contractsData] = await Promise.all([
-        api.getInvoicesPaginated({
-          page: pagination.page,
-          limit: pagination.limit,
-          sortBy: pagination.sortBy,
-          sortOrder: pagination.sortOrder,
-          search: pagination.debouncedSearch || undefined,
-          status: statusFilter !== "ALL" ? statusFilter : undefined,
-        }),
-        api.getContracts(),
-      ]);
-      setInvoices(result.data);
-      pagination.updateFromResult(result);
-      setContracts(contractsData);
-    } catch (error) {
-      console.error("Failed to load invoices:", error);
-    } finally {
-      setLoading(false);
-    }
-  }, [pagination.page, pagination.limit, pagination.sortBy, pagination.sortOrder, pagination.debouncedSearch, statusFilter]);
+  const { data: invoicesData, isLoading: loading } = useInvoicesPaginated({
+    page: pagination.page,
+    limit: pagination.limit,
+    sortBy: pagination.sortBy,
+    sortOrder: pagination.sortOrder,
+    search: pagination.debouncedSearch || undefined,
+    status: statusFilter !== "ALL" ? statusFilter : undefined,
+  });
+  const invoices = (invoicesData?.data as Invoice[]) || [];
 
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    if (invoicesData) pagination.updateFromResult(invoicesData);
+  }, [invoicesData]);
+
+  const { data: contracts = [] as Contract[] } = useContractsList();
 
   const handleStatusFilterChange = (value: string) => {
     setStatusFilter(value);
@@ -123,7 +110,7 @@ export default function InvoicesPage() {
         "Pembayaran",
         `Tagihan berhasil di-${status === "PAID" ? "bayar" : "gagalkan"}.`
       );
-      await loadData();
+      invalidate("/invoices", "/contracts", "/dashboard");
     } catch (error: any) {
       toastError("Gagal", error?.message || "Gagal memproses pembayaran.");
     } finally {
@@ -142,7 +129,7 @@ export default function InvoicesPage() {
       );
       setVoidDialogOpen(false);
       setVoidInvoiceTarget(null);
-      await loadData();
+      invalidate("/invoices", "/contracts", "/dashboard");
     } catch (error: any) {
       toastError("Gagal", error?.message || "Gagal void tagihan.");
     } finally {
@@ -161,7 +148,7 @@ export default function InvoicesPage() {
       );
       setMarkPaidDialogOpen(false);
       setMarkPaidTarget(null);
-      await loadData();
+      invalidate("/invoices", "/contracts", "/dashboard");
     } catch (error: any) {
       toastError("Gagal", error?.message || "Gagal menandai tagihan lunas.");
     } finally {
@@ -177,7 +164,7 @@ export default function InvoicesPage() {
       toastSuccess("Berhasil", `Tagihan ${revertTarget.invoiceNumber} dikembalikan ke PENDING.`);
       setRevertDialogOpen(false);
       setRevertTarget(null);
-      await loadData();
+      invalidate("/invoices", "/contracts", "/dashboard");
     } catch (error: any) {
       toastError("Gagal", error?.message || "Gagal me-revert tagihan.");
     } finally {

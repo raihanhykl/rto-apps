@@ -24,6 +24,7 @@
 |-------|-----------|
 | Frontend | Next.js 16 (App Router), TypeScript, Tailwind CSS v4, ShadCN UI |
 | State | Zustand |
+| Data Fetching | SWR (stale-while-revalidate) |
 | Forms | React Hook Form + Zod |
 | Backend | Express.js, TypeScript, Clean Architecture |
 | Scheduler | node-cron (daily billing at 00:01 WIB) |
@@ -1574,8 +1575,10 @@ Fokus: Migrasi ke database nyata dan persiapan production.
 
 Fokus: CI/CD dan deployment.
 
-- [ ] **CI/CD pipeline (GitHub Actions)**
-- [ ] **Production deployment (VPS/Cloud)**
+- [x] **CI/CD pipeline (GitHub Actions)** — CI only (test + build on PR)
+- [x] **Git branching strategy** — main/staging/develop/hotfix/chore
+- [x] **Branch protection** — main + staging require PR + CI pass
+- [ ] **Production deployment (VPS/Cloud)** — Railway (staging + production)
 - [ ] **SSL/HTTPS setup**
 - [ ] **Domain configuration**
 
@@ -1703,3 +1706,149 @@ Replaced `setInterval` (24-hour interval) with `node-cron` for the daily billing
 
 - `node-cron` (backend) — Cron scheduler
 - `@types/node-cron` (backend, devDependency) — TypeScript types
+
+---
+
+## 2026-03-04 - SDLC Git Branching Strategy & CI Setup
+
+### Context
+
+Setup proper SDLC Git workflow dengan branch protection, CI pipeline, dan environment separation untuk development/staging/production.
+
+### Branching Strategy
+
+```
+develop/* ──PR──> staging ──PR──> main (production)
+hotfix/*  ──PR──> main (+ backmerge ke staging)
+chore/*   ──PR──> staging atau main
+```
+
+| Branch | Tujuan | Protection |
+|--------|--------|------------|
+| `main` | Production | PR required, CI must pass, no direct push |
+| `staging` | Pre-production/QA | PR required, CI must pass, no direct push |
+| `develop/*` | Feature development | No protection, per fitur |
+| `hotfix/*` | Critical bug fixes | No protection, PR ke main |
+| `chore/*` | Maintenance tasks | No protection, PR ke staging/main |
+
+### Environment Separation
+
+| | Development | Staging | Production |
+|---|---|---|---|
+| Branch | `develop/*` | `staging` | `main` |
+| Backend | localhost:3001 | Railway (staging-backend) | Railway (production-backend) |
+| Frontend | localhost:3000 | Vercel Preview | Vercel Production |
+| Database | In-Memory / local PG | PostgreSQL (staging) | PostgreSQL (production) |
+| `NODE_ENV` | `development` | `staging` | `production` |
+
+### What was built
+
+1. **`.github/workflows/ci.yml`** — GitHub Actions CI workflow:
+   - Triggers on PR to `main` and `staging`
+   - Steps: install, prisma generate, tsc check, jest tests, build backend, build frontend
+   - Node 22, concurrency cancel-in-progress
+   - Job name `ci` (referenced in branch protection status checks)
+
+2. **`.env.example` files** — Environment variable documentation:
+   - `packages/backend/.env.example`: PORT, NODE_ENV, CORS_ORIGIN, DATABASE_URL
+   - `packages/frontend/.env.example`: NEXT_PUBLIC_API_URL
+
+3. **`.gitignore` updates** — Broader `.env.*` pattern with `!.env.example` exception (root + frontend)
+
+4. **Branch `staging`** — Created from main, pushed to GitHub
+
+5. **Branch protection rules** — Configured via GitHub Settings:
+   - `main`: Require PR, require `ci` status check, no bypass
+   - `staging`: Same rules as `main`
+
+### New Files
+
+| File | Description |
+|------|-------------|
+| `.github/workflows/ci.yml` | GitHub Actions CI workflow |
+| `packages/backend/.env.example` | Backend env vars documentation |
+| `packages/frontend/.env.example` | Frontend env vars documentation |
+
+### Modified Files
+
+| File | Change |
+|------|--------|
+| `.gitignore` | `.env.*` + `!.env.example` (broader pattern) |
+| `packages/frontend/.gitignore` | Added `!.env.example` exception |
+
+---
+
+## 2026-03-04 - Frontend API Caching with SWR
+
+### Context
+
+Every page navigation triggered full API re-fetch from server. Implemented SWR (stale-while-revalidate) by Vercel for proper client-side caching — cached data shown instantly on navigation, background revalidation, request deduplication.
+
+### What was built
+
+**SWR Provider** (`packages/frontend/src/components/SWRProvider.tsx`):
+- Global `<SWRConfig>` wrapper with: `revalidateOnFocus: true`, `revalidateOnReconnect: true`, `dedupingInterval: 2000`, `errorRetryCount: 1`
+- Wrapped in `app/(dashboard)/layout.tsx` inside `<AuthGuard>`
+
+**Custom SWR Hooks** (`packages/frontend/src/hooks/useApi.ts`):
+- TTL tiers: LONG (10min — settings, motor rates), MEDIUM (5min — dashboard), DEFAULT (1min — lists, details), SHORT (15sec — billing, calendar)
+- 17 hooks: `useDashboardStats`, `useCustomersPaginated`, `useCustomer`, `useCustomersList`, `useContractsPaginated`, `useContractDetail`, `useContractsByCustomer`, `useContractsList`, `useInvoicesPaginated`, `useInvoicesByCustomer`, `useBillingsByContract`, `useActiveBilling`, `useCalendarData`, `useReport`, `useAuditLogsPaginated`, `useSettings`, `useMotorRates`
+- `useInvalidate()` — prefix-based cache invalidation (e.g., `invalidate("/customers", "/dashboard")`)
+
+**Page Conversions** (11 pages):
+- Replaced `useState + useEffect + loadData` pattern with SWR hooks
+- Mutation handlers use `invalidate("/prefix")` instead of manual `loadData()`
+- Pattern for paginated pages: `useEffect(() => { if (data) pagination.updateFromResult(data); }, [data])`
+
+**PaymentCalendar**:
+- Replaced `useEffect + loadCalendar` with `useCalendarData` SWR hook
+- Removed `refreshKey` prop — parent's `invalidate("/billings")` auto-triggers refetch
+
+**CommandPalette**:
+- Replaced direct API calls with `useCustomersList` and `useContractsList` SWR hooks
+- Results derived from SWR cached data with internal debounce
+
+### Caching Behavior
+
+| Scenario | Behavior |
+|----------|----------|
+| Navigate away & back | Cached data shown instantly (no spinner), background revalidation if expired |
+| Mutation (create/edit/delete) | `invalidate("/prefix")` force-refetches all related data |
+| Tab focus | Auto-refresh stale data |
+| Page refresh | Cache cleared (in-memory, intentional) |
+| Same data from 2 components | Single request (deduplication) |
+
+### New Files
+
+| File | Description |
+|------|-------------|
+| `packages/frontend/src/components/SWRProvider.tsx` | Global SWR configuration provider |
+| `packages/frontend/src/hooks/useApi.ts` | All SWR hooks + invalidation helper |
+
+### Modified Files
+
+| File | Change |
+|------|--------|
+| `packages/frontend/src/app/(dashboard)/layout.tsx` | Wrap with `<SWRProvider>` |
+| `packages/frontend/src/app/(dashboard)/page.tsx` | useDashboardStats hook |
+| `packages/frontend/src/app/(dashboard)/customers/page.tsx` | useCustomersPaginated + useInvalidate |
+| `packages/frontend/src/app/(dashboard)/customers/[id]/page.tsx` | useCustomer + useContractsByCustomer + useInvoicesByCustomer |
+| `packages/frontend/src/app/(dashboard)/contracts/page.tsx` | useContractsPaginated + useCustomersList + useMotorRates |
+| `packages/frontend/src/app/(dashboard)/contracts/[id]/page.tsx` | useContractDetail + useBillingsByContract + useActiveBilling |
+| `packages/frontend/src/app/(dashboard)/invoices/page.tsx` | useInvoicesPaginated + useContractsList |
+| `packages/frontend/src/app/(dashboard)/reports/page.tsx` | useReport |
+| `packages/frontend/src/app/(dashboard)/audit/page.tsx` | useAuditLogsPaginated |
+| `packages/frontend/src/app/(dashboard)/settings/page.tsx` | useSettings + useInvalidate |
+| `packages/frontend/src/components/PaymentCalendar.tsx` | useCalendarData, removed refreshKey prop |
+| `packages/frontend/src/components/CommandPalette.tsx` | useCustomersList + useContractsList |
+
+### Dependencies Added
+
+- `swr` (frontend) — ~4KB, stale-while-revalidate data fetching by Vercel
+
+### NOT Modified
+
+- `packages/frontend/src/lib/api.ts` — ApiClient unchanged (SWR hooks call existing methods as fetchers)
+- `packages/frontend/src/hooks/usePagination.ts` — Unchanged (manages UI state only)
+- All backend code — Zero changes
+- Tests — 129 tests passing (5 suites, unchanged)

@@ -5,35 +5,26 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useSettings, useInvalidate } from "@/hooks/useApi";
 import { api } from "@/lib/api";
 import { Setting } from "@/types";
 import { Settings, Save } from "lucide-react";
 
 export default function SettingsPage() {
-  const [settings, setSettings] = useState<Setting[]>([]);
-  const [loading, setLoading] = useState(true);
+  const invalidate = useInvalidate();
+  const { data: settings = [] as Setting[], isLoading: loading } = useSettings();
   const [editValues, setEditValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<string | null>(null);
 
   useEffect(() => {
-    loadSettings();
-  }, []);
-
-  const loadSettings = async () => {
-    try {
-      const data = await api.getSettings();
-      setSettings(data);
+    if (settings && (settings as Setting[]).length > 0) {
       const values: Record<string, string> = {};
-      data.forEach((s: Setting) => {
+      (settings as Setting[]).forEach((s: Setting) => {
         values[s.key] = s.value;
       });
       setEditValues(values);
-    } catch (error) {
-      console.error("Failed to load settings:", error);
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [settings]);
 
   const handleSave = async (setting: Setting) => {
     const newValue = editValues[setting.key];
@@ -46,7 +37,7 @@ export default function SettingsPage() {
         value: newValue,
         description: setting.description,
       });
-      await loadSettings();
+      invalidate("/settings");
     } catch (error) {
       console.error("Failed to save setting:", error);
     } finally {
