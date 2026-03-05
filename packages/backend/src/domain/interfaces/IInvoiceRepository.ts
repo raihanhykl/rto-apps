@@ -15,4 +15,5 @@ export interface IInvoiceRepository {
   count(): Promise<number>;
   countByStatus(status: PaymentStatus): Promise<number>;
   sumByStatus(status: PaymentStatus): Promise<number>;
+  findMaxInvoiceSequence(): Promise<number>;
 }

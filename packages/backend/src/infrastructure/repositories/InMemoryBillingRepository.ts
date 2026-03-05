@@ -108,4 +108,16 @@ export class InMemoryBillingRepository implements IBillingRepository {
     return Array.from(this.billings.values())
       .filter(b => b.status === status && !b.isDeleted).length;
   }
+
+  async findMaxBillingSequence(): Promise<number> {
+    let max = 0;
+    for (const b of this.billings.values()) {
+      const match = b.billingNumber.match(/BIL-\d{6}-(\d+)/);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num > max) max = num;
+      }
+    }
+    return max;
+  }
 }

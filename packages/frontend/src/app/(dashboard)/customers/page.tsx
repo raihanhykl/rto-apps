@@ -10,6 +10,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -39,8 +46,14 @@ export default function CustomersPage() {
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [deletingCustomer, setDeletingCustomer] = useState<Customer | null>(null);
   const [saving, setSaving] = useState(false);
+  const [genderFilter, setGenderFilter] = useState("ALL");
 
   const pagination = usePagination({ initialSortBy: "createdAt", initialSortOrder: "desc" });
+
+  const handleGenderFilterChange = (value: string) => {
+    setGenderFilter(value);
+    pagination.setPage(1);
+  };
 
   const { data: customersData, isLoading: loading } = useCustomersPaginated({
     page: pagination.page,
@@ -48,6 +61,7 @@ export default function CustomersPage() {
     sortBy: pagination.sortBy,
     sortOrder: pagination.sortOrder,
     search: pagination.debouncedSearch || undefined,
+    gender: genderFilter !== "ALL" ? genderFilter : undefined,
   });
   const customers = (customersData?.data as Customer[]) || [];
 
@@ -183,8 +197,8 @@ export default function CustomersPage() {
         </Button>
       </div>
 
-      {/* Search */}
-      <div className="flex gap-2">
+      {/* Search & Filter */}
+      <div className="flex flex-col sm:flex-row gap-2">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
@@ -194,6 +208,16 @@ export default function CustomersPage() {
             className="pl-9"
           />
         </div>
+        <Select value={genderFilter} onValueChange={handleGenderFilterChange}>
+          <SelectTrigger className="w-44">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">Semua Gender</SelectItem>
+            <SelectItem value="MALE">Laki-laki</SelectItem>
+            <SelectItem value="FEMALE">Perempuan</SelectItem>
+          </SelectContent>
+        </Select>
         {pagination.total > 0 && (
           <span className="text-sm text-muted-foreground self-center">{pagination.total} customer</span>
         )}
@@ -205,9 +229,9 @@ export default function CustomersPage() {
           <CardContent className="py-12 text-center">
             <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <p className="text-muted-foreground">
-              {pagination.debouncedSearch ? "Tidak ada customer yang cocok." : "Belum ada customer."}
+              {pagination.debouncedSearch || genderFilter !== "ALL" ? "Tidak ada customer yang cocok dengan filter." : "Belum ada customer."}
             </p>
-            {!pagination.debouncedSearch && (
+            {!pagination.debouncedSearch && genderFilter === "ALL" && (
               <Button className="mt-4" onClick={openCreate}>
                 <Plus className="h-4 w-4 mr-2" />
                 Tambah Customer Pertama

@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { ReportService, ReportFilters } from '../../application/services/ReportService';
 import { IAuditLogRepository } from '../../domain/interfaces';
-import { AuditAction, ContractStatus, MotorModel } from '../../domain/enums';
+import { AuditAction, ContractStatus, MotorModel, BatteryType } from '../../domain/enums';
 import { v4 as uuidv4 } from 'uuid';
 
 export class ReportController {
@@ -19,6 +19,9 @@ export class ReportController {
     }
     if (query.motorModel && Object.values(MotorModel).includes(query.motorModel)) {
       filters.motorModel = query.motorModel as MotorModel;
+    }
+    if (query.batteryType && Object.values(BatteryType).includes(query.batteryType)) {
+      filters.batteryType = query.batteryType as BatteryType;
     }
     return filters;
   }

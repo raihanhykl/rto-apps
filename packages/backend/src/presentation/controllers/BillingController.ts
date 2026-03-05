@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { BillingService } from '../../application/services';
+import { getWibToday } from '../../domain/utils/dateUtils';
 
 export class BillingController {
   constructor(private billingService: BillingService) {}
@@ -25,8 +26,9 @@ export class BillingController {
   getCalendarData = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { year, month } = req.query;
-      const y = parseInt(year as string) || new Date().getFullYear();
-      const m = parseInt(month as string) || (new Date().getMonth() + 1);
+      const today = getWibToday();
+      const y = parseInt(year as string) || today.getFullYear();
+      const m = parseInt(month as string) || (today.getMonth() + 1);
       const data = await this.billingService.getCalendarData(req.params.contractId, y, m);
       res.json(data);
     } catch (error) {

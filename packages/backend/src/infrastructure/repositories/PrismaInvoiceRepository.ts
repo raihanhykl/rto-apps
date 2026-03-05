@@ -30,6 +30,9 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
     if (params.customerId) {
       where.customerId = params.customerId;
     }
+    if (params.invoiceType && params.invoiceType !== 'ALL') {
+      where.type = params.invoiceType as any;
+    }
     if (params.startDate || params.endDate) {
       where.createdAt = {};
       if (params.startDate) {
@@ -159,5 +162,22 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
       },
     });
     return (result._sum.amount || 0) + (result._sum.lateFee || 0);
+  }
+
+  async findMaxInvoiceSequence(): Promise<number> {
+    const invoices = await this.prisma.invoice.findMany({
+      select: { invoiceNumber: true },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+    });
+    let max = 0;
+    for (const i of invoices) {
+      const match = i.invoiceNumber.match(/PMT-\d{6}-(\d+)/);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num > max) max = num;
+      }
+    }
+    return max;
   }
 }

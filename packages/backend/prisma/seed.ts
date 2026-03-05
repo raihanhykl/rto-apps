@@ -41,6 +41,13 @@ function startOfDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
 }
 
+function getWibToday(): Date {
+  const now = new Date();
+  const wibStr = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+  const [y, m, d] = wibStr.split('-').map(Number);
+  return new Date(y, m - 1, d, 0, 0, 0, 0);
+}
+
 function endOfDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
 }
@@ -179,7 +186,7 @@ async function seedCustomers(): Promise<number> {
 }
 
 async function seedContracts(adminId: string): Promise<{ contractCount: number; invoiceCount: number; billingCount: number }> {
-  const TODAY = startOfDay(new Date());
+  const TODAY = startOfDay(getWibToday());
   const existingContracts = new Set(
     (await prisma.contract.findMany({ select: { contractNumber: true } })).map((c) => c.contractNumber)
   );

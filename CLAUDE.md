@@ -7,6 +7,13 @@
 > - `README.md` — Dokumentasi project (tech stack, API endpoints, architecture, cara setup)
 > - `docs/CHANGELOG.md` — History lengkap semua perubahan per phase
 
+## Bahasa Komunikasi
+
+**Claude WAJIB selalu berkomunikasi dalam Bahasa Indonesia dengan user.** Semua penjelasan, pertanyaan, summary, dan output teks harus dalam Bahasa Indonesia. Kecuali untuk:
+- Kode program (tetap dalam bahasa Inggris)
+- Istilah teknis yang sudah umum (commit message, variable name, error message, dll.)
+- Nama file, path, dan command terminal
+
 ---
 
 ## Documentation Rules (WAJIB DIIKUTI)
@@ -58,7 +65,7 @@ Ada 5 kombinasi motor + baterai dengan harga berbeda:
 | EdPower (hanya 1 tipe baterai) | Rp 83.000/hari | Rp 780.000 |
 
 - **Ownership Target**: 1.278 hari kerja (bukan calendar days — Libur Bayar Sundays tidak dihitung)
-- **Billing Model**: Auto-billing harian. Jika tidak dibayar, billing berikutnya rollover (akumulasi amount).
+- **Billing Model**: Same-day billing — tagihan di-generate jam 00:01 WIB untuk hari itu juga (bukan hari besok). Jika tidak dibayar, billing berikutnya rollover (akumulasi amount).
 - **Manual Payment**: Admin bisa buat billing manual 1-7 hari ke depan sebagai opsi tambahan.
 
 ---
@@ -127,6 +134,13 @@ Domain (paling dalam) → Application → Infrastructure → Presentation (palin
 - Invoice: `INV-YYMMDD-NNNN`
 - Billing: `BIL-YYMMDD-NNNN`
 
+**Timezone — WIB (Asia/Jakarta):**
+- Semua logika tanggal "hari ini" WAJIB menggunakan `getWibToday()` dari `BillingService.ts`, BUKAN `new Date()`.
+- Server production (Railway) berjalan di timezone UTC. `new Date()` memberikan tanggal UTC yang bisa beda hari dari WIB.
+- Scheduler cron sudah di-set `timezone: 'Asia/Jakarta'` — ini hanya mengatur kapan cron trigger, tapi `new Date()` di dalamnya tetap UTC.
+- `getWibToday()` menggunakan `toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' })` untuk mendapatkan tanggal WIB yang benar.
+- Timestamp seperti `createdAt`, `updatedAt`, `paidAt` tetap pakai `new Date()` (UTC) — tidak perlu WIB karena ini timestamp murni.
+
 ### Frontend Patterns (Detail)
 
 **Tailwind CSS v4 (BUKAN v3):**
@@ -176,8 +190,8 @@ Domain (paling dalam) → Application → Infrastructure → Presentation (palin
 
 ### Billing & Payment Lifecycle
 
-**Flow normal:**
-1. Scheduler (00:01 WIB) generate billing harian untuk semua kontrak ACTIVE & OVERDUE
+**Flow normal (same-day billing model):**
+1. Scheduler (00:01 WIB) generate billing untuk **hari ini** (bukan besok) untuk semua kontrak ACTIVE & OVERDUE
 2. Customer bayar billing → billing status jadi PAID → system generate Invoice (type=DAILY_BILLING)
 3. Invoice PAID → credit hari ke contract (`totalDaysPaid++`, `ownershipProgress` update, `endDate` maju)
 

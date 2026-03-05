@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { ICustomerRepository, IContractRepository, IInvoiceRepository, IAuditLogRepository } from '../domain/interfaces';
 import { Customer, Contract, Invoice } from '../domain/entities';
 import { MotorModel, BatteryType, ContractStatus, PaymentStatus, AuditAction, DPScheme, InvoiceType, Gender, MOTOR_DAILY_RATES, DP_AMOUNTS, DEFAULT_OWNERSHIP_TARGET_DAYS, DEFAULT_GRACE_PERIOD_DAYS, DEFAULT_HOLIDAY_DAYS_PER_MONTH } from '../domain/enums';
+import { getWibToday, getWibDateParts } from '../domain/utils/dateUtils';
 
 const CUSTOMER_DATA = [
   { fullName: 'Budi Santoso', phone: '08123456789', email: 'budi.santoso@gmail.com', address: 'Jl. Sudirman No. 45, Jakarta Selatan', ktpNumber: '3174012305900001', birthDate: '1990-05-23', gender: Gender.MALE, rideHailingApps: ['Grab', 'Gojek'], guarantorName: 'Joko Santoso', guarantorPhone: '08129876543' },
@@ -15,23 +16,23 @@ const CUSTOMER_DATA = [
 ];
 
 function daysAgo(days: number): Date {
-  const d = new Date();
+  const d = getWibToday();
   d.setDate(d.getDate() - days);
   d.setHours(9, 0, 0, 0);
   return d;
 }
 
 function generateContractNumber(idx: number): string {
-  const date = new Date();
-  const y = date.getFullYear().toString().slice(-2);
-  const m = (date.getMonth() + 1).toString().padStart(2, '0');
+  const { year, month } = getWibDateParts();
+  const y = year.toString().slice(-2);
+  const m = month.toString().padStart(2, '0');
   return `RTO-${y}${m}${(idx + 1).toString().padStart(2, '0')}-${(1000 + idx).toString()}`;
 }
 
 function generateInvoiceNumber(idx: number): string {
-  const date = new Date();
-  const y = date.getFullYear().toString().slice(-2);
-  const m = (date.getMonth() + 1).toString().padStart(2, '0');
+  const { year, month } = getWibDateParts();
+  const y = year.toString().slice(-2);
+  const m = month.toString().padStart(2, '0');
   return `PMT-${y}${m}${(idx + 1).toString().padStart(2, '0')}-${(2000 + idx).toString()}`;
 }
 

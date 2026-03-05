@@ -4,7 +4,8 @@ import {
   IInvoiceRepository,
 } from '../../domain/interfaces';
 import { Contract, Customer, Invoice } from '../../domain/entities';
-import { ContractStatus, PaymentStatus, MotorModel } from '../../domain/enums';
+import { ContractStatus, PaymentStatus, MotorModel, BatteryType } from '../../domain/enums';
+import { getWibToday } from '../../domain/utils/dateUtils';
 
 export interface ReportData {
   generatedAt: Date;
@@ -30,6 +31,7 @@ export interface ReportFilters {
   endDate?: string;
   status?: ContractStatus;
   motorModel?: MotorModel;
+  batteryType?: BatteryType;
 }
 
 export class ReportService {
@@ -70,10 +72,13 @@ export class ReportService {
     if (filters?.motorModel) {
       contracts = contracts.filter(c => c.motorModel === filters.motorModel);
     }
+    if (filters?.batteryType) {
+      contracts = contracts.filter(c => c.batteryType === filters.batteryType);
+    }
 
     // Filter invoices to match filtered contracts
     const contractIds = new Set(contracts.map(c => c.id));
-    if (filters?.status || filters?.motorModel) {
+    if (filters?.status || filters?.motorModel || filters?.batteryType) {
       invoices = invoices.filter(i => contractIds.has(i.contractId));
     }
 
@@ -113,7 +118,7 @@ export class ReportService {
     // Revenue by month (last 6 months)
     const revenueByMonth: Array<{ month: string; revenue: number }> = [];
     for (let m = 5; m >= 0; m--) {
-      const d = new Date();
+      const d = getWibToday();
       d.setMonth(d.getMonth() - m);
       const month = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`;
       const monthRevenue = paidInvoices

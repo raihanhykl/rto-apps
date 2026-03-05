@@ -7,6 +7,7 @@ import {
 } from '../../domain/interfaces';
 import { Invoice, Contract } from '../../domain/entities';
 import { PaymentStatus, AuditAction, ContractStatus, InvoiceType } from '../../domain/enums';
+import { getWibToday } from '../../domain/utils/dateUtils';
 import { v4 as uuidv4 } from 'uuid';
 import QRCode from 'qrcode';
 
@@ -91,7 +92,8 @@ export class InvoiceService {
     // For extension payments, also update durationDays, totalAmount, and endDate
     // For initial payments, these are already set correctly at contract creation
     if (!isInitialPayment) {
-      const newStartDate = contract.endDate > new Date() ? contract.endDate : new Date();
+      const today = getWibToday();
+      const newStartDate = contract.endDate > today ? contract.endDate : today;
       const newEndDate = new Date(newStartDate);
       newEndDate.setDate(newEndDate.getDate() + invoice.extensionDays);
 

@@ -31,7 +31,7 @@ import { api } from "@/lib/api";
 import { Contract, Customer, MotorModel, BatteryType, DPScheme, DP_AMOUNTS, MOTOR_DAILY_RATES } from "@/types";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { contractSchema, ContractFormData } from "@/lib/schemas";
-import { Plus, FileText, Search } from "lucide-react";
+import { Plus, FileText, Search, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toastSuccess } from "@/stores/toastStore";
 
@@ -53,6 +53,10 @@ export default function ContractsPage() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [motorModelFilter, setMotorModelFilter] = useState("ALL");
+  const [batteryTypeFilter, setBatteryTypeFilter] = useState("ALL");
+  const [dpSchemeFilter, setDpSchemeFilter] = useState("ALL");
+  const [dpFullyPaidFilter, setDpFullyPaidFilter] = useState("ALL");
 
   const pagination = usePagination({ initialSortBy: "createdAt", initialSortOrder: "desc" });
 
@@ -63,6 +67,10 @@ export default function ContractsPage() {
     sortOrder: pagination.sortOrder,
     search: pagination.debouncedSearch || undefined,
     status: statusFilter !== "ALL" ? statusFilter : undefined,
+    motorModel: motorModelFilter !== "ALL" ? motorModelFilter : undefined,
+    batteryType: batteryTypeFilter !== "ALL" ? batteryTypeFilter : undefined,
+    dpScheme: dpSchemeFilter !== "ALL" ? dpSchemeFilter : undefined,
+    dpFullyPaid: dpFullyPaidFilter !== "ALL" ? dpFullyPaidFilter : undefined,
   });
   const contracts = (contractsData?.data as Contract[]) || [];
 
@@ -88,8 +96,19 @@ export default function ContractsPage() {
   const watchBatteryType = watch("batteryType");
   const watchDpScheme = watch("dpScheme");
 
-  const handleStatusFilterChange = (value: string) => {
-    setStatusFilter(value);
+  const handleFilterChange = (setter: (v: string) => void) => (value: string) => {
+    setter(value);
+    pagination.setPage(1);
+  };
+
+  const hasActiveFilters = statusFilter !== "ALL" || motorModelFilter !== "ALL" || batteryTypeFilter !== "ALL" || dpSchemeFilter !== "ALL" || dpFullyPaidFilter !== "ALL";
+
+  const clearAllFilters = () => {
+    setStatusFilter("ALL");
+    setMotorModelFilter("ALL");
+    setBatteryTypeFilter("ALL");
+    setDpSchemeFilter("ALL");
+    setDpFullyPaidFilter("ALL");
     pagination.setPage(1);
   };
 
@@ -161,33 +180,83 @@ export default function ContractsPage() {
         </Button>
       </div>
 
-      {/* Search & Filter */}
-      <div className="flex flex-col sm:flex-row gap-2">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Cari no. kontrak, customer, motor..."
-            value={pagination.search}
-            onChange={(e) => pagination.setSearch(e.target.value)}
-            className="pl-9"
-          />
+      {/* Search & Filters */}
+      <div className="space-y-2">
+        <div className="flex flex-col sm:flex-row gap-2">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Cari no. kontrak, customer, motor..."
+              value={pagination.search}
+              onChange={(e) => pagination.setSearch(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          <Select value={statusFilter} onValueChange={handleFilterChange(setStatusFilter)}>
+            <SelectTrigger className="w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">Semua Status</SelectItem>
+              <SelectItem value="ACTIVE">Active</SelectItem>
+              <SelectItem value="COMPLETED">Completed</SelectItem>
+              <SelectItem value="OVERDUE">Overdue</SelectItem>
+              <SelectItem value="CANCELLED">Cancelled</SelectItem>
+              <SelectItem value="REPOSSESSED">Repossessed</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={motorModelFilter} onValueChange={handleFilterChange(setMotorModelFilter)}>
+            <SelectTrigger className="w-36">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">Semua Motor</SelectItem>
+              <SelectItem value="ATHENA">Athena</SelectItem>
+              <SelectItem value="VICTORY">Victory</SelectItem>
+              <SelectItem value="EDPOWER">EdPower</SelectItem>
+            </SelectContent>
+          </Select>
+          {pagination.total > 0 && (
+            <span className="text-sm text-muted-foreground self-center">{pagination.total} kontrak</span>
+          )}
         </div>
-        <Select value={statusFilter} onValueChange={handleStatusFilterChange}>
-          <SelectTrigger className="w-40">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ALL">Semua Status</SelectItem>
-            <SelectItem value="ACTIVE">Active</SelectItem>
-            <SelectItem value="COMPLETED">Completed</SelectItem>
-            <SelectItem value="OVERDUE">Overdue</SelectItem>
-            <SelectItem value="CANCELLED">Cancelled</SelectItem>
-            <SelectItem value="REPOSSESSED">Repossessed</SelectItem>
-          </SelectContent>
-        </Select>
-        {pagination.total > 0 && (
-          <span className="text-sm text-muted-foreground self-center">{pagination.total} kontrak</span>
-        )}
+        <div className="flex flex-wrap gap-2">
+          <Select value={batteryTypeFilter} onValueChange={handleFilterChange(setBatteryTypeFilter)}>
+            <SelectTrigger className="w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">Semua Baterai</SelectItem>
+              <SelectItem value="REGULAR">Regular</SelectItem>
+              <SelectItem value="EXTENDED">Extended</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={dpSchemeFilter} onValueChange={handleFilterChange(setDpSchemeFilter)}>
+            <SelectTrigger className="w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">Semua Skema DP</SelectItem>
+              <SelectItem value="FULL">Bayar Lunas</SelectItem>
+              <SelectItem value="INSTALLMENT">Cicilan 2x</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={dpFullyPaidFilter} onValueChange={handleFilterChange(setDpFullyPaidFilter)}>
+            <SelectTrigger className="w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">Semua DP</SelectItem>
+              <SelectItem value="true">DP Lunas</SelectItem>
+              <SelectItem value="false">DP Belum Lunas</SelectItem>
+            </SelectContent>
+          </Select>
+          {hasActiveFilters && (
+            <Button variant="ghost" size="sm" onClick={clearAllFilters} className="text-muted-foreground">
+              <X className="h-4 w-4 mr-1" /> Reset Filter
+            </Button>
+          )}
+        </div>
       </div>
 
       {!loading && contracts.length === 0 ? (
@@ -195,11 +264,11 @@ export default function ContractsPage() {
           <CardContent className="py-12 text-center">
             <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <p className="text-muted-foreground">
-              {pagination.debouncedSearch || statusFilter !== "ALL"
+              {pagination.debouncedSearch || hasActiveFilters
                 ? "Tidak ada kontrak yang cocok dengan filter."
                 : "Belum ada kontrak."}
             </p>
-            {!pagination.debouncedSearch && statusFilter === "ALL" && customers.length > 0 && (
+            {!pagination.debouncedSearch && !hasActiveFilters && customers.length > 0 && (
               <Button className="mt-4" onClick={openCreate}>
                 <Plus className="h-4 w-4 mr-2" />
                 Buat Kontrak Pertama
@@ -216,13 +285,13 @@ export default function ContractsPage() {
                   <tr className="border-b bg-muted/50">
                     <SortableHeader label="No. Kontrak" field="contractNumber" currentSortBy={pagination.sortBy} currentSortOrder={pagination.sortOrder} onSort={pagination.handleSort} />
                     <th className="text-left p-4 text-sm font-medium">Customer</th>
-                    <SortableHeader label="Motor" field="motorModel" currentSortBy={pagination.sortBy} currentSortOrder={pagination.sortOrder} onSort={pagination.handleSort} />
+                    <th className="text-left p-4 text-sm font-medium">Motor</th>
                     <th className="text-left p-4 text-sm font-medium">DP</th>
-                    <th className="text-left p-4 text-sm font-medium">Progress</th>
+                    <SortableHeader label="Progress" field="ownershipProgress" currentSortBy={pagination.sortBy} currentSortOrder={pagination.sortOrder} onSort={pagination.handleSort} />
                     <SortableHeader label="Total" field="totalAmount" currentSortBy={pagination.sortBy} currentSortOrder={pagination.sortOrder} onSort={pagination.handleSort} />
-                    <th className="text-left p-4 text-sm font-medium">Periode Aktif</th>
-                    <th className="text-left p-4 text-sm font-medium">Sisa Hari</th>
-                    <SortableHeader label="Status" field="status" currentSortBy={pagination.sortBy} currentSortOrder={pagination.sortOrder} onSort={pagination.handleSort} />
+                    <SortableHeader label="Periode Aktif" field="endDate" currentSortBy={pagination.sortBy} currentSortOrder={pagination.sortOrder} onSort={pagination.handleSort} />
+                    <SortableHeader label="Sisa Hari" field="endDate" currentSortBy={pagination.sortBy} currentSortOrder={pagination.sortOrder} onSort={pagination.handleSort} />
+                    <th className="text-left p-4 text-sm font-medium">Status</th>
                   </tr>
                 </thead>
                 <tbody>

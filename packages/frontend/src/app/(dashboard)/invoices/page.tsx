@@ -13,6 +13,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -37,6 +38,7 @@ import {
   XCircle,
   FileX,
   Undo2,
+  X,
 } from "lucide-react";
 
 const statusBadgeVariant = (status: string) => {
@@ -57,6 +59,9 @@ export default function InvoicesPage() {
   const [qrCode, setQrCode] = useState("");
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [invoiceTypeFilter, setInvoiceTypeFilter] = useState("ALL");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [voidDialogOpen, setVoidDialogOpen] = useState(false);
   const [voidInvoiceTarget, setVoidInvoiceTarget] = useState<Invoice | null>(null);
   const [markPaidDialogOpen, setMarkPaidDialogOpen] = useState(false);
@@ -73,6 +78,9 @@ export default function InvoicesPage() {
     sortOrder: pagination.sortOrder,
     search: pagination.debouncedSearch || undefined,
     status: statusFilter !== "ALL" ? statusFilter : undefined,
+    invoiceType: invoiceTypeFilter !== "ALL" ? invoiceTypeFilter : undefined,
+    startDate: startDate || undefined,
+    endDate: endDate || undefined,
   });
   const invoices = (invoicesData?.data as Invoice[]) || [];
 
@@ -82,8 +90,18 @@ export default function InvoicesPage() {
 
   const { data: contracts = [] as Contract[] } = useContractsList();
 
-  const handleStatusFilterChange = (value: string) => {
-    setStatusFilter(value);
+  const handleFilterChange = (setter: (v: string) => void) => (value: string) => {
+    setter(value);
+    pagination.setPage(1);
+  };
+
+  const hasActiveFilters = statusFilter !== "ALL" || invoiceTypeFilter !== "ALL" || !!startDate || !!endDate;
+
+  const clearAllFilters = () => {
+    setStatusFilter("ALL");
+    setInvoiceTypeFilter("ALL");
+    setStartDate("");
+    setEndDate("");
     pagination.setPage(1);
   };
 
@@ -179,32 +197,61 @@ export default function InvoicesPage() {
         <p className="text-muted-foreground">Daftar tagihan & QR pembayaran</p>
       </div>
 
-      {/* Search & Filter */}
-      <div className="flex flex-col sm:flex-row gap-2">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Cari no. tagihan atau no. kontrak..."
-            value={pagination.search}
-            onChange={(e) => pagination.setSearch(e.target.value)}
-            className="pl-9"
-          />
+      {/* Search & Filters */}
+      <div className="space-y-2">
+        <div className="flex flex-col sm:flex-row gap-2">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Cari no. tagihan atau no. kontrak..."
+              value={pagination.search}
+              onChange={(e) => pagination.setSearch(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          <Select value={statusFilter} onValueChange={handleFilterChange(setStatusFilter)}>
+            <SelectTrigger className="w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">Semua Status</SelectItem>
+              <SelectItem value="PENDING">Pending</SelectItem>
+              <SelectItem value="PAID">Paid</SelectItem>
+              <SelectItem value="FAILED">Failed</SelectItem>
+              <SelectItem value="VOID">Void</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={invoiceTypeFilter} onValueChange={handleFilterChange(setInvoiceTypeFilter)}>
+            <SelectTrigger className="w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">Semua Tipe</SelectItem>
+              <SelectItem value="DP">DP</SelectItem>
+              <SelectItem value="DP_INSTALLMENT">DP Cicilan</SelectItem>
+              <SelectItem value="DAILY_BILLING">Tagihan Harian</SelectItem>
+              <SelectItem value="MANUAL_PAYMENT">Pembayaran Manual</SelectItem>
+            </SelectContent>
+          </Select>
+          {pagination.total > 0 && (
+            <span className="text-sm text-muted-foreground self-center">{pagination.total} tagihan</span>
+          )}
         </div>
-        <Select value={statusFilter} onValueChange={handleStatusFilterChange}>
-          <SelectTrigger className="w-40">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ALL">Semua Status</SelectItem>
-            <SelectItem value="PENDING">Pending</SelectItem>
-            <SelectItem value="PAID">Paid</SelectItem>
-            <SelectItem value="FAILED">Failed</SelectItem>
-            <SelectItem value="VOID">Void</SelectItem>
-          </SelectContent>
-        </Select>
-        {pagination.total > 0 && (
-          <span className="text-sm text-muted-foreground self-center">{pagination.total} tagihan</span>
-        )}
+        <div className="flex flex-wrap gap-2 items-end">
+          <div>
+            <Label className="text-xs">Dari Tanggal</Label>
+            <Input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); pagination.setPage(1); }} className="w-40" />
+          </div>
+          <div>
+            <Label className="text-xs">Sampai Tanggal</Label>
+            <Input type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); pagination.setPage(1); }} className="w-40" />
+          </div>
+          {hasActiveFilters && (
+            <Button variant="ghost" size="sm" onClick={clearAllFilters} className="text-muted-foreground">
+              <X className="h-4 w-4 mr-1" /> Reset Filter
+            </Button>
+          )}
+        </div>
       </div>
 
       {!loading && invoices.length === 0 ? (
@@ -212,7 +259,7 @@ export default function InvoicesPage() {
           <CardContent className="py-12 text-center">
             <Receipt className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <p className="text-muted-foreground">
-              {pagination.debouncedSearch || statusFilter !== "ALL"
+              {pagination.debouncedSearch || hasActiveFilters
                 ? "Tidak ada tagihan yang cocok dengan filter."
                 : "Belum ada tagihan."}
             </p>

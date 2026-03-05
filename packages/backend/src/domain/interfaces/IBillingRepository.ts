@@ -15,4 +15,5 @@ export interface IBillingRepository {
   delete(id: string): Promise<boolean>;
   count(): Promise<number>;
   countByStatus(status: BillingStatus): Promise<number>;
+  findMaxBillingSequence(): Promise<number>;
 }

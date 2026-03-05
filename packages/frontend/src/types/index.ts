@@ -238,6 +238,7 @@ export interface DashboardStats {
   completedContracts: number;
   overdueContracts: number;
   repossessedContracts: number;
+  cancelledContracts: number;
   pendingPayments: number;
   totalRevenue: number;
   pendingRevenue: number;

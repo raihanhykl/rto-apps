@@ -88,13 +88,14 @@ class ApiClient {
     return this.request<any[]>(`/customers${query}`);
   }
 
-  async getCustomersPaginated(params: { page?: number; limit?: number; sortBy?: string; sortOrder?: 'asc' | 'desc'; search?: string }) {
+  async getCustomersPaginated(params: { page?: number; limit?: number; sortBy?: string; sortOrder?: 'asc' | 'desc'; search?: string; gender?: string }) {
     const query = new URLSearchParams();
     query.set('page', String(params.page || 1));
     query.set('limit', String(params.limit || 20));
     if (params.sortBy) query.set('sortBy', params.sortBy);
     if (params.sortOrder) query.set('sortOrder', params.sortOrder);
     if (params.search) query.set('search', params.search);
+    if (params.gender) query.set('gender', params.gender);
     return this.request<any>(`/customers?${query.toString()}`);
   }
 
@@ -125,7 +126,7 @@ class ApiClient {
     return this.request<any[]>('/contracts');
   }
 
-  async getContractsPaginated(params: { page?: number; limit?: number; sortBy?: string; sortOrder?: 'asc' | 'desc'; search?: string; status?: string }) {
+  async getContractsPaginated(params: { page?: number; limit?: number; sortBy?: string; sortOrder?: 'asc' | 'desc'; search?: string; status?: string; motorModel?: string; batteryType?: string; dpScheme?: string; dpFullyPaid?: string }) {
     const query = new URLSearchParams();
     query.set('page', String(params.page || 1));
     query.set('limit', String(params.limit || 20));
@@ -133,6 +134,10 @@ class ApiClient {
     if (params.sortOrder) query.set('sortOrder', params.sortOrder);
     if (params.search) query.set('search', params.search);
     if (params.status) query.set('status', params.status);
+    if (params.motorModel) query.set('motorModel', params.motorModel);
+    if (params.batteryType) query.set('batteryType', params.batteryType);
+    if (params.dpScheme) query.set('dpScheme', params.dpScheme);
+    if (params.dpFullyPaid) query.set('dpFullyPaid', params.dpFullyPaid);
     return this.request<any>(`/contracts?${query.toString()}`);
   }
 
@@ -215,7 +220,7 @@ class ApiClient {
     return this.request<any[]>('/invoices');
   }
 
-  async getInvoicesPaginated(params: { page?: number; limit?: number; sortBy?: string; sortOrder?: 'asc' | 'desc'; search?: string; status?: string; customerId?: string }) {
+  async getInvoicesPaginated(params: { page?: number; limit?: number; sortBy?: string; sortOrder?: 'asc' | 'desc'; search?: string; status?: string; customerId?: string; invoiceType?: string; startDate?: string; endDate?: string }) {
     const query = new URLSearchParams();
     query.set('page', String(params.page || 1));
     query.set('limit', String(params.limit || 20));
@@ -224,6 +229,9 @@ class ApiClient {
     if (params.search) query.set('search', params.search);
     if (params.status) query.set('status', params.status);
     if (params.customerId) query.set('customerId', params.customerId);
+    if (params.invoiceType) query.set('invoiceType', params.invoiceType);
+    if (params.startDate) query.set('startDate', params.startDate);
+    if (params.endDate) query.set('endDate', params.endDate);
     return this.request<any>(`/invoices?${query.toString()}`);
   }
 
@@ -307,42 +315,46 @@ class ApiClient {
   }
 
   // Reports
-  async getReport(filters?: { startDate?: string; endDate?: string; status?: string; motorModel?: string }) {
+  async getReport(filters?: { startDate?: string; endDate?: string; status?: string; motorModel?: string; batteryType?: string }) {
     const query = new URLSearchParams();
     if (filters?.startDate) query.set('startDate', filters.startDate);
     if (filters?.endDate) query.set('endDate', filters.endDate);
     if (filters?.status) query.set('status', filters.status);
     if (filters?.motorModel) query.set('motorModel', filters.motorModel);
+    if (filters?.batteryType) query.set('batteryType', filters.batteryType);
     const queryStr = query.toString() ? `?${query.toString()}` : '';
     return this.request<any>(`/reports${queryStr}`);
   }
 
-  async exportReportJSON(filters?: { startDate?: string; endDate?: string; status?: string; motorModel?: string }) {
+  async exportReportJSON(filters?: { startDate?: string; endDate?: string; status?: string; motorModel?: string; batteryType?: string }) {
     const query = new URLSearchParams();
     if (filters?.startDate) query.set('startDate', filters.startDate);
     if (filters?.endDate) query.set('endDate', filters.endDate);
     if (filters?.status) query.set('status', filters.status);
     if (filters?.motorModel) query.set('motorModel', filters.motorModel);
+    if (filters?.batteryType) query.set('batteryType', filters.batteryType);
     const queryStr = query.toString() ? `?${query.toString()}` : '';
     return this.request<string>(`/reports/export/json${queryStr}`);
   }
 
-  async exportReportCSV(filters?: { startDate?: string; endDate?: string; status?: string; motorModel?: string }) {
+  async exportReportCSV(filters?: { startDate?: string; endDate?: string; status?: string; motorModel?: string; batteryType?: string }) {
     const query = new URLSearchParams();
     if (filters?.startDate) query.set('startDate', filters.startDate);
     if (filters?.endDate) query.set('endDate', filters.endDate);
     if (filters?.status) query.set('status', filters.status);
     if (filters?.motorModel) query.set('motorModel', filters.motorModel);
+    if (filters?.batteryType) query.set('batteryType', filters.batteryType);
     const queryStr = query.toString() ? `?${query.toString()}` : '';
     return this.request<string>(`/reports/export/csv${queryStr}`);
   }
 
-  async exportReportXLSV(filters?: { startDate?: string; endDate?: string; status?: string; motorModel?: string }) {
+  async exportReportXLSV(filters?: { startDate?: string; endDate?: string; status?: string; motorModel?: string; batteryType?: string }) {
     const query = new URLSearchParams();
     if (filters?.startDate) query.set('startDate', filters.startDate);
     if (filters?.endDate) query.set('endDate', filters.endDate);
     if (filters?.status) query.set('status', filters.status);
     if (filters?.motorModel) query.set('motorModel', filters.motorModel);
+    if (filters?.batteryType) query.set('batteryType', filters.batteryType);
     const queryStr = query.toString() ? `?${query.toString()}` : '';
     return this.request<string>(`/reports/export/xlsv${queryStr}`);
   }

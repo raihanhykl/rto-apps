@@ -40,7 +40,7 @@ export class ContractController {
 
   getAll = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { page, limit, sortBy, sortOrder, search, status } = req.query;
+      const { page, limit, sortBy, sortOrder, search, status, motorModel, batteryType, dpScheme, dpFullyPaid } = req.query;
       if (page) {
         const result = await this.contractService.getAllPaginated({
           page: parseInt(page as string) || 1,
@@ -49,6 +49,10 @@ export class ContractController {
           sortOrder: sortOrder as 'asc' | 'desc',
           search: search as string,
           status: status as string,
+          motorModel: motorModel as string,
+          batteryType: batteryType as string,
+          dpScheme: dpScheme as string,
+          dpFullyPaid: dpFullyPaid as string,
         });
         return res.json(result);
       }

@@ -39,6 +39,7 @@ export function useCustomersPaginated(params: {
   sortBy?: string;
   sortOrder?: "asc" | "desc";
   search?: string;
+  gender?: string;
 }) {
   const key = buildKey("/customers", params);
   return useSWR(key, () => api.getCustomersPaginated(params), {
@@ -67,6 +68,10 @@ export function useContractsPaginated(params: {
   sortOrder?: "asc" | "desc";
   search?: string;
   status?: string;
+  motorModel?: string;
+  batteryType?: string;
+  dpScheme?: string;
+  dpFullyPaid?: string;
 }) {
   const key = buildKey("/contracts", params);
   return useSWR(key, () => api.getContractsPaginated(params), {
@@ -103,6 +108,9 @@ export function useInvoicesPaginated(params: {
   search?: string;
   status?: string;
   customerId?: string;
+  invoiceType?: string;
+  startDate?: string;
+  endDate?: string;
 }) {
   const key = buildKey("/invoices", params);
   return useSWR(key, () => api.getInvoicesPaginated(params), {
@@ -149,6 +157,7 @@ export function useReport(filters?: {
   endDate?: string;
   status?: string;
   motorModel?: string;
+  batteryType?: string;
 }) {
   const key = buildKey("/reports", filters);
   return useSWR(key, () => api.getReport(filters), {

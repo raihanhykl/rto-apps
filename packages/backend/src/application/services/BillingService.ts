@@ -12,6 +12,7 @@ import {
   InvoiceType,
   AuditAction,
 } from '../../domain/enums';
+import { getWibToday, getWibDateParts } from '../../domain/utils/dateUtils';
 import { SettingService } from './SettingService';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -24,6 +25,7 @@ export interface CalendarDay {
 export class BillingService {
   private static billingCounter = 0;
   private static invoiceCounter = 0;
+  private static countersInitialized = false;
 
   constructor(
     private billingRepo: IBillingRepository,
@@ -32,6 +34,18 @@ export class BillingService {
     private auditRepo: IAuditLogRepository,
     private settingService?: SettingService,
   ) {}
+
+  private async initCounters(): Promise<void> {
+    if (!BillingService.countersInitialized) {
+      const [maxBilling, maxInvoice] = await Promise.all([
+        this.billingRepo.findMaxBillingSequence(),
+        this.invoiceRepo.findMaxInvoiceSequence(),
+      ]);
+      BillingService.billingCounter = maxBilling;
+      BillingService.invoiceCounter = maxInvoice;
+      BillingService.countersInitialized = true;
+    }
+  }
 
   private async getSetting(key: string, fallback: number): Promise<number> {
     if (!this.settingService) return fallback;
@@ -89,12 +103,8 @@ export class BillingService {
    * Called by the scheduler every day.
    */
   async generateDailyBilling(today?: Date): Promise<number> {
-    const now = today || new Date();
+    const now = today || getWibToday();
     now.setHours(0, 0, 0, 0);
-
-    const tomorrow = new Date(now);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setHours(0, 0, 0, 0);
 
     // Process both ACTIVE and OVERDUE contracts
     const activeContracts = await this.contractRepo.findByStatus(ContractStatus.ACTIVE);
@@ -109,8 +119,8 @@ export class BillingService {
       const billingStart = new Date(contract.billingStartDate);
       billingStart.setHours(0, 0, 0, 0);
 
-      // Only generate if tomorrow >= billingStartDate (prepaid: generate today for tomorrow's usage)
-      if (tomorrow < billingStart) continue;
+      // Only generate if today >= billingStartDate
+      if (now < billingStart) continue;
 
       // Check if there's already an active billing for this contract
       const activeBilling = await this.billingRepo.findActiveByContractId(contract.id);
@@ -128,13 +138,13 @@ export class BillingService {
       firstUnpaidDay.setHours(0, 0, 0, 0);
 
       // Contract is paid in advance — no billing needed
-      if (firstUnpaidDay > tomorrow) continue;
+      if (firstUnpaidDay > now) continue;
 
-      if (firstUnpaidDay <= now) {
-        // There are unpaid days from today or the past — create accumulated billing
+      if (firstUnpaidDay < now) {
+        // There are unpaid days from the past — create accumulated billing up to today
         let unpaidWorkingDays = 0;
         const cursor = new Date(firstUnpaidDay);
-        while (cursor <= tomorrow) {
+        while (cursor <= now) {
           if (!this.isLiburBayar(contract, cursor)) {
             unpaidWorkingDays++;
           }
@@ -144,12 +154,12 @@ export class BillingService {
         if (unpaidWorkingDays > 0) {
           const periodStart = new Date(firstUnpaidDay);
           periodStart.setHours(0, 0, 0, 0);
-          const periodEnd = new Date(tomorrow);
+          const periodEnd = new Date(now);
           periodEnd.setHours(23, 59, 59, 999);
 
           const billing: Billing = {
             id: uuidv4(),
-            billingNumber: this.generateBillingNumber(),
+            billingNumber: await this.generateBillingNumber(),
             contractId: contract.id,
             customerId: contract.customerId,
             amount: unpaidWorkingDays * contract.dailyRate,
@@ -176,17 +186,17 @@ export class BillingService {
         continue;
       }
 
-      // firstUnpaidDay === tomorrow (standard case)
-      // Check if tomorrow is a Libur Bayar
-      if (this.isLiburBayar(contract, tomorrow)) {
-        // Create a holiday billing for tomorrow (zero amount, credits 1 day for free)
-        await this.createHolidayBilling(contract, tomorrow);
+      // firstUnpaidDay === now (standard case: generate billing for today)
+      // Check if today is a Libur Bayar
+      if (this.isLiburBayar(contract, now)) {
+        // Create a holiday billing for today (zero amount, credits 1 day for free)
+        await this.createHolidayBilling(contract, now);
         generated++;
         continue;
       }
 
-      // Create a normal daily billing for tomorrow
-      await this.createDailyBilling(contract, tomorrow);
+      // Create a normal daily billing for today
+      await this.createDailyBilling(contract, now);
       generated++;
     }
 
@@ -194,7 +204,7 @@ export class BillingService {
   }
 
   /**
-   * Create a normal daily billing (PREPAID: covers the target usage day).
+   * Create a normal daily billing (same-day: covers the target usage day).
    */
   private async createDailyBilling(contract: Contract, usageDate: Date): Promise<Billing> {
     const periodStart = new Date(usageDate);
@@ -204,7 +214,7 @@ export class BillingService {
 
     const billing: Billing = {
       id: uuidv4(),
-      billingNumber: this.generateBillingNumber(),
+      billingNumber: await this.generateBillingNumber(),
       contractId: contract.id,
       customerId: contract.customerId,
       amount: contract.dailyRate,
@@ -240,7 +250,7 @@ export class BillingService {
 
     const billing: Billing = {
       id: uuidv4(),
-      billingNumber: this.generateBillingNumber(),
+      billingNumber: await this.generateBillingNumber(),
       contractId: contract.id,
       customerId: contract.customerId,
       amount: 0,
@@ -270,10 +280,10 @@ export class BillingService {
   }
 
   /**
-   * Rollover an expired billing (PREPAID model):
+   * Rollover an expired billing (same-day model):
    * - Mark old as EXPIRED
-   * - Create new billing covering tomorrow + accumulated unpaid days
-   * - periodStart keeps the earliest unpaid day, periodEnd = tomorrow
+   * - Create new billing covering accumulated unpaid days up to today
+   * - periodStart keeps the earliest unpaid day, periodEnd = today
    */
   private async rolloverBilling(expiredBilling: Billing, contract: Contract, today: Date): Promise<Billing> {
     // Mark old billing as EXPIRED
@@ -282,21 +292,17 @@ export class BillingService {
       expiredAt: new Date(),
     });
 
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setHours(0, 0, 0, 0);
-
-    // Check if tomorrow is a Libur Bayar
-    if (this.isLiburBayar(contract, tomorrow)) {
+    // Check if today is a Libur Bayar
+    if (this.isLiburBayar(contract, today)) {
       // Holiday: credit 1 free day, carry forward the unpaid amount
       await this.creditDayToContract(contract, 1, true);
 
-      const periodEnd = new Date(tomorrow);
+      const periodEnd = new Date(today);
       periodEnd.setHours(23, 59, 59, 999);
 
       const newBilling: Billing = {
         id: uuidv4(),
-        billingNumber: this.generateBillingNumber(),
+        billingNumber: await this.generateBillingNumber(),
         contractId: contract.id,
         customerId: contract.customerId,
         amount: expiredBilling.amount, // carry forward unpaid amount
@@ -320,16 +326,16 @@ export class BillingService {
       return this.billingRepo.create(newBilling);
     }
 
-    // Normal day: add tomorrow's rate to accumulated amount
+    // Normal day: add today's rate to accumulated amount
     const newAmount = expiredBilling.amount + contract.dailyRate;
     const newDaysCount = expiredBilling.daysCount + 1;
 
-    const periodEnd = new Date(tomorrow);
+    const periodEnd = new Date(today);
     periodEnd.setHours(23, 59, 59, 999);
 
     const newBilling: Billing = {
       id: uuidv4(),
-      billingNumber: this.generateBillingNumber(),
+      billingNumber: await this.generateBillingNumber(),
       contractId: contract.id,
       customerId: contract.customerId,
       amount: newAmount,
@@ -374,7 +380,7 @@ export class BillingService {
     if (!contract) throw new Error('Contract not found');
 
     // Create invoice from billing
-    const invoiceNumber = this.generateInvoiceNumber();
+    const invoiceNumber = await this.generateInvoiceNumber();
     const invoice: Invoice = {
       id: uuidv4(),
       invoiceNumber,
@@ -501,8 +507,7 @@ export class BillingService {
 
     const billings = await this.billingRepo.findByContractId(contractId);
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = getWibToday();
 
     const daysInMonth = new Date(year, month, 0).getDate();
     const result: CalendarDay[] = [];
@@ -659,7 +664,7 @@ export class BillingService {
 
     const billing: Billing = {
       id: uuidv4(),
-      billingNumber: this.generateBillingNumber(),
+      billingNumber: await this.generateBillingNumber(),
       contractId: contract.id,
       customerId: contract.customerId,
       amount: mergedAmount,
@@ -754,18 +759,18 @@ export class BillingService {
    * Used by scheduler to catch up if server was down.
    */
   async rolloverExpiredBillings(today?: Date): Promise<number> {
-    const now = today || new Date();
+    const now = today || getWibToday();
     now.setHours(0, 0, 0, 0);
 
     const activeBillings = await this.billingRepo.findByStatus(BillingStatus.ACTIVE);
     let rolledOver = 0;
 
     for (const billing of activeBillings) {
-      // Prepaid: if we've reached or passed the usage day (periodStart), payment is overdue
-      const periodStart = new Date(billing.periodStart);
-      periodStart.setHours(0, 0, 0, 0);
+      // Same-day: billing period has passed (periodEnd < today), needs rollover
+      const periodEnd = new Date(billing.periodEnd);
+      periodEnd.setHours(0, 0, 0, 0);
 
-      if (now >= periodStart) {
+      if (now > periodEnd) {
         const contract = await this.contractRepo.findById(billing.contractId);
         if (!contract) continue;
         if (contract.status !== ContractStatus.ACTIVE && contract.status !== ContractStatus.OVERDUE) continue;
@@ -778,22 +783,24 @@ export class BillingService {
     return rolledOver;
   }
 
-  private generateBillingNumber(): string {
+  private async generateBillingNumber(): Promise<string> {
+    await this.initCounters();
     BillingService.billingCounter++;
-    const date = new Date();
-    const y = date.getFullYear().toString().slice(-2);
-    const m = (date.getMonth() + 1).toString().padStart(2, '0');
-    const d = date.getDate().toString().padStart(2, '0');
+    const { year, month, day } = getWibDateParts();
+    const y = year.toString().slice(-2);
+    const m = month.toString().padStart(2, '0');
+    const d = day.toString().padStart(2, '0');
     const seq = BillingService.billingCounter.toString().padStart(4, '0');
     return `BIL-${y}${m}${d}-${seq}`;
   }
 
-  private generateInvoiceNumber(): string {
+  private async generateInvoiceNumber(): Promise<string> {
+    await this.initCounters();
     BillingService.invoiceCounter++;
-    const date = new Date();
-    const y = date.getFullYear().toString().slice(-2);
-    const m = (date.getMonth() + 1).toString().padStart(2, '0');
-    const d = date.getDate().toString().padStart(2, '0');
+    const { year, month, day } = getWibDateParts();
+    const y = year.toString().slice(-2);
+    const m = month.toString().padStart(2, '0');
+    const d = day.toString().padStart(2, '0');
     const seq = BillingService.invoiceCounter.toString().padStart(4, '0');
     return `PMT-${y}${m}${d}-${seq}`;
   }

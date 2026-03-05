@@ -18,7 +18,7 @@ export class InvoiceController {
 
   getAll = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { page, limit, sortBy, sortOrder, search, status, customerId } = req.query;
+      const { page, limit, sortBy, sortOrder, search, status, customerId, invoiceType, startDate, endDate } = req.query;
       if (page) {
         const result = await this.invoiceService.getAllPaginated({
           page: parseInt(page as string) || 1,
@@ -28,6 +28,9 @@ export class InvoiceController {
           search: search as string,
           status: status as string,
           customerId: customerId as string,
+          invoiceType: invoiceType as string,
+          startDate: startDate as string,
+          endDate: endDate as string,
         });
         return res.json(result);
       }

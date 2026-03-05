@@ -163,4 +163,21 @@ export class PrismaBillingRepository implements IBillingRepository {
       where: { status: status as any, isDeleted: false },
     });
   }
+
+  async findMaxBillingSequence(): Promise<number> {
+    const billings = await this.prisma.billing.findMany({
+      select: { billingNumber: true },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+    });
+    let max = 0;
+    for (const b of billings) {
+      const match = b.billingNumber.match(/BIL-\d{6}-(\d+)/);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num > max) max = num;
+      }
+    }
+    return max;
+  }
 }

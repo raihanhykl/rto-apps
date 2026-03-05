@@ -48,7 +48,7 @@ describe('BillingService', () => {
       durationDays: 0,
       totalAmount: 0,
       startDate: createDate(-5),
-      endDate: createDate(0), // "covered" through today — standard 1-day billing for tomorrow
+      endDate: createDate(-1), // "covered" through yesterday — standard 1-day billing for today
       status: ContractStatus.ACTIVE,
       notes: '',
       createdBy: adminId,
@@ -142,18 +142,19 @@ describe('BillingService', () => {
     });
 
     it('should create holiday billing on Libur Bayar Sunday', async () => {
-      // Find a Saturday before a designated Libur Bayar Sunday
-      // Use a fixed date: March 7, 2026 (Saturday) → March 8, 2026 (Sunday, Libur Bayar with 2 holidays/month)
-      const saturday = new Date(2026, 2, 7); // March 7, 2026
+      // March 8, 2026 (Sunday) is a designated Libur Bayar with 2 holidays/month
+      const saturday = new Date(2026, 2, 7); // March 7, 2026 (Saturday)
       saturday.setHours(0, 0, 0, 0);
+      const sunday = new Date(2026, 2, 8); // March 8, 2026 (Sunday, Libur Bayar)
+      sunday.setHours(0, 0, 0, 0);
 
-      // Set billingStartDate and endDate appropriately
+      // Set endDate to Saturday so firstUnpaidDay = Sunday (Libur Bayar)
       await contractRepo.update(activeContract.id, {
         endDate: new Date(saturday),
         billingStartDate: new Date(2026, 2, 1),
       });
 
-      const generated = await billingService.generateDailyBilling(saturday);
+      const generated = await billingService.generateDailyBilling(sunday);
       expect(generated).toBeGreaterThanOrEqual(1);
 
       const billings = await billingRepo.findByContractId(activeContract.id);
@@ -190,14 +191,14 @@ describe('BillingService', () => {
       const activeBilling = billings.find(b => b.status === BillingStatus.ACTIVE);
       expect(activeBilling).toBeDefined();
 
-      // Should accumulate multiple days (5 past days + tomorrow, minus Sundays)
+      // Should accumulate multiple days (past days up to today, minus Sundays)
       expect(activeBilling!.daysCount).toBeGreaterThan(1);
       expect(activeBilling!.amount).toBe(activeBilling!.daysCount * 58000);
     });
 
     it('should generate billing for OVERDUE contracts', async () => {
       const overdueContract = await createActiveContract({
-        endDate: createDate(0), // covered through today
+        endDate: createDate(-1), // covered through yesterday
         status: ContractStatus.OVERDUE,
       });
 
@@ -213,14 +214,19 @@ describe('BillingService', () => {
 
   describe('rollover', () => {
     it('should rollover expired billing with accumulated amount', async () => {
+      const twoDaysAgo = new Date();
+      twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+      twoDaysAgo.setHours(0, 0, 0, 0);
+
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
       yesterday.setHours(0, 0, 0, 0);
+      if (yesterday.getDay() === 0) return; // skip if yesterday is Sunday
 
-      // Set endDate to yesterday so from yesterday's perspective, firstUnpaidDay = today (standard billing)
-      await contractRepo.update(activeContract.id, { endDate: new Date(yesterday) });
+      // Set endDate to 2 days ago so from yesterday's perspective, firstUnpaidDay = yesterday
+      await contractRepo.update(activeContract.id, { endDate: new Date(twoDaysAgo) });
 
-      // Generate billing for yesterday — creates 1-day billing for today
+      // Generate billing for yesterday — creates 1-day billing for yesterday
       await billingService.generateDailyBilling(yesterday);
 
       let billings = await billingRepo.findByContractId(activeContract.id);
@@ -327,8 +333,11 @@ describe('BillingService', () => {
       day1.setHours(0, 0, 0, 0);
       if (day1.getDay() === 0) return;
 
-      // Set endDate to yesterday so billing starts fresh
-      await contractRepo.update(activeContract.id, { endDate: new Date(day1) });
+      // Set endDate to 2 days ago so firstUnpaidDay = yesterday
+      const twoDaysAgo = new Date();
+      twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+      twoDaysAgo.setHours(0, 0, 0, 0);
+      await contractRepo.update(activeContract.id, { endDate: new Date(twoDaysAgo) });
 
       await billingService.generateDailyBilling(day1);
 
@@ -356,13 +365,17 @@ describe('BillingService', () => {
 
   describe('rolloverExpiredBillings', () => {
     it('should rollover all expired billings', async () => {
+      const twoDaysAgo = new Date();
+      twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+      twoDaysAgo.setHours(0, 0, 0, 0);
+
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
       yesterday.setHours(0, 0, 0, 0);
       if (yesterday.getDay() === 0) return; // skip Sunday
 
-      // Set endDate to yesterday so billing is standard 1-day
-      await contractRepo.update(activeContract.id, { endDate: new Date(yesterday) });
+      // Set endDate to 2 days ago so billing for yesterday is standard 1-day
+      await contractRepo.update(activeContract.id, { endDate: new Date(twoDaysAgo) });
 
       await billingService.generateDailyBilling(yesterday);
 
