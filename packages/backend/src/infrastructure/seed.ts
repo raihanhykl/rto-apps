@@ -39,7 +39,7 @@ function generateInvoiceNumber(idx: number): string {
 /**
  * Get designated Libur Bayar Sundays for a given month.
  * Picks holidayDaysPerMonth Sundays evenly distributed.
- * Must match BillingService.getSundayHolidays() algorithm.
+ * Must match PaymentService.getSundayHolidays() algorithm.
  */
 function getSundayHolidays(year: number, month: number, holidayDaysPerMonth: number): Set<number> {
   const sundays: number[] = [];
@@ -244,9 +244,13 @@ export async function seedDummyData(
         extensionDays: null,
         dokuPaymentUrl: null,
         dokuReferenceId: null,
-        billingPeriodStart: null,
-        billingPeriodEnd: null,
-        billingId: null,
+        dailyRate: null,
+        daysCount: null,
+        periodStart: null,
+        periodEnd: null,
+        expiredAt: null,
+        previousPaymentId: null,
+        isHoliday: false,
         createdAt: startDate,
         updatedAt: new Date(),
       };
@@ -272,9 +276,13 @@ export async function seedDummyData(
         extensionDays: null,
         dokuPaymentUrl: null,
         dokuReferenceId: null,
-        billingPeriodStart: null,
-        billingPeriodEnd: null,
-        billingId: null,
+        dailyRate: null,
+        daysCount: null,
+        periodStart: null,
+        periodEnd: null,
+        expiredAt: null,
+        previousPaymentId: null,
+        isHoliday: false,
         createdAt: startDate,
         updatedAt: new Date(),
       };
@@ -296,9 +304,13 @@ export async function seedDummyData(
         extensionDays: null,
         dokuPaymentUrl: null,
         dokuReferenceId: null,
-        billingPeriodStart: null,
-        billingPeriodEnd: null,
-        billingId: null,
+        dailyRate: null,
+        daysCount: null,
+        periodStart: null,
+        periodEnd: null,
+        expiredAt: null,
+        previousPaymentId: null,
+        isHoliday: false,
         createdAt: daysAgo(scenario.startDaysAgo - 1),
         updatedAt: new Date(),
       };
@@ -332,9 +344,13 @@ export async function seedDummyData(
         extensionDays: ext.days,
         dokuPaymentUrl: null,
         dokuReferenceId: null,
-        billingPeriodStart: null,
-        billingPeriodEnd: null,
-        billingId: null,
+        dailyRate: null,
+        daysCount: null,
+        periodStart: null,
+        periodEnd: null,
+        expiredAt: null,
+        previousPaymentId: null,
+        isHoliday: false,
         createdAt: daysAgo(extensionStart),
         updatedAt: new Date(),
       };

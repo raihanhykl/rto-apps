@@ -138,12 +138,11 @@ async function resetData() {
   console.log("\n[RESET] Deleting existing data...");
   const counts = {
     auditLogs: await prisma.auditLog.deleteMany({}),
-    billings: await prisma.billing.deleteMany({}),
     invoices: await prisma.invoice.deleteMany({}),
     contracts: await prisma.contract.deleteMany({}),
     customers: await prisma.customer.deleteMany({}),
   };
-  console.log(`  Deleted: ${counts.auditLogs.count} audit logs, ${counts.billings.count} billings, ${counts.invoices.count} invoices, ${counts.contracts.count} contracts, ${counts.customers.count} customers`);
+  console.log(`  Deleted: ${counts.auditLogs.count} audit logs, ${counts.invoices.count} payments, ${counts.contracts.count} contracts, ${counts.customers.count} customers`);
 }
 
 async function seedCustomers(): Promise<number> {
@@ -185,17 +184,15 @@ async function seedCustomers(): Promise<number> {
   return created;
 }
 
-async function seedContracts(adminId: string): Promise<{ contractCount: number; invoiceCount: number; billingCount: number }> {
+async function seedContracts(adminId: string): Promise<{ contractCount: number; paymentCount: number }> {
   const TODAY = startOfDay(getWibToday());
   const existingContracts = new Set(
     (await prisma.contract.findMany({ select: { contractNumber: true } })).map((c) => c.contractNumber)
   );
 
-  const allInvoices: any[] = [];
-  const allBillings: any[] = [];
+  const allPayments: any[] = [];
   const allAuditLogs: any[] = [];
-  let globalInvSeq = 1;
-  let globalBilSeq = 1;
+  let globalSeq = 1;
   let contractsCreated = 0;
 
   for (const row of contracts) {
@@ -278,36 +275,36 @@ async function seedContracts(adminId: string): Promise<{ contractCount: number; 
     });
     contractsCreated++;
 
-    // ====== DP Invoices ======
+    // ====== DP Payments ======
     if (row.dpScheme === "FULL") {
-      const invNum = `PMT-${fmtDateCompact(startDate)}-${String(globalInvSeq++).padStart(4, "0")}`;
-      allInvoices.push({
-        id: uuidv4(), invoiceNumber: invNum, contractId: row.id, customerId: row.customerId,
+      const pmtNum = `PMT-${fmtDateCompact(startDate)}-${String(globalSeq++).padStart(4, "0")}`;
+      allPayments.push({
+        id: uuidv4(), invoiceNumber: pmtNum, contractId: row.id, customerId: row.customerId,
         amount: dpAmount, lateFee: 0, type: "DP", status: dpFullyPaid ? "PAID" : "PENDING",
-        qrCodeData: `WEDISON-PAY-${invNum}-${dpAmount}`,
+        qrCodeData: `WEDISON-PAY-${pmtNum}-${dpAmount}`,
         dueDate: startDate, paidAt: dpFullyPaid ? startDate : null, createdAt: startDate,
       });
     } else {
       const half1 = Math.ceil(dpAmount / 2);
       const half2 = dpAmount - half1;
-      const invNum1 = `PMT-${fmtDateCompact(startDate)}-${String(globalInvSeq++).padStart(4, "0")}`;
-      const invNum2 = `PMT-${fmtDateCompact(startDate)}-${String(globalInvSeq++).padStart(4, "0")}`;
-      allInvoices.push({
-        id: uuidv4(), invoiceNumber: invNum1, contractId: row.id, customerId: row.customerId,
+      const pmtNum1 = `PMT-${fmtDateCompact(startDate)}-${String(globalSeq++).padStart(4, "0")}`;
+      const pmtNum2 = `PMT-${fmtDateCompact(startDate)}-${String(globalSeq++).padStart(4, "0")}`;
+      allPayments.push({
+        id: uuidv4(), invoiceNumber: pmtNum1, contractId: row.id, customerId: row.customerId,
         amount: half1, lateFee: 0, type: "DP_INSTALLMENT", status: dpPaidAmount >= half1 ? "PAID" : "PENDING",
-        qrCodeData: `WEDISON-PAY-${invNum1}-${half1}`,
+        qrCodeData: `WEDISON-PAY-${pmtNum1}-${half1}`,
         dueDate: startDate, paidAt: dpPaidAmount >= half1 ? startDate : null, createdAt: startDate,
       });
-      allInvoices.push({
-        id: uuidv4(), invoiceNumber: invNum2, contractId: row.id, customerId: row.customerId,
+      allPayments.push({
+        id: uuidv4(), invoiceNumber: pmtNum2, contractId: row.id, customerId: row.customerId,
         amount: half2, lateFee: 0, type: "DP_INSTALLMENT", status: dpPaidAmount >= dpAmount ? "PAID" : "PENDING",
-        qrCodeData: `WEDISON-PAY-${invNum2}-${half2}`,
+        qrCodeData: `WEDISON-PAY-${pmtNum2}-${half2}`,
         dueDate: unitReceivedDate || addDays(startDate, 7),
         paidAt: dpPaidAmount >= dpAmount ? (unitReceivedDate || startDate) : null, createdAt: startDate,
       });
     }
 
-    // ====== Daily billings & invoices for paid days ======
+    // ====== Daily payments for paid days ======
     if (billingStartDate && totalDaysPaid > 0) {
       let currentDate = new Date(billingStartDate);
       for (let dayIdx = 0; dayIdx < totalDaysPaid; dayIdx++) {
@@ -316,36 +313,33 @@ async function seedContracts(adminId: string): Promise<{ contractCount: number; 
         const ed = endOfDay(currentDate);
 
         if (isHoliday) {
-          allBillings.push({
-            id: uuidv4(),
-            billingNumber: `BIL-${fmtDateCompact(currentDate)}-${String(globalBilSeq++).padStart(4, "0")}`,
-            contractId: row.id, customerId: row.customerId, amount: 0, dailyRate, daysCount: 0,
-            status: "PAID", periodStart: sd, periodEnd: ed, paidAt: sd, createdAt: sd,
+          // Holiday payment: amount 0, auto-PAID, credits 1 day
+          const pmtNum = `PMT-${fmtDateCompact(currentDate)}-${String(globalSeq++).padStart(4, "0")}`;
+          allPayments.push({
+            id: uuidv4(), invoiceNumber: pmtNum, contractId: row.id, customerId: row.customerId,
+            amount: 0, lateFee: 0, type: "DAILY_BILLING", status: "PAID",
+            qrCodeData: `WEDISON-PAY-${pmtNum}-0`,
+            dueDate: ed, paidAt: sd, extensionDays: 0,
+            dailyRate, daysCount: 0, periodStart: sd, periodEnd: ed, isHoliday: true,
+            createdAt: sd,
           });
         } else {
-          const bilId = uuidv4();
-          const invId = uuidv4();
-          const bilNum = `BIL-${fmtDateCompact(currentDate)}-${String(globalBilSeq++).padStart(4, "0")}`;
-          const invNum = `PMT-${fmtDateCompact(currentDate)}-${String(globalInvSeq++).padStart(4, "0")}`;
-
-          allBillings.push({
-            id: bilId, billingNumber: bilNum, contractId: row.id, customerId: row.customerId,
-            amount: dailyRate, dailyRate, daysCount: 1, status: "PAID",
-            periodStart: sd, periodEnd: ed, paidAt: sd, invoiceId: invId, createdAt: sd,
-          });
-          allInvoices.push({
-            id: invId, invoiceNumber: invNum, contractId: row.id, customerId: row.customerId,
+          // Normal daily payment: PAID
+          const pmtNum = `PMT-${fmtDateCompact(currentDate)}-${String(globalSeq++).padStart(4, "0")}`;
+          allPayments.push({
+            id: uuidv4(), invoiceNumber: pmtNum, contractId: row.id, customerId: row.customerId,
             amount: dailyRate, lateFee: 0, type: "DAILY_BILLING", status: "PAID",
-            qrCodeData: `WEDISON-PAY-${invNum}-${dailyRate}`,
+            qrCodeData: `WEDISON-PAY-${pmtNum}-${dailyRate}`,
             dueDate: ed, paidAt: sd, extensionDays: 1,
-            billingId: bilId, billingPeriodStart: sd, billingPeriodEnd: ed, createdAt: sd,
+            dailyRate, daysCount: 1, periodStart: sd, periodEnd: ed, isHoliday: false,
+            createdAt: sd,
           });
         }
         currentDate = addDays(currentDate, 1);
       }
     }
 
-    // ====== Active billing for today (ACTIVE contracts with unit received) ======
+    // ====== Active payment for today (unpaid days for ACTIVE contracts) ======
     if (row.status === "ACTIVE" && unitReceivedDate && billingStartDate && totalDaysPaid > 0) {
       let unpaidDays = 0;
       let accCursor = addDays(endDate, 1);
@@ -354,13 +348,17 @@ async function seedContracts(adminId: string): Promise<{ contractCount: number; 
         accCursor = addDays(accCursor, 1);
       }
       if (unpaidDays > 0) {
-        allBillings.push({
-          id: uuidv4(),
-          billingNumber: `BIL-${fmtDateCompact(TODAY)}-${String(globalBilSeq++).padStart(4, "0")}`,
-          contractId: row.id, customerId: row.customerId, amount: unpaidDays * dailyRate, dailyRate,
-          daysCount: unpaidDays, status: "ACTIVE",
+        const pmtNum = `PMT-${fmtDateCompact(TODAY)}-${String(globalSeq++).padStart(4, "0")}`;
+        allPayments.push({
+          id: uuidv4(), invoiceNumber: pmtNum,
+          contractId: row.id, customerId: row.customerId,
+          amount: unpaidDays * dailyRate, lateFee: 0,
+          type: "DAILY_BILLING", status: "PENDING",
+          qrCodeData: `WEDISON-PAY-${pmtNum}-${unpaidDays * dailyRate}`,
+          dueDate: endOfDay(TODAY),
+          dailyRate, daysCount: unpaidDays, extensionDays: unpaidDays,
           periodStart: startOfDay(addDays(endDate, 1)), periodEnd: endOfDay(TODAY),
-          createdAt: startOfDay(TODAY),
+          isHoliday: false, createdAt: startOfDay(TODAY),
         });
       }
     }
@@ -378,12 +376,8 @@ async function seedContracts(adminId: string): Promise<{ contractCount: number; 
   // ====== Bulk insert in batches ======
   const BATCH = 500;
 
-  for (let i = 0; i < allInvoices.length; i += BATCH) {
-    await prisma.invoice.createMany({ data: allInvoices.slice(i, i + BATCH) });
-  }
-
-  for (let i = 0; i < allBillings.length; i += BATCH) {
-    await prisma.billing.createMany({ data: allBillings.slice(i, i + BATCH) });
+  for (let i = 0; i < allPayments.length; i += BATCH) {
+    await prisma.invoice.createMany({ data: allPayments.slice(i, i + BATCH) });
   }
 
   for (let i = 0; i < allAuditLogs.length; i += BATCH) {
@@ -391,11 +385,10 @@ async function seedContracts(adminId: string): Promise<{ contractCount: number; 
   }
 
   console.log(`  Contracts: ${contractsCreated} created`);
-  console.log(`  Invoices: ${allInvoices.length} (DP + daily billing)`);
-  console.log(`  Billings: ${allBillings.length}`);
+  console.log(`  Payments: ${allPayments.length} (DP + daily)`);
   console.log(`  Audit logs: ${allAuditLogs.length}`);
 
-  return { contractCount: contractsCreated, invoiceCount: allInvoices.length, billingCount: allBillings.length };
+  return { contractCount: contractsCreated, paymentCount: allPayments.length };
 }
 
 // ====== Main ======
@@ -428,8 +421,8 @@ async function main() {
   console.log("\n[2/4] Seeding customers:");
   await seedCustomers();
 
-  console.log("\n[3/4] Seeding contracts + billing history:");
-  const { invoiceCount, billingCount } = await seedContracts(adminId);
+  console.log("\n[3/4] Seeding contracts + payment history:");
+  const { paymentCount } = await seedContracts(adminId);
 
   // Summary
   const activeCount = contracts.filter((c) => c.status === "ACTIVE").length;
@@ -439,7 +432,7 @@ async function main() {
   console.log("\n[4/4] Summary:");
   console.log(`  ${customers.length} customers in data file`);
   console.log(`  ${contracts.length} contracts (${activeCount} active, ${repossessedCount} repossessed, ${cancelledCount} cancelled)`);
-  console.log(`  ${invoiceCount} invoices, ${billingCount} billings`);
+  console.log(`  ${paymentCount} payments`);
   console.log("\nSeed complete!");
 }
 

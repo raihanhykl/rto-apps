@@ -24,9 +24,9 @@ import {
 import { Pagination } from "@/components/ui/pagination";
 import { SortableHeader } from "@/components/SortableHeader";
 import { usePagination } from "@/hooks/usePagination";
-import { useInvoicesPaginated, useContractsList, useInvalidate } from "@/hooks/useApi";
+import { usePaymentsPaginated, useContractsList, useInvalidate } from "@/hooks/useApi";
 import { api } from "@/lib/api";
-import { Invoice, Contract } from "@/types";
+import { Invoice, Contract, InvoiceType } from "@/types";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils";
 import { toastSuccess, toastError } from "@/stores/toastStore";
 import {
@@ -39,6 +39,9 @@ import {
   FileX,
   Undo2,
   X,
+  Eye,
+  CalendarDays,
+  Clock,
 } from "lucide-react";
 
 const statusBadgeVariant = (status: string) => {
@@ -50,6 +53,33 @@ const statusBadgeVariant = (status: string) => {
     case "VOID": return "secondary" as const;
     default: return "outline" as const;
   }
+};
+
+const getInvoiceTypeLabel = (type: string): string => {
+  switch (type) {
+    case "DP": return "DP";
+    case "DP_INSTALLMENT": return "DP Cicilan";
+    case "DAILY_BILLING": return "Harian";
+    case "MANUAL_PAYMENT": return "Manual";
+    default: return type;
+  }
+};
+
+const getInvoiceTypeBadgeVariant = (type: string) => {
+  switch (type) {
+    case "DP":
+    case "DP_INSTALLMENT": return "default" as const;
+    case "DAILY_BILLING": return "outline" as const;
+    case "MANUAL_PAYMENT": return "secondary" as const;
+    default: return "outline" as const;
+  }
+};
+
+const formatPeriod = (invoice: Invoice): string => {
+  if (!invoice.periodStart) return "-";
+  const start = formatDate(invoice.periodStart);
+  if (!invoice.periodEnd || invoice.periodStart === invoice.periodEnd) return start;
+  return `${start} - ${formatDate(invoice.periodEnd)}`;
 };
 
 export default function InvoicesPage() {
@@ -68,10 +98,12 @@ export default function InvoicesPage() {
   const [markPaidTarget, setMarkPaidTarget] = useState<Invoice | null>(null);
   const [revertDialogOpen, setRevertDialogOpen] = useState(false);
   const [revertTarget, setRevertTarget] = useState<Invoice | null>(null);
+  const [detailDialogOpen, setDetailDialogOpen] = useState(false);
+  const [detailTarget, setDetailTarget] = useState<Invoice | null>(null);
 
   const pagination = usePagination({ initialSortBy: "createdAt", initialSortOrder: "desc" });
 
-  const { data: invoicesData, isLoading: loading } = useInvoicesPaginated({
+  const { data: invoicesData, isLoading: loading } = usePaymentsPaginated({
     page: pagination.page,
     limit: pagination.limit,
     sortBy: pagination.sortBy,
@@ -112,7 +144,7 @@ export default function InvoicesPage() {
   const showQR = async (invoice: Invoice) => {
     setSelectedInvoice(invoice);
     try {
-      const data = await api.getInvoiceQR(invoice.id);
+      const data = await api.getPaymentQR(invoice.id);
       setQrCode(data.qrCode);
       setQrDialogOpen(true);
     } catch (error: any) {
@@ -128,7 +160,7 @@ export default function InvoicesPage() {
         "Pembayaran",
         `Tagihan berhasil di-${status === "PAID" ? "bayar" : "gagalkan"}.`
       );
-      invalidate("/invoices", "/contracts", "/dashboard");
+      invalidate("/payments", "/contracts", "/dashboard");
     } catch (error: any) {
       toastError("Gagal", error?.message || "Gagal memproses pembayaran.");
     } finally {
@@ -140,14 +172,14 @@ export default function InvoicesPage() {
     if (!voidInvoiceTarget) return;
     setProcessing(true);
     try {
-      await api.voidInvoice(voidInvoiceTarget.id);
+      await api.voidPayment(voidInvoiceTarget.id);
       toastSuccess(
         "Berhasil",
         `Tagihan ${voidInvoiceTarget.invoiceNumber} berhasil di-void.`
       );
       setVoidDialogOpen(false);
       setVoidInvoiceTarget(null);
-      invalidate("/invoices", "/contracts", "/dashboard");
+      invalidate("/payments", "/contracts", "/dashboard");
     } catch (error: any) {
       toastError("Gagal", error?.message || "Gagal void tagihan.");
     } finally {
@@ -159,14 +191,14 @@ export default function InvoicesPage() {
     if (!markPaidTarget) return;
     setProcessing(true);
     try {
-      await api.markInvoicePaid(markPaidTarget.id);
+      await api.markPaymentPaid(markPaidTarget.id);
       toastSuccess(
         "Berhasil",
         `Tagihan ${markPaidTarget.invoiceNumber} ditandai lunas.`
       );
       setMarkPaidDialogOpen(false);
       setMarkPaidTarget(null);
-      invalidate("/invoices", "/contracts", "/dashboard");
+      invalidate("/payments", "/contracts", "/dashboard");
     } catch (error: any) {
       toastError("Gagal", error?.message || "Gagal menandai tagihan lunas.");
     } finally {
@@ -178,11 +210,11 @@ export default function InvoicesPage() {
     if (!revertTarget) return;
     setProcessing(true);
     try {
-      await api.revertInvoiceStatus(revertTarget.id);
+      await api.revertPaymentStatus(revertTarget.id);
       toastSuccess("Berhasil", `Tagihan ${revertTarget.invoiceNumber} dikembalikan ke PENDING.`);
       setRevertDialogOpen(false);
       setRevertTarget(null);
-      invalidate("/invoices", "/contracts", "/dashboard");
+      invalidate("/payments", "/contracts", "/dashboard");
     } catch (error: any) {
       toastError("Gagal", error?.message || "Gagal me-revert tagihan.");
     } finally {
@@ -274,10 +306,11 @@ export default function InvoicesPage() {
                   <tr className="border-b bg-muted/50">
                     <SortableHeader label="No. Tagihan" field="invoiceNumber" currentSortBy={pagination.sortBy} currentSortOrder={pagination.sortOrder} onSort={pagination.handleSort} />
                     <th className="text-left p-4 text-sm font-medium">No. Kontrak</th>
+                    <th className="text-left p-4 text-sm font-medium">Tipe</th>
                     <SortableHeader label="Amount" field="amount" currentSortBy={pagination.sortBy} currentSortOrder={pagination.sortOrder} onSort={pagination.handleSort} />
+                    <th className="text-left p-4 text-sm font-medium">Periode</th>
                     <SortableHeader label="Status" field="status" currentSortBy={pagination.sortBy} currentSortOrder={pagination.sortOrder} onSort={pagination.handleSort} />
-                    <SortableHeader label="Due Date" field="dueDate" currentSortBy={pagination.sortBy} currentSortOrder={pagination.sortOrder} onSort={pagination.handleSort} />
-                    <th className="text-left p-4 text-sm font-medium">Paid At</th>
+                    <SortableHeader label="Dibayar" field="paidAt" currentSortBy={pagination.sortBy} currentSortOrder={pagination.sortOrder} onSort={pagination.handleSort} />
                     <th className="text-right p-4 text-sm font-medium">Aksi</th>
                   </tr>
                 </thead>
@@ -285,7 +318,7 @@ export default function InvoicesPage() {
                   {loading ? (
                     Array.from({ length: 5 }).map((_, i) => (
                       <tr key={i} className="border-b">
-                        {Array.from({ length: 7 }).map((_, j) => (
+                        {Array.from({ length: 8 }).map((_, j) => (
                           <td key={j} className="p-4">
                             <div className="h-4 bg-muted animate-pulse rounded" />
                           </td>
@@ -297,18 +330,36 @@ export default function InvoicesPage() {
                       const totalAmount = invoice.amount + (invoice.lateFee || 0);
                       const hasLateFee = (invoice.lateFee || 0) > 0;
                       return (
-                        <tr key={invoice.id} className="border-b last:border-0 hover:bg-muted/30">
+                        <tr
+                          key={invoice.id}
+                          className="border-b last:border-0 hover:bg-muted/30 cursor-pointer"
+                          onClick={() => { setDetailTarget(invoice); setDetailDialogOpen(true); }}
+                        >
                           <td className="p-4 font-mono text-sm">{invoice.invoiceNumber}</td>
                           <td className="p-4 font-mono text-sm text-muted-foreground">
                             {getContractNumber(invoice.contractId)}
                           </td>
-                          <td className="p-4 text-sm font-medium">
-                            <div>
-                              {formatCurrency(totalAmount)}
-                              {hasLateFee && (
-                                <span className="ml-1 text-xs text-orange-600 font-normal">(+denda)</span>
-                              )}
-                            </div>
+                          <td className="p-4">
+                            <Badge variant={getInvoiceTypeBadgeVariant(invoice.type)}>
+                              {getInvoiceTypeLabel(invoice.type)}
+                            </Badge>
+                            {invoice.isHoliday && (
+                              <Badge variant="outline" className="ml-1 text-blue-600 border-blue-300">Libur</Badge>
+                            )}
+                          </td>
+                          <td className="p-4 text-sm">
+                            <div className="font-medium">{formatCurrency(totalAmount)}</div>
+                            {hasLateFee && (
+                              <div className="text-xs text-muted-foreground mt-0.5">
+                                {formatCurrency(invoice.amount)} + <span className="text-orange-600">{formatCurrency(invoice.lateFee)}</span>
+                              </div>
+                            )}
+                          </td>
+                          <td className="p-4 text-sm text-muted-foreground">
+                            {formatPeriod(invoice)}
+                            {invoice.daysCount && invoice.daysCount > 1 && (
+                              <span className="ml-1 text-xs">({invoice.daysCount} hari)</span>
+                            )}
                           </td>
                           <td className="p-4">
                             <Badge variant={statusBadgeVariant(invoice.status)}>
@@ -316,13 +367,18 @@ export default function InvoicesPage() {
                             </Badge>
                           </td>
                           <td className="p-4 text-sm text-muted-foreground">
-                            {formatDate(invoice.dueDate)}
+                            {invoice.paidAt ? formatDateTime(invoice.paidAt) : "-"}
                           </td>
-                          <td className="p-4 text-sm text-muted-foreground">
-                            {invoice.paidAt ? formatDate(invoice.paidAt) : "-"}
-                          </td>
-                          <td className="p-4 text-right">
+                          <td className="p-4 text-right" onClick={(e) => e.stopPropagation()}>
                             <div className="flex gap-1 justify-end flex-wrap">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => { setDetailTarget(invoice); setDetailDialogOpen(true); }}
+                                title="Detail"
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -339,7 +395,7 @@ export default function InvoicesPage() {
                                 size="sm"
                                 onClick={async () => {
                                   try {
-                                    const blob = await api.downloadInvoicePdf(invoice.id);
+                                    const blob = await api.downloadPaymentPdf(invoice.id);
                                     const url = URL.createObjectURL(blob);
                                     const a = document.createElement("a");
                                     a.href = url;
@@ -633,6 +689,126 @@ export default function InvoicesPage() {
               {processing ? "Memproses..." : "Ya, Revert"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Detail Payment Dialog */}
+      <Dialog open={detailDialogOpen} onOpenChange={(open) => { setDetailDialogOpen(open); if (!open) setDetailTarget(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Receipt className="h-5 w-5" />
+              Detail Tagihan
+            </DialogTitle>
+            <DialogDescription>
+              {detailTarget?.invoiceNumber}
+            </DialogDescription>
+          </DialogHeader>
+          {detailTarget && (() => {
+            const totalAmount = detailTarget.amount + (detailTarget.lateFee || 0);
+            const hasLateFee = (detailTarget.lateFee || 0) > 0;
+            const isDailyOrManual = detailTarget.type === "DAILY_BILLING" || detailTarget.type === "MANUAL_PAYMENT";
+            return (
+              <div className="space-y-4">
+                {/* Status & Tipe */}
+                <div className="flex items-center gap-2">
+                  <Badge variant={statusBadgeVariant(detailTarget.status)}>
+                    {detailTarget.status}
+                  </Badge>
+                  <Badge variant={getInvoiceTypeBadgeVariant(detailTarget.type)}>
+                    {getInvoiceTypeLabel(detailTarget.type)}
+                  </Badge>
+                  {detailTarget.isHoliday && (
+                    <Badge variant="outline" className="text-blue-600 border-blue-300">Libur Bayar</Badge>
+                  )}
+                </div>
+
+                {/* Breakdown Tagihan */}
+                <div className="rounded-lg border p-4 space-y-2">
+                  <p className="text-sm font-medium mb-2">Breakdown Tagihan</p>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Pokok</span>
+                    <span>{formatCurrency(detailTarget.amount)}</span>
+                  </div>
+                  {hasLateFee && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Denda keterlambatan</span>
+                      <span className="text-orange-600">{formatCurrency(detailTarget.lateFee)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-sm font-bold border-t pt-2">
+                    <span>Total</span>
+                    <span className="text-primary">{formatCurrency(totalAmount)}</span>
+                  </div>
+                </div>
+
+                {/* Periode Tagihan (hanya untuk harian/manual) */}
+                {isDailyOrManual && detailTarget.periodStart && (
+                  <div className="rounded-lg border p-4 space-y-2">
+                    <p className="text-sm font-medium mb-2 flex items-center gap-1.5">
+                      <CalendarDays className="h-4 w-4" /> Periode Tagihan
+                    </p>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Tanggal</span>
+                      <span>{formatPeriod(detailTarget)}</span>
+                    </div>
+                    {detailTarget.daysCount && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Jumlah hari</span>
+                        <span>{detailTarget.daysCount} hari</span>
+                      </div>
+                    )}
+                    {detailTarget.dailyRate && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Tarif harian</span>
+                        <span>{formatCurrency(detailTarget.dailyRate)}/hari</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Waktu Pembayaran */}
+                <div className="rounded-lg border p-4 space-y-2">
+                  <p className="text-sm font-medium mb-2 flex items-center gap-1.5">
+                    <Clock className="h-4 w-4" /> Waktu
+                  </p>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Dibuat</span>
+                    <span>{formatDateTime(detailTarget.createdAt)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Jatuh tempo</span>
+                    <span>{formatDate(detailTarget.dueDate)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Dibayar</span>
+                    <span>{detailTarget.paidAt ? formatDateTime(detailTarget.paidAt) : "-"}</span>
+                  </div>
+                  {detailTarget.expiredAt && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Expired</span>
+                      <span className="text-red-600">{formatDateTime(detailTarget.expiredAt)}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Informasi Kontrak */}
+                <div className="rounded-lg border p-4 space-y-2">
+                  <p className="text-sm font-medium mb-2">Informasi Kontrak</p>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">No. Kontrak</span>
+                    <span className="font-mono">{getContractNumber(detailTarget.contractId)}</span>
+                  </div>
+                  {detailTarget.previousPaymentId && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Tagihan sebelumnya</span>
+                      <span className="text-xs text-muted-foreground font-mono">{detailTarget.previousPaymentId.slice(0, 8)}...</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
     </div>

@@ -27,6 +27,7 @@
 - [Git & CI Setup (2026-03-04)](#2026-03-04---sdlc-git-branching-strategy--ci-setup)
 - [SWR Caching (2026-03-04)](#2026-03-04---frontend-api-caching-with-swr)
 - [Seed Best Practices & Lainnya (2026-03-05)](#2026-03-05---seed-script-best-practices--lainnya-ride-hailing-apps)
+- [Billing + Invoice Unification (2026-03-05)](#2026-03-05---billing--invoice-unification-into-unified-payment-pmt-xxx)
 - [Development Roadmap](#development-roadmap)
 
 ---
@@ -897,6 +898,107 @@ Restructured documentation from single monolithic `CLAUDE.md` (1.965 lines) into
 - CLAUDE.md was consuming ~5.000 tokens of context window every session
 - Most content (changelog) was rarely relevant to active tasks
 - Separated concerns: instructions vs documentation vs history
+
+---
+
+## 2026-03-05 - Billing + Invoice Unification into Unified Payment (PMT-xxx)
+
+### Context
+
+Sistem sebelumnya punya 2 entitas terpisah: **Billing** (BIL-xxx, transient lifecycle: ACTIVE→PAID/EXPIRED/CANCELLED) dan **Invoice** (INV-xxx → PMT-xxx, record permanen). Flow terlalu kompleks — billing harus dibayar dulu, lalu sistem buat invoice baru. Refactor ini mengeliminasi Billing sepenuhnya. Semua pembayaran menggunakan satu entitas Invoice/Payment (PMT-xxx).
+
+### What was changed
+
+**Prisma Schema:**
+- Hapus model `Billing` dan enum `BillingStatus`
+- Tambah kolom ke `Invoice`: `dailyRate`, `daysCount`, `periodStart`, `periodEnd`, `expiredAt`, `previousPaymentId`, `isHoliday`
+- Hapus kolom lama: `billingPeriodStart`, `billingPeriodEnd`, `billingId`
+- Tambah self-relation `PaymentChain` untuk rollover tracking
+- 7 models → 6 models, 10 enums → 9 enums
+
+**Backend — Domain Layer:**
+- Hapus: `Billing.ts` entity, `IBillingRepository.ts` interface, `BillingStatus` enum
+- Update: `Invoice.ts` entity dengan field baru (dailyRate, daysCount, periodStart, periodEnd, expiredAt, previousPaymentId, isHoliday)
+
+**Backend — Infrastructure:**
+- Hapus: `InMemoryBillingRepository.ts`, `PrismaBillingRepository.ts`
+- Update: `InMemoryInvoiceRepository.ts`, `PrismaInvoiceRepository.ts` — tambah `findActiveByContractId()`, `search()`, field mapping baru
+- Update: `scheduler.ts` — dependency dari BillingService → PaymentService
+
+**Backend — Application Layer:**
+- Hapus: `BillingService.ts`, `InvoiceService.ts`
+- Buat: `PaymentService.ts` — merge semua logic dari kedua service:
+  - `generateDailyPayments()` — buat PMT-xxx PENDING (bukan Billing)
+  - `rolloverExpiredPayments()` — expire dan buat akumulasi baru
+  - `payPayment()` — PENDING → PAID, credit hari
+  - `createManualPayment()` — manual 1-7 hari
+  - `cancelPayment()` — void + reactivate previous
+  - `voidPayment()`, `markPaid()`, `revertPaymentStatus()`, `bulkMarkPaid()`
+  - `generateQRCode()`, `getCalendarData()`, `search()`
+  - `getSundayHolidays()`, `isLiburBayar()`, `creditDayToContract()`
+- Update: `ContractService.ts`, `DashboardService.ts`, `ReportService.ts` — hapus dependency billing
+
+**Backend — Presentation:**
+- Hapus: `BillingController.ts`, `InvoiceController.ts`
+- Buat: `PaymentController.ts` — unified routes `/api/payments/*`
+- Update: `routes/index.ts`
+
+**Backend — Entry Point:**
+- `index.ts` — hapus billing imports, buat PaymentService + PaymentController
+
+**Frontend — Types:**
+- Hapus: `BillingStatus` enum, `Billing` interface
+- Update: `Invoice` interface — tambah field baru, hapus `billingPeriodStart/End/billingId`
+
+**Frontend — API & Hooks:**
+- `api.ts` — semua `/invoices/*` dan `/billings/*` → `/payments/*`
+- `useApi.ts` — rename hooks: `usePaymentsPaginated`, `usePaymentsByContract`, `useActivePayment`
+
+**Frontend — Pages:**
+- `invoices/page.tsx` — gunakan `usePaymentsPaginated`, API calls ke `/payments`
+- `contracts/[id]/page.tsx` — semua billing references → payment (variables, API calls, UI text)
+- `customers/[id]/page.tsx` — `usePaymentsPaginated` ganti `useInvoicesByCustomer`
+- `CommandPalette.tsx` — tambah pencarian PMT-xxx di global search (Ctrl+K)
+
+**Seed Data:**
+- `prisma/seed.ts` — hapus Billing references, buat Payment records langsung
+- `infrastructure/seed.ts` — update field mapping
+
+**Tests:**
+- Hapus: `BillingService.test.ts`, `InvoiceService.test.ts`
+- Buat: `PaymentService.test.ts` — merge semua test cases
+- 5 suites → 4 suites, 129 tests → 127 tests (consolidation, not lost coverage)
+
+### Files Deleted (8)
+
+| File | Was |
+|------|-----|
+| `domain/entities/Billing.ts` | Billing entity |
+| `domain/interfaces/IBillingRepository.ts` | Billing repo interface |
+| `infrastructure/repositories/InMemoryBillingRepository.ts` | InMemory billing repo |
+| `infrastructure/repositories/PrismaBillingRepository.ts` | Prisma billing repo |
+| `application/services/BillingService.ts` | Billing service |
+| `application/services/InvoiceService.ts` | Invoice service |
+| `presentation/controllers/BillingController.ts` | Billing controller |
+| `presentation/controllers/InvoiceController.ts` | Invoice controller |
+
+### Files Created (2)
+
+| File | Description |
+|------|-------------|
+| `application/services/PaymentService.ts` | Unified payment service (merge Billing + Invoice) |
+| `presentation/controllers/PaymentController.ts` | Unified payment controller |
+
+### Status Mapping
+
+| Old (BillingStatus) | New (PaymentStatus) |
+|---------------------|---------------------|
+| ACTIVE | PENDING |
+| PAID | PAID |
+| EXPIRED | EXPIRED |
+| CANCELLED | VOID |
+
+### Tests: 127 tests, 4 suites (AuthService, CustomerService, ContractService, PaymentService)
 
 ---
 

@@ -9,7 +9,7 @@ const TTL = {
   LONG: 10 * 60 * 1000,   // 10 min - settings, motor rates
   MEDIUM: 5 * 60 * 1000,  // 5 min  - dashboard
   DEFAULT: 60 * 1000,     // 1 min  - paginated lists, detail pages
-  SHORT: 15 * 1000,       // 15 sec - billing, calendar
+  SHORT: 15 * 1000,       // 15 sec - payments, calendar
 };
 
 // --- Helper: build cache key from path + params ---
@@ -99,8 +99,8 @@ export function useContractsList() {
   });
 }
 
-// --- Invoices ---
-export function useInvoicesPaginated(params: {
+// --- Payments (unified billing + invoice) ---
+export function usePaymentsPaginated(params: {
   page?: number;
   limit?: number;
   sortBy?: string;
@@ -112,40 +112,31 @@ export function useInvoicesPaginated(params: {
   startDate?: string;
   endDate?: string;
 }) {
-  const key = buildKey("/invoices", params);
-  return useSWR(key, () => api.getInvoicesPaginated(params), {
+  const key = buildKey("/payments", params);
+  return useSWR(key, () => api.getPaymentsPaginated(params), {
     dedupingInterval: TTL.DEFAULT,
   });
 }
 
-export function useInvoicesByCustomer(customerId: string | undefined) {
+export function usePaymentsByContract(contractId: string | undefined) {
   return useSWR(
-    customerId ? `/invoices?customerId=${customerId}` : null,
-    () => api.getInvoicesByCustomer(customerId!),
-    { dedupingInterval: TTL.DEFAULT }
-  );
-}
-
-// --- Billings ---
-export function useBillingsByContract(contractId: string | undefined) {
-  return useSWR(
-    contractId ? `/billings/contract/${contractId}` : null,
-    () => api.getBillingsByContract(contractId!),
+    contractId ? `/payments/contract/${contractId}` : null,
+    () => api.getPaymentsByContract(contractId!),
     { dedupingInterval: TTL.SHORT }
   );
 }
 
-export function useActiveBilling(contractId: string | undefined) {
+export function useActivePayment(contractId: string | undefined) {
   return useSWR(
-    contractId ? `/billings/contract/${contractId}/active` : null,
-    () => api.getActiveBillingByContract(contractId!),
+    contractId ? `/payments/contract/${contractId}/active` : null,
+    () => api.getActivePaymentByContract(contractId!),
     { dedupingInterval: TTL.SHORT }
   );
 }
 
 export function useCalendarData(contractId: string | undefined, year: number, month: number) {
   return useSWR(
-    contractId ? `/billings/contract/${contractId}/calendar?year=${year}&month=${month}` : null,
+    contractId ? `/payments/contract/${contractId}/calendar?year=${year}&month=${month}` : null,
     () => api.getCalendarData(contractId!, year, month),
     { dedupingInterval: TTL.SHORT }
   );

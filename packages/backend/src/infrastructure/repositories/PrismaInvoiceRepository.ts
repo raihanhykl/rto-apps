@@ -1,14 +1,17 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 import { Invoice } from '../../domain/entities';
 import { IInvoiceRepository } from '../../domain/interfaces';
-import { PaymentStatus } from '../../domain/enums';
+import { PaymentStatus, InvoiceType } from '../../domain/enums';
 import { PaginationParams, PaginatedResult } from '../../domain/interfaces/Pagination';
 
 export class PrismaInvoiceRepository implements IInvoiceRepository {
   constructor(private prisma: PrismaClient) {}
 
   private toEntity(raw: any): Invoice {
-    return raw as Invoice;
+    return {
+      ...raw,
+      isHoliday: raw.isHoliday ?? false,
+    } as Invoice;
   }
 
   async findAll(): Promise<Invoice[]> {
@@ -96,6 +99,28 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
     return rows.map(r => this.toEntity(r));
   }
 
+  async findActiveByContractId(contractId: string): Promise<Invoice | null> {
+    const row = await this.prisma.invoice.findFirst({
+      where: {
+        contractId,
+        status: 'PENDING' as any,
+        type: { in: ['DAILY_BILLING', 'MANUAL_PAYMENT'] as any },
+      },
+    });
+    return row ? this.toEntity(row) : null;
+  }
+
+  async search(query: string): Promise<Invoice[]> {
+    const rows = await this.prisma.invoice.findMany({
+      where: {
+        invoiceNumber: { contains: query, mode: 'insensitive' },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    });
+    return rows.map(r => this.toEntity(r));
+  }
+
   async create(invoice: Invoice): Promise<Invoice> {
     const row = await this.prisma.invoice.create({
       data: {
@@ -113,9 +138,13 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
         extensionDays: invoice.extensionDays,
         dokuPaymentUrl: invoice.dokuPaymentUrl,
         dokuReferenceId: invoice.dokuReferenceId,
-        billingPeriodStart: invoice.billingPeriodStart,
-        billingPeriodEnd: invoice.billingPeriodEnd,
-        billingId: invoice.billingId,
+        periodStart: invoice.periodStart,
+        periodEnd: invoice.periodEnd,
+        dailyRate: invoice.dailyRate,
+        daysCount: invoice.daysCount,
+        expiredAt: invoice.expiredAt,
+        previousPaymentId: invoice.previousPaymentId,
+        isHoliday: invoice.isHoliday,
         createdAt: invoice.createdAt,
         updatedAt: invoice.updatedAt,
       },

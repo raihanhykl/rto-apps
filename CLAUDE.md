@@ -65,8 +65,8 @@ Ada 5 kombinasi motor + baterai dengan harga berbeda:
 | EdPower (hanya 1 tipe baterai) | Rp 83.000/hari | Rp 780.000 |
 
 - **Ownership Target**: 1.278 hari kerja (bukan calendar days — Libur Bayar Sundays tidak dihitung)
-- **Billing Model**: Same-day billing — tagihan di-generate jam 00:01 WIB untuk hari itu juga (bukan hari besok). Jika tidak dibayar, billing berikutnya rollover (akumulasi amount).
-- **Manual Payment**: Admin bisa buat billing manual 1-7 hari ke depan sebagai opsi tambahan.
+- **Payment Model**: Same-day — tagihan (PMT-xxx) di-generate jam 00:01 WIB untuk hari itu juga (bukan hari besok) dengan status PENDING. Jika tidak dibayar, tagihan berikutnya rollover (akumulasi amount).
+- **Manual Payment**: Admin bisa buat tagihan manual 1-7 hari ke depan sebagai opsi tambahan.
 
 ---
 
@@ -131,11 +131,10 @@ Domain (paling dalam) → Application → Infrastructure → Presentation (palin
 
 **Sequential Numbering:**
 - Contract: `RTO-YYMMDD-NNNN` (contoh: `RTO-260305-0001`)
-- Invoice: `INV-YYMMDD-NNNN`
-- Billing: `BIL-YYMMDD-NNNN`
+- Payment: `PMT-YYMMDD-NNNN` (semua jenis pembayaran: DP, harian, manual)
 
 **Timezone — WIB (Asia/Jakarta):**
-- Semua logika tanggal "hari ini" WAJIB menggunakan `getWibToday()` dari `BillingService.ts`, BUKAN `new Date()`.
+- Semua logika tanggal "hari ini" WAJIB menggunakan `getWibToday()` dari `PaymentService.ts`, BUKAN `new Date()`.
 - Server production (Railway) berjalan di timezone UTC. `new Date()` memberikan tanggal UTC yang bisa beda hari dari WIB.
 - Scheduler cron sudah di-set `timezone: 'Asia/Jakarta'` — ini hanya mengatur kapan cron trigger, tapi `new Date()` di dalamnya tetap UTC.
 - `getWibToday()` menggunakan `toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' })` untuk mendapatkan tanggal WIB yang benar.
@@ -188,25 +187,35 @@ Domain (paling dalam) → Application → Infrastructure → Presentation (palin
   - BAST (Berita Acara Serah Terima): `bastPhoto` WAJIB diisi saat receive unit. `bastNotes` opsional.
   - Tagihan harian mulai H+1 setelah unit diterima (hari penerimaan = bebas tagihan).
 
-### Billing & Payment Lifecycle
+### Payment Lifecycle (Unified PMT-xxx)
 
-**Flow normal (same-day billing model):**
-1. Scheduler (00:01 WIB) generate billing untuk **hari ini** (bukan besok) untuk semua kontrak ACTIVE & OVERDUE
-2. Customer bayar billing → billing status jadi PAID → system generate Invoice (type=DAILY_BILLING)
-3. Invoice PAID → credit hari ke contract (`totalDaysPaid++`, `ownershipProgress` update, `endDate` maju)
+**Arsitektur**: Tidak ada lagi entitas Billing terpisah. Semua pembayaran (DP, harian, manual) menggunakan satu entitas Invoice/Payment dengan nomor PMT-xxx dan status PENDING/PAID/EXPIRED/VOID/FAILED.
+
+**Flow normal (same-day model):**
+1. Scheduler (00:01 WIB) generate Payment (PMT-xxx, status=PENDING) untuk **hari ini** untuk semua kontrak ACTIVE & OVERDUE
+2. Customer bayar → status berubah dari PENDING ke PAID
+3. PAID → credit hari ke contract (`totalDaysPaid++`, `ownershipProgress` update, `endDate` maju)
 
 **Rollover mechanism:**
-- Jika billing hari ini tidak dibayar, besok billing baru dibuat dengan akumulasi:
-  - Hari ke-1: billing Rp 58.000 (1 hari)
-  - Hari ke-2 (belum bayar): billing lama expired, billing baru Rp 116.000 (2 hari)
-  - Hari ke-3 (belum bayar): billing lama expired, billing baru Rp 174.000 (3 hari)
-- Customer WAJIB bayar billing terbaru yang sudah akumulasi — billing lama sudah expired.
+- Jika tagihan hari ini tidak dibayar, besok tagihan baru dibuat dengan akumulasi:
+  - Hari ke-1: tagihan Rp 58.000 (1 hari, daysCount=1)
+  - Hari ke-2 (belum bayar): tagihan lama expired, tagihan baru Rp 116.000 (daysCount=2)
+  - Hari ke-3 (belum bayar): tagihan lama expired, tagihan baru Rp 174.000 (daysCount=3)
+- Customer WAJIB bayar tagihan terbaru yang sudah akumulasi — tagihan lama sudah expired.
 
-**Manual billing (1-7 hari):**
-- Admin bisa buat billing manual untuk bayar beberapa hari sekaligus ke depan.
-- Jika sudah ada billing aktif: billing lama di-cancel, billing baru dibuat dengan merge (amount lama + baru).
-- Billing merged punya `previousBillingId` yang menunjuk ke billing sebelumnya.
-- Jika billing merged di-cancel: billing sebelumnya di-reactivate (status → ACTIVE kembali).
+**Manual payment (1-7 hari):**
+- Admin bisa buat tagihan manual untuk bayar beberapa hari sekaligus ke depan.
+- Jika sudah ada tagihan aktif (PENDING): tagihan lama di-cancel, tagihan baru dibuat dengan merge (amount lama + baru).
+- Tagihan merged punya `previousPaymentId` yang menunjuk ke tagihan sebelumnya.
+- Jika tagihan merged di-cancel: tagihan sebelumnya di-reactivate (status → PENDING kembali).
+
+**Field tambahan pada Invoice (Payment):**
+- `dailyRate`: tarif harian saat tagihan dibuat
+- `daysCount`: jumlah hari yang di-cover tagihan ini
+- `periodStart`/`periodEnd`: periode tagihan
+- `expiredAt`: kapan tagihan expired (untuk rollover)
+- `previousPaymentId`: chain ke tagihan sebelumnya (rollover/merge)
+- `isHoliday`: apakah tagihan ini untuk hari Libur Bayar
 
 ### Libur Bayar (Holiday System)
 
@@ -217,7 +226,7 @@ Domain (paling dalam) → Application → Infrastructure → Presentation (palin
   - Minimum: 2, Maksimum: 4
 - **Algoritma pemilihan Minggu**: `getSundayHolidays(year, month, holidayDaysPerMonth)` — pilih Minggu yang evenly distributed dalam bulan tersebut menggunakan index-based algorithm.
 - **Minggu yang BUKAN Libur Bayar** = hari kerja biasa yang HARUS dibayar.
-- **Billing di hari Libur Bayar**: amount Rp 0, status auto-PAID, tetap credit 1 hari ke ownership progress.
+- **Tagihan di hari Libur Bayar**: amount Rp 0, status auto-PAID, isHoliday=true, tetap credit 1 hari ke ownership progress.
 - **endDate advancement**: saat credit hari kerja ke contract, skip hanya Libur Bayar Sundays (bukan semua Sundays).
 
 ### Contract Status Machine
@@ -242,12 +251,12 @@ OVERDUE → CANCELLED   (manual oleh admin)
 - Semua PENDING dan FAILED invoices otomatis di-void.
 - Audit log dicatat.
 
-### Invoice Revert
+### Payment Revert
 
-- Admin bisa revert invoice dari PAID atau VOID → kembali ke PENDING.
+- Admin bisa revert payment dari PAID atau VOID → kembali ke PENDING.
 - **Jika revert dari PAID**: system otomatis undo perubahan contract:
-  - DP invoice: kurangi `dpPaidAmount`, set `dpFullyPaid = false` jika perlu
-  - Daily billing invoice: kurangi `totalDaysPaid`, recalculate `ownershipProgress`, mundurkan `endDate`
+  - DP payment: kurangi `dpPaidAmount`, set `dpFullyPaid = false` jika perlu
+  - Daily payment: kurangi `totalDaysPaid`, recalculate `ownershipProgress`, mundurkan `endDate`
 - Ini fitur koreksi admin — gunakan dengan hati-hati.
 
 ### Payment Calendar (Warna)
@@ -255,8 +264,8 @@ OVERDUE → CANCELLED   (manual oleh admin)
 | Warna | Status | Keterangan |
 |-------|--------|------------|
 | Hijau | `paid` | Hari yang sudah dibayar |
-| Kuning | `pending` | Ada billing aktif, belum dibayar (hari ini atau mendatang) |
-| Merah | `overdue` | Tanggal yang sudah lewat dalam billing aktif (tunggakan) |
+| Kuning | `pending` | Ada tagihan aktif, belum dibayar (hari ini atau mendatang) |
+| Merah | `overdue` | Tanggal yang sudah lewat dalam tagihan aktif (tunggakan) |
 | Biru | `holiday` | Libur Bayar (Minggu yang designated) |
 | Abu-abu | `not_issued` | Tagihan belum diterbitkan untuk tanggal ini |
 
@@ -267,8 +276,8 @@ OVERDUE → CANCELLED   (manual oleh admin)
 ### Prisma
 
 - Schema: `packages/backend/prisma/schema.prisma`
-- 7 models: User, Customer, Contract, Invoice, Billing, AuditLog, Setting
-- 10 enums: MotorModel, BatteryType, ContractStatus, PaymentStatus, InvoiceType, BillingStatus, DPScheme, Gender, AuditAction, UserRole
+- 6 models: User, Customer, Contract, Invoice, AuditLog, Setting
+- 9 enums: MotorModel, BatteryType, ContractStatus, PaymentStatus, InvoiceType, DPScheme, Gender, AuditAction, UserRole
 - Column naming: snake_case via `@map`/`@@map` (field names tetap camelCase di TypeScript)
 - Client singleton: `packages/backend/src/infrastructure/prisma/client.ts`
 
@@ -317,8 +326,8 @@ cd packages/backend && npx prisma db seed -- --reset --force
 
 - Framework: Jest + ts-jest
 - Lokasi: `packages/backend/src/__tests__/`
-- 5 test suites: AuthService, CustomerService, ContractService, InvoiceService, BillingService
-- **129 tests** saat ini
+- 4 test suites: AuthService, CustomerService, ContractService, PaymentService
+- **127 tests** saat ini
 - Semua tests menggunakan InMemory repositories — TIDAK butuh PostgreSQL.
 - Jalankan: `cd packages/backend && npm test`
 - Saat menambah fitur baru, WAJIB tambah/update tests yang relevan.

@@ -22,7 +22,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { useCustomer, useContractsByCustomer, useInvoicesByCustomer, useInvalidate } from "@/hooks/useApi";
+import { useCustomer, useContractsByCustomer, usePaymentsPaginated, useInvalidate } from "@/hooks/useApi";
 import { api } from "@/lib/api";
 import { Customer, Contract, Invoice } from "@/types";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils";
@@ -80,7 +80,8 @@ export default function CustomerDetailPage() {
   const invalidate = useInvalidate();
   const { data: customer, isLoading: customerLoading } = useCustomer(id);
   const { data: contracts = [] as Contract[], isLoading: contractsLoading } = useContractsByCustomer(id);
-  const { data: invoices = [] as Invoice[], isLoading: invoicesLoading } = useInvoicesByCustomer(id);
+  const { data: invoicesData, isLoading: invoicesLoading } = usePaymentsPaginated({ customerId: id, limit: 100, sortBy: "createdAt", sortOrder: "desc" });
+  const invoices = (invoicesData?.data as Invoice[]) || [];
   const loading = customerLoading || contractsLoading || invoicesLoading;
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [processing, setProcessing] = useState(false);

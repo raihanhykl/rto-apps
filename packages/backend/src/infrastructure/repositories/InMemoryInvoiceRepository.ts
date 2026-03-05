@@ -1,6 +1,6 @@
 import { Invoice } from '../../domain/entities';
 import { IInvoiceRepository } from '../../domain/interfaces';
-import { PaymentStatus } from '../../domain/enums';
+import { PaymentStatus, InvoiceType } from '../../domain/enums';
 import { PaginationParams, PaginatedResult } from '../../domain/interfaces/Pagination';
 
 export class InMemoryInvoiceRepository implements IInvoiceRepository {
@@ -47,6 +47,23 @@ export class InMemoryInvoiceRepository implements IInvoiceRepository {
 
   async findByStatus(status: PaymentStatus): Promise<Invoice[]> {
     return Array.from(this.invoices.values()).filter(i => i.status === status);
+  }
+
+  async findActiveByContractId(contractId: string): Promise<Invoice | null> {
+    const active = Array.from(this.invoices.values()).find(
+      i => i.contractId === contractId
+        && i.status === PaymentStatus.PENDING
+        && (i.type === InvoiceType.DAILY_BILLING || i.type === InvoiceType.MANUAL_PAYMENT)
+    );
+    return active || null;
+  }
+
+  async search(query: string): Promise<Invoice[]> {
+    const q = query.toLowerCase();
+    return Array.from(this.invoices.values())
+      .filter(i => i.invoiceNumber.toLowerCase().includes(q))
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, 20);
   }
 
   async create(invoice: Invoice): Promise<Invoice> {

@@ -153,10 +153,6 @@ class ApiClient {
     return this.request<any[]>(`/contracts/customer/${customerId}`);
   }
 
-  async getInvoicesByCustomer(customerId: string) {
-    return this.request<any[]>(`/invoices?customerId=${customerId}`);
-  }
-
   async createContract(data: any) {
     return this.request<any>('/contracts', {
       method: 'POST',
@@ -215,12 +211,12 @@ class ApiClient {
     return this.request<any[]>('/contracts/overdue-warnings');
   }
 
-  // Invoices
-  async getInvoices() {
-    return this.request<any[]>('/invoices');
+  // Payments (unified billing + invoice)
+  async getPayments() {
+    return this.request<any[]>('/payments');
   }
 
-  async getInvoicesPaginated(params: { page?: number; limit?: number; sortBy?: string; sortOrder?: 'asc' | 'desc'; search?: string; status?: string; customerId?: string; invoiceType?: string; startDate?: string; endDate?: string }) {
+  async getPaymentsPaginated(params: { page?: number; limit?: number; sortBy?: string; sortOrder?: 'asc' | 'desc'; search?: string; status?: string; customerId?: string; invoiceType?: string; startDate?: string; endDate?: string }) {
     const query = new URLSearchParams();
     query.set('page', String(params.page || 1));
     query.set('limit', String(params.limit || 20));
@@ -232,86 +228,88 @@ class ApiClient {
     if (params.invoiceType) query.set('invoiceType', params.invoiceType);
     if (params.startDate) query.set('startDate', params.startDate);
     if (params.endDate) query.set('endDate', params.endDate);
-    return this.request<any>(`/invoices?${query.toString()}`);
+    return this.request<any>(`/payments?${query.toString()}`);
   }
 
-  async getInvoice(id: string) {
-    return this.request<any>(`/invoices/${id}`);
+  async getPayment(id: string) {
+    return this.request<any>(`/payments/${id}`);
   }
 
-  async getInvoiceQR(id: string) {
-    return this.request<{ qrCode: string }>(`/invoices/${id}/qr`);
+  async searchPayments(query: string) {
+    return this.request<any[]>(`/payments/search?q=${encodeURIComponent(query)}`);
+  }
+
+  async getPaymentQR(id: string) {
+    return this.request<{ qrCode: string }>(`/payments/${id}/qr`);
   }
 
   async simulatePayment(id: string, status: 'PAID' | 'FAILED') {
-    return this.request<any>(`/invoices/${id}/payment`, {
+    return this.request<any>(`/payments/${id}/simulate`, {
       method: 'POST',
       body: JSON.stringify({ status }),
     });
   }
 
-  async voidInvoice(id: string) {
-    return this.request<any>(`/invoices/${id}/void`, {
+  async voidPayment(id: string) {
+    return this.request<any>(`/payments/${id}/void`, {
       method: 'PATCH',
     });
   }
 
-  async markInvoicePaid(id: string) {
-    return this.request<any>(`/invoices/${id}/mark-paid`, {
+  async markPaymentPaid(id: string) {
+    return this.request<any>(`/payments/${id}/mark-paid`, {
       method: 'PATCH',
     });
   }
 
-  async revertInvoiceStatus(id: string) {
-    return this.request<any>(`/invoices/${id}/revert`, {
+  async revertPaymentStatus(id: string) {
+    return this.request<any>(`/payments/${id}/revert`, {
       method: 'PATCH',
     });
   }
 
-  async bulkMarkPaid(invoiceIds: string[]) {
-    return this.request<{ success: string[]; failed: Array<{ id: string; error: string }> }>('/invoices/bulk-pay', {
+  async bulkMarkPaid(paymentIds: string[]) {
+    return this.request<{ success: string[]; failed: Array<{ id: string; error: string }> }>('/payments/bulk-pay', {
       method: 'POST',
-      body: JSON.stringify({ invoiceIds }),
+      body: JSON.stringify({ paymentIds }),
     });
   }
 
-  // Billings
-  async getBillingsByContract(contractId: string) {
-    return this.request<any[]>(`/billings/contract/${contractId}`);
+  async payPayment(id: string) {
+    return this.request<any>(`/payments/${id}/pay`, {
+      method: 'POST',
+    });
   }
 
-  async getActiveBillingByContract(contractId: string) {
-    return this.request<any>(`/billings/contract/${contractId}/active`);
+  async getPaymentsByContract(contractId: string) {
+    return this.request<any[]>(`/payments/contract/${contractId}`);
+  }
+
+  async getActivePaymentByContract(contractId: string) {
+    return this.request<any>(`/payments/contract/${contractId}/active`);
   }
 
   async getCalendarData(contractId: string, year: number, month: number) {
     return this.request<Array<{ date: string; status: string; amount?: number }>>(
-      `/billings/contract/${contractId}/calendar?year=${year}&month=${month}`
+      `/payments/contract/${contractId}/calendar?year=${year}&month=${month}`
     );
   }
 
-  async payBilling(id: string) {
-    return this.request<any>(`/billings/${id}/pay`, {
-      method: 'POST',
-    });
-  }
-
-  async createManualBilling(contractId: string, days: number) {
-    return this.request<any>(`/billings/contract/${contractId}/manual`, {
+  async createManualPayment(contractId: string, days: number) {
+    return this.request<any>(`/payments/contract/${contractId}/manual`, {
       method: 'POST',
       body: JSON.stringify({ days }),
     });
   }
 
-  async cancelBilling(billingId: string) {
-    return this.request<any>(`/billings/${billingId}/cancel`, {
+  async cancelPayment(paymentId: string) {
+    return this.request<any>(`/payments/${paymentId}/cancel`, {
       method: 'PATCH',
     });
   }
 
-  // Invoice PDF
-  async downloadInvoicePdf(id: string) {
-    return this.request<Blob>(`/invoices/${id}/pdf`);
+  async downloadPaymentPdf(id: string) {
+    return this.request<Blob>(`/payments/${id}/pdf`);
   }
 
   // Reports

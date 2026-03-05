@@ -32,13 +32,6 @@ export enum InvoiceType {
   MANUAL_PAYMENT = 'MANUAL_PAYMENT',
 }
 
-export enum BillingStatus {
-  ACTIVE = 'ACTIVE',
-  PAID = 'PAID',
-  EXPIRED = 'EXPIRED',
-  CANCELLED = 'CANCELLED',
-}
-
 export enum DPScheme {
   FULL = 'FULL',
   INSTALLMENT = 'INSTALLMENT',
@@ -161,33 +154,14 @@ export interface Invoice {
   // DOKU payment gateway
   dokuPaymentUrl: string | null;
   dokuReferenceId: string | null;
-  // Billing period
-  billingPeriodStart: string | null;
-  billingPeriodEnd: string | null;
-  billingId: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface Billing {
-  id: string;
-  billingNumber: string;
-  contractId: string;
-  customerId: string;
-  amount: number;
-  dailyRate: number;
-  daysCount: number;
-  status: BillingStatus;
-  dokuPaymentUrl: string | null;
-  dokuReferenceId: string | null;
-  periodStart: string;
-  periodEnd: string;
+  // Payment period
+  dailyRate: number | null;
+  daysCount: number | null;
+  periodStart: string | null;
+  periodEnd: string | null;
   expiredAt: string | null;
-  paidAt: string | null;
-  invoiceId: string | null;
-  previousBillingId: string | null;
-  isDeleted: boolean;
-  deletedAt: string | null;
+  previousPaymentId: string | null;
+  isHoliday: boolean;
   createdAt: string;
   updatedAt: string;
 }

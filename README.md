@@ -13,7 +13,7 @@ Internal Rent-To-Own (RTO) management system for WEDISON electric motorcycles. A
 | EdPower | Rp 83.000/hari | Rp 780.000 |
 
 - **Ownership Target**: 1.278 hari kerja
-- **Billing**: Auto-billing harian dengan rollover
+- **Payment**: Tagihan harian otomatis (PMT-xxx) dengan rollover
 - **Libur Bayar**: Minggu tertentu (2-4 per bulan, configurable per contract)
 - **Payment Gateway**: DOKU (planned)
 - **Manual Payment**: 1-7 hari ke depan
@@ -67,7 +67,7 @@ Monorepo (npm workspaces)
 └── railway.json          Railway deployment config
 ```
 
-## Running the Project
+## Running the Project (127 tests, 4 suites)
 
 ### Prerequisites
 - Node.js 22+
@@ -109,7 +109,7 @@ npm run dev
 ### Testing
 
 ```bash
-# Run all tests (129 tests, 5 suites)
+# Run all tests (127 tests, 4 suites)
 cd packages/backend && npm test
 
 # TypeScript check
@@ -130,19 +130,18 @@ cd packages/frontend && npm run build
 
 ## Database Schema
 
-7 models with full relations:
+6 models with full relations:
 
 | Model | Description |
 |-------|-------------|
 | User | Admin users (username, password, role) |
 | Customer | Customer data (KTP, contact, guarantor, spouse, documents) |
-| Contract | RTO contracts (motor, battery, DP, billing, ownership tracking) |
-| Invoice | Payment records (DP, daily billing, manual payment) |
-| Billing | Daily billing lifecycle (active, paid, expired, cancelled) |
+| Contract | RTO contracts (motor, battery, DP, ownership tracking) |
+| Invoice | Unified payment records — PMT-xxx (DP, daily, manual, holiday) |
 | AuditLog | All mutation operations logged |
 | Setting | Configurable system settings |
 
-10 enums: MotorModel, BatteryType, ContractStatus, PaymentStatus, InvoiceType, BillingStatus, DPScheme, Gender, AuditAction, UserRole
+9 enums: MotorModel, BatteryType, ContractStatus, PaymentStatus, InvoiceType, DPScheme, Gender, AuditAction, UserRole
 
 ## API Endpoints
 
@@ -183,26 +182,24 @@ cd packages/frontend && npm run build
 | GET | /api/contracts/overdue-warnings | Get overdue/near-overdue contracts |
 | GET | /api/contracts/customer/:customerId | Contracts by customer |
 
-### Invoices
+### Payments (Unified — replaces Invoices + Billings)
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | /api/invoices | List invoices (paginated) |
-| GET | /api/invoices/:id/qr | Generate QR code |
-| GET | /api/invoices/:id/pdf | Download invoice as PDF |
-| POST | /api/invoices/:id/payment | Simulate payment |
-| PATCH | /api/invoices/:id/void | Void invoice |
-| PATCH | /api/invoices/:id/mark-paid | Manual mark as paid |
-| PATCH | /api/invoices/:id/revert | Revert invoice to PENDING |
-| POST | /api/invoices/bulk-pay | Bulk mark invoices as paid |
-
-### Billings
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | /api/billings/contract/:id | Get billings by contract |
-| GET | /api/billings/contract/:id/active | Get active billing for contract |
-| POST | /api/billings/:id/pay | Pay billing (generates invoice) |
-| POST | /api/billings/contract/:contractId/manual | Create manual billing (1-7 days) |
-| PATCH | /api/billings/:id/cancel | Cancel billing (revert if merged) |
+| GET | /api/payments | List payments (paginated, filterable) |
+| GET | /api/payments/:id | Get payment detail |
+| GET | /api/payments/:id/qr | Generate QR code |
+| GET | /api/payments/:id/pdf | Download payment as PDF |
+| POST | /api/payments/:id/pay | Pay payment (PENDING → PAID) |
+| POST | /api/payments/:id/simulate | Simulate payment (dev) |
+| PATCH | /api/payments/:id/void | Void payment |
+| PATCH | /api/payments/:id/mark-paid | Manual mark as paid |
+| PATCH | /api/payments/:id/revert | Revert payment to PENDING |
+| PATCH | /api/payments/:id/cancel | Cancel payment (reactivate previous if merged) |
+| POST | /api/payments/bulk-pay | Bulk mark payments as paid |
+| GET | /api/payments/contract/:contractId | All payments for contract |
+| GET | /api/payments/contract/:contractId/active | Active (PENDING) payment |
+| GET | /api/payments/contract/:contractId/calendar | Calendar data |
+| POST | /api/payments/contract/:contractId/manual | Create manual payment (1-7 days) |
 
 ### Reports & Export
 | Method | Path | Description |
