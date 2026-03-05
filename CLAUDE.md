@@ -24,6 +24,7 @@
 |-------|-----------|
 | Frontend | Next.js 16 (App Router), TypeScript, Tailwind CSS v4, ShadCN UI |
 | State | Zustand |
+| Data Fetching | SWR (stale-while-revalidate) |
 | Forms | React Hook Form + Zod |
 | Backend | Express.js, TypeScript, Clean Architecture |
 | Scheduler | node-cron (daily billing at 00:01 WIB) |
@@ -1774,3 +1775,80 @@ chore/*   ──PR──> staging atau main
 |------|--------|
 | `.gitignore` | `.env.*` + `!.env.example` (broader pattern) |
 | `packages/frontend/.gitignore` | Added `!.env.example` exception |
+
+---
+
+## 2026-03-04 - Frontend API Caching with SWR
+
+### Context
+
+Every page navigation triggered full API re-fetch from server. Implemented SWR (stale-while-revalidate) by Vercel for proper client-side caching — cached data shown instantly on navigation, background revalidation, request deduplication.
+
+### What was built
+
+**SWR Provider** (`packages/frontend/src/components/SWRProvider.tsx`):
+- Global `<SWRConfig>` wrapper with: `revalidateOnFocus: true`, `revalidateOnReconnect: true`, `dedupingInterval: 2000`, `errorRetryCount: 1`
+- Wrapped in `app/(dashboard)/layout.tsx` inside `<AuthGuard>`
+
+**Custom SWR Hooks** (`packages/frontend/src/hooks/useApi.ts`):
+- TTL tiers: LONG (10min — settings, motor rates), MEDIUM (5min — dashboard), DEFAULT (1min — lists, details), SHORT (15sec — billing, calendar)
+- 17 hooks: `useDashboardStats`, `useCustomersPaginated`, `useCustomer`, `useCustomersList`, `useContractsPaginated`, `useContractDetail`, `useContractsByCustomer`, `useContractsList`, `useInvoicesPaginated`, `useInvoicesByCustomer`, `useBillingsByContract`, `useActiveBilling`, `useCalendarData`, `useReport`, `useAuditLogsPaginated`, `useSettings`, `useMotorRates`
+- `useInvalidate()` — prefix-based cache invalidation (e.g., `invalidate("/customers", "/dashboard")`)
+
+**Page Conversions** (11 pages):
+- Replaced `useState + useEffect + loadData` pattern with SWR hooks
+- Mutation handlers use `invalidate("/prefix")` instead of manual `loadData()`
+- Pattern for paginated pages: `useEffect(() => { if (data) pagination.updateFromResult(data); }, [data])`
+
+**PaymentCalendar**:
+- Replaced `useEffect + loadCalendar` with `useCalendarData` SWR hook
+- Removed `refreshKey` prop — parent's `invalidate("/billings")` auto-triggers refetch
+
+**CommandPalette**:
+- Replaced direct API calls with `useCustomersList` and `useContractsList` SWR hooks
+- Results derived from SWR cached data with internal debounce
+
+### Caching Behavior
+
+| Scenario | Behavior |
+|----------|----------|
+| Navigate away & back | Cached data shown instantly (no spinner), background revalidation if expired |
+| Mutation (create/edit/delete) | `invalidate("/prefix")` force-refetches all related data |
+| Tab focus | Auto-refresh stale data |
+| Page refresh | Cache cleared (in-memory, intentional) |
+| Same data from 2 components | Single request (deduplication) |
+
+### New Files
+
+| File | Description |
+|------|-------------|
+| `packages/frontend/src/components/SWRProvider.tsx` | Global SWR configuration provider |
+| `packages/frontend/src/hooks/useApi.ts` | All SWR hooks + invalidation helper |
+
+### Modified Files
+
+| File | Change |
+|------|--------|
+| `packages/frontend/src/app/(dashboard)/layout.tsx` | Wrap with `<SWRProvider>` |
+| `packages/frontend/src/app/(dashboard)/page.tsx` | useDashboardStats hook |
+| `packages/frontend/src/app/(dashboard)/customers/page.tsx` | useCustomersPaginated + useInvalidate |
+| `packages/frontend/src/app/(dashboard)/customers/[id]/page.tsx` | useCustomer + useContractsByCustomer + useInvoicesByCustomer |
+| `packages/frontend/src/app/(dashboard)/contracts/page.tsx` | useContractsPaginated + useCustomersList + useMotorRates |
+| `packages/frontend/src/app/(dashboard)/contracts/[id]/page.tsx` | useContractDetail + useBillingsByContract + useActiveBilling |
+| `packages/frontend/src/app/(dashboard)/invoices/page.tsx` | useInvoicesPaginated + useContractsList |
+| `packages/frontend/src/app/(dashboard)/reports/page.tsx` | useReport |
+| `packages/frontend/src/app/(dashboard)/audit/page.tsx` | useAuditLogsPaginated |
+| `packages/frontend/src/app/(dashboard)/settings/page.tsx` | useSettings + useInvalidate |
+| `packages/frontend/src/components/PaymentCalendar.tsx` | useCalendarData, removed refreshKey prop |
+| `packages/frontend/src/components/CommandPalette.tsx` | useCustomersList + useContractsList |
+
+### Dependencies Added
+
+- `swr` (frontend) — ~4KB, stale-while-revalidate data fetching by Vercel
+
+### NOT Modified
+
+- `packages/frontend/src/lib/api.ts` — ApiClient unchanged (SWR hooks call existing methods as fetchers)
+- `packages/frontend/src/hooks/usePagination.ts` — Unchanged (manages UI state only)
+- All backend code — Zero changes
+- Tests — 129 tests passing (5 suites, unchanged)

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { useCustomer, useContractsByCustomer, useInvoicesByCustomer, useInvalidate } from "@/hooks/useApi";
 import { api } from "@/lib/api";
 import { Customer, Contract, Invoice } from "@/types";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils";
@@ -72,10 +73,11 @@ const genderLabel = (g: string | null) => {
 export default function CustomerDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const [customer, setCustomer] = useState<Customer | null>(null);
-  const [contracts, setContracts] = useState<Contract[]>([]);
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [loading, setLoading] = useState(true);
+  const invalidate = useInvalidate();
+  const { data: customer, isLoading: customerLoading } = useCustomer(id);
+  const { data: contracts = [] as Contract[], isLoading: contractsLoading } = useContractsByCustomer(id);
+  const { data: invoices = [] as Invoice[], isLoading: invoicesLoading } = useInvoicesByCustomer(id);
+  const loading = customerLoading || contractsLoading || invoicesLoading;
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [editForm, setEditForm] = useState({
@@ -124,7 +126,7 @@ export default function CustomerDetailPage() {
       });
       toastSuccess("Berhasil", "Data customer berhasil diperbarui.");
       setEditDialogOpen(false);
-      await loadData();
+      invalidate("/customers");
     } catch (error: any) {
       toastError("Gagal", error.message);
     } finally {
@@ -139,27 +141,6 @@ export default function CustomerDetailPage() {
         ? prev.rideHailingApps.filter(a => a !== app)
         : [...prev.rideHailingApps, app],
     }));
-  };
-
-  useEffect(() => {
-    if (id) loadData();
-  }, [id]);
-
-  const loadData = async () => {
-    try {
-      const [customerData, contractsData, invoicesData] = await Promise.all([
-        api.getCustomer(id),
-        api.getContractsByCustomer(id),
-        api.getInvoicesByCustomer(id),
-      ]);
-      setCustomer(customerData);
-      setContracts(contractsData);
-      setInvoices(invoicesData);
-    } catch (error) {
-      console.error("Failed to load customer detail:", error);
-    } finally {
-      setLoading(false);
-    }
   };
 
   if (loading) {
@@ -254,7 +235,7 @@ export default function CustomerDetailPage() {
                   <p className="text-xs text-muted-foreground">Aplikasi Ojol</p>
                   <div className="flex flex-wrap gap-1 mt-0.5">
                     {(customer.rideHailingApps || []).length > 0 ? (
-                      customer.rideHailingApps.map(app => (
+                      customer.rideHailingApps.map((app: string) => (
                         <Badge key={app} variant="outline" className="text-xs">{app}</Badge>
                       ))
                     ) : (

@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { api } from "@/lib/api";
+import { useCalendarData } from "@/hooks/useApi";
 import { formatCurrency } from "@/lib/utils";
 import { ChevronLeft, ChevronRight, Calendar } from "lucide-react";
 
@@ -16,7 +16,6 @@ interface CalendarDay {
 interface PaymentCalendarProps {
   contractId: string;
   billingStartDate: string | null;
-  refreshKey?: number;
 }
 
 const STATUS_COLORS: Record<string, { bg: string; text: string; label: string }> = {
@@ -33,28 +32,17 @@ const MONTH_NAMES = [
   "Juli", "Agustus", "September", "Oktober", "November", "Desember",
 ];
 
-export default function PaymentCalendar({ contractId, billingStartDate, refreshKey }: PaymentCalendarProps) {
+export default function PaymentCalendar({ contractId, billingStartDate }: PaymentCalendarProps) {
   const [year, setYear] = useState(new Date().getFullYear());
   const [month, setMonth] = useState(new Date().getMonth() + 1);
-  const [days, setDays] = useState<CalendarDay[]>([]);
-  const [loading, setLoading] = useState(true);
   const [hoveredDay, setHoveredDay] = useState<CalendarDay | null>(null);
 
-  useEffect(() => {
-    loadCalendar();
-  }, [contractId, year, month, refreshKey]);
-
-  const loadCalendar = async () => {
-    setLoading(true);
-    try {
-      const data = await api.getCalendarData(contractId, year, month);
-      setDays(data as CalendarDay[]);
-    } catch {
-      setDays([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data: calendarData, isLoading: loading } = useCalendarData(
+    billingStartDate ? contractId : undefined,
+    year,
+    month
+  );
+  const days = (calendarData as CalendarDay[]) || [];
 
   const prevMonth = () => {
     if (month === 1) {

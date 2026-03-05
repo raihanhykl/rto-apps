@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useReport } from "@/hooks/useApi";
 import { api } from "@/lib/api";
 import { formatCurrency } from "@/lib/utils";
 import { ReportData, ContractStatus, MotorModel } from "@/types";
@@ -36,8 +37,6 @@ interface ReportFilters {
 }
 
 export default function ReportsPage() {
-  const [report, setReport] = useState<ReportData | null>(null);
-  const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [filters, setFilters] = useState<ReportFilters>({
     startDate: "",
@@ -52,10 +51,6 @@ export default function ReportsPage() {
     motorModel: "",
   });
 
-  useEffect(() => {
-    loadReport();
-  }, []);
-
   const buildFilterParams = (f: ReportFilters) => {
     const params: Record<string, string> = {};
     if (f.startDate) params.startDate = f.startDate;
@@ -65,29 +60,16 @@ export default function ReportsPage() {
     return Object.keys(params).length > 0 ? params : undefined;
   };
 
-  const loadReport = async (f?: ReportFilters) => {
-    setLoading(true);
-    try {
-      const filterParams = buildFilterParams(f || appliedFilters);
-      const data = await api.getReport(filterParams);
-      setReport(data);
-    } catch (error) {
-      console.error("Failed to load report:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data: report, isLoading: loading } = useReport(buildFilterParams(appliedFilters)) as { data: ReportData | undefined; isLoading: boolean };
 
   const handleApplyFilters = () => {
     setAppliedFilters({ ...filters });
-    loadReport(filters);
   };
 
   const handleClearFilters = () => {
     const empty = { startDate: "", endDate: "", status: "", motorModel: "" };
     setFilters(empty);
     setAppliedFilters(empty);
-    loadReport(empty);
   };
 
   const downloadBlob = (blob: Blob, filename: string) => {

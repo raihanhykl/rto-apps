@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { api } from "@/lib/api";
+import { useContractDetail, useBillingsByContract, useActiveBilling, useInvalidate } from "@/hooks/useApi";
 import { Contract, Customer, Invoice, Billing } from "@/types";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -93,10 +94,24 @@ const TAGIHAN_PAGE_SIZE = 5;
 export default function ContractDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const [contract, setContract] = useState<Contract | null>(null);
-  const [customer, setCustomer] = useState<Customer | null>(null);
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [loading, setLoading] = useState(true);
+  const invalidate = useInvalidate();
+
+  // SWR hooks
+  const { data: detailData, isLoading: detailLoading } = useContractDetail(id);
+  const { data: billingsData } = useBillingsByContract(id);
+  const { data: activeBillingData } = useActiveBilling(id);
+
+  const contract = (detailData as any)?.contract as Contract | undefined ?? null;
+  const customer = (detailData as any)?.customer as Customer | undefined ?? null;
+  const invoices = ((detailData as any)?.invoices as Invoice[] | undefined) || [];
+  const billings = (billingsData as Billing[] | undefined) || [];
+  const activeBilling = (activeBillingData as Billing | undefined) ?? null;
+  const loading = detailLoading;
+
+  const refreshAll = () => {
+    invalidate("/contracts", "/billings", "/invoices", "/dashboard");
+  };
+
   const [processing, setProcessing] = useState(false);
   const [qrDialogOpen, setQrDialogOpen] = useState(false);
   const [qrCode, setQrCode] = useState("");
@@ -120,12 +135,9 @@ export default function ContractDetailPage() {
   const [markPaidTarget, setMarkPaidTarget] = useState<Invoice | null>(null);
   const [revertDialogOpen, setRevertDialogOpen] = useState(false);
   const [revertTarget, setRevertTarget] = useState<Invoice | null>(null);
-  const [activeBilling, setActiveBilling] = useState<Billing | null>(null);
-  const [billings, setBillings] = useState<Billing[]>([]);
   const [receiveUnitDialogOpen, setReceiveUnitDialogOpen] = useState(false);
   const [bastPhoto, setBastPhoto] = useState("");
   const [bastNotes, setBastNotes] = useState("");
-  const [calendarKey, setCalendarKey] = useState(0);
 
   // Collapsible sections
   const [timelineOpen, setTimelineOpen] = useState(false);
@@ -133,41 +145,6 @@ export default function ContractDetailPage() {
   // Pagination
   const [timelinePage, setTimelinePage] = useState(1);
   const [tagihanPage, setTagihanPage] = useState(1);
-
-  useEffect(() => {
-    if (id) loadData();
-  }, [id]);
-
-  const loadData = async () => {
-    try {
-      const data = await api.getContractDetail(id);
-      setContract(data.contract);
-      setCustomer(data.customer);
-      setInvoices(data.invoices || []);
-
-      // Load billing data
-      try {
-        const [billingsData, activeBillingData] = await Promise.all([
-          api.getBillingsByContract(id),
-          api.getActiveBillingByContract(id),
-        ]);
-        setBillings(billingsData || []);
-        setActiveBilling(activeBillingData);
-      } catch {
-        // Billing data is optional
-      }
-    } catch (error) {
-      console.error("Failed to load contract detail:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  /** Re-fetch all data + refresh calendar */
-  const refreshAll = async () => {
-    await loadData();
-    setCalendarKey((k) => k + 1);
-  };
 
   const showQR = async (invoice: Invoice) => {
     try {
@@ -185,7 +162,7 @@ export default function ContractDetailPage() {
     try {
       await api.simulatePayment(invoiceId, status);
       toastSuccess("Pembayaran", `Tagihan berhasil di-${status === "PAID" ? "bayar" : "gagalkan"}.`);
-      await refreshAll();
+      refreshAll();
     } catch (error: any) {
       toastError("Gagal", error.message);
     } finally {
@@ -199,7 +176,7 @@ export default function ContractDetailPage() {
       await api.createManualBilling(id, parseInt(extendDays));
       toastSuccess("Bayar Tagihan", `Tagihan manual ${extendDays} hari berhasil dibuat.`);
       setExtendDialogOpen(false);
-      await refreshAll();
+      refreshAll();
     } catch (error: any) {
       toastError("Gagal", error.message);
     } finally {
@@ -213,7 +190,7 @@ export default function ContractDetailPage() {
       await api.repossessContract(id);
       toastSuccess("Penarikan", "Motor berhasil ditarik (repossessed).");
       setRepossessDialogOpen(false);
-      await refreshAll();
+      refreshAll();
     } catch (error: any) {
       toastError("Gagal", error.message);
     } finally {
@@ -247,7 +224,7 @@ export default function ContractDetailPage() {
       });
       toastSuccess("Berhasil", "Kontrak berhasil diperbarui.");
       setEditDialogOpen(false);
-      await refreshAll();
+      refreshAll();
     } catch (error: any) {
       toastError("Gagal", error.message);
     } finally {
@@ -266,7 +243,7 @@ export default function ContractDetailPage() {
       toastSuccess("Dibatalkan", "Kontrak berhasil dibatalkan.");
       setCancelDialogOpen(false);
       setCancelReason("");
-      await refreshAll();
+      refreshAll();
     } catch (error: any) {
       toastError("Gagal", error.message);
     } finally {
@@ -282,7 +259,7 @@ export default function ContractDetailPage() {
       toastSuccess("Berhasil", `Tagihan ${voidInvoiceTarget.invoiceNumber} berhasil di-void.`);
       setVoidDialogOpen(false);
       setVoidInvoiceTarget(null);
-      await refreshAll();
+      refreshAll();
     } catch (error: any) {
       toastError("Gagal", error.message);
     } finally {
@@ -298,7 +275,7 @@ export default function ContractDetailPage() {
       toastSuccess("Berhasil", `Tagihan ${markPaidTarget.invoiceNumber} ditandai lunas.`);
       setMarkPaidDialogOpen(false);
       setMarkPaidTarget(null);
-      await refreshAll();
+      refreshAll();
     } catch (error: any) {
       toastError("Gagal", error.message);
     } finally {
@@ -314,7 +291,7 @@ export default function ContractDetailPage() {
       toastSuccess("Berhasil", `Tagihan ${revertTarget.invoiceNumber} dikembalikan ke PENDING.`);
       setRevertDialogOpen(false);
       setRevertTarget(null);
-      await refreshAll();
+      refreshAll();
     } catch (error: any) {
       toastError("Gagal", error.message);
     } finally {
@@ -334,7 +311,7 @@ export default function ContractDetailPage() {
       setReceiveUnitDialogOpen(false);
       setBastPhoto("");
       setBastNotes("");
-      await refreshAll();
+      refreshAll();
     } catch (error: any) {
       toastError("Gagal", error.message);
     } finally {
@@ -347,7 +324,7 @@ export default function ContractDetailPage() {
     try {
       await api.payBilling(billingId);
       toastSuccess("Berhasil", "Billing berhasil dibayar.");
-      await refreshAll();
+      refreshAll();
     } catch (error: any) {
       toastError("Gagal", error.message);
     } finally {
@@ -360,7 +337,7 @@ export default function ContractDetailPage() {
     try {
       await api.cancelBilling(billingId);
       toastSuccess("Berhasil", "Billing berhasil dibatalkan.");
-      await refreshAll();
+      refreshAll();
     } catch (error: any) {
       toastError("Gagal", error.message);
     } finally {
@@ -562,7 +539,7 @@ export default function ContractDetailPage() {
       </Card>
 
       {/* Payment Calendar */}
-      <PaymentCalendar contractId={id} billingStartDate={contract.billingStartDate} refreshKey={calendarKey} />
+      <PaymentCalendar contractId={id} billingStartDate={contract.billingStartDate} />
 
       {/* Ownership Progress */}
       <Card>
