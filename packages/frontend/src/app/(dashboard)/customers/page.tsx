@@ -25,11 +25,11 @@ import { api } from "@/lib/api";
 import { Customer } from "@/types";
 import { formatDate } from "@/lib/utils";
 import { customerSchema, CustomerFormData } from "@/lib/schemas";
-import { Plus, Search, Pencil, Trash2, Users, Eye } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, Users, Eye, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toastSuccess, toastError } from "@/stores/toastStore";
 
-const RIDE_HAILING_OPTIONS = ["Grab", "Gojek", "Maxim", "Indrive", "Shopee"];
+const RIDE_HAILING_OPTIONS = ["Grab", "Gojek", "Maxim", "Indrive", "Shopee", "Lalamove"];
 
 export default function CustomersPage() {
   const router = useRouter();
@@ -65,7 +65,10 @@ export default function CustomersPage() {
     },
   });
   const [formError, setFormError] = useState("");
+  const [otherAppInput, setOtherAppInput] = useState("");
+  const [showOtherInput, setShowOtherInput] = useState(false);
   const watchApps = watch("rideHailingApps");
+  const customApps = (watchApps || []).filter(a => !RIDE_HAILING_OPTIONS.includes(a));
 
   const openCreate = () => {
     setEditingCustomer(null);
@@ -76,11 +79,14 @@ export default function CustomersPage() {
       spouseName: "", notes: "",
     });
     setFormError("");
+    setOtherAppInput("");
+    setShowOtherInput(false);
     setDialogOpen(true);
   };
 
   const openEdit = (customer: Customer) => {
     setEditingCustomer(customer);
+    const apps = customer.rideHailingApps || [];
     reset({
       fullName: customer.fullName,
       phone: customer.phone,
@@ -88,7 +94,7 @@ export default function CustomersPage() {
       address: customer.address,
       birthDate: customer.birthDate || "",
       gender: customer.gender || "",
-      rideHailingApps: customer.rideHailingApps || [],
+      rideHailingApps: apps,
       ktpNumber: customer.ktpNumber,
       guarantorName: customer.guarantorName || "",
       guarantorPhone: customer.guarantorPhone || "",
@@ -96,6 +102,8 @@ export default function CustomersPage() {
       notes: customer.notes,
     });
     setFormError("");
+    setOtherAppInput("");
+    setShowOtherInput(apps.some(a => !RIDE_HAILING_OPTIONS.includes(a)));
     setDialogOpen(true);
   };
 
@@ -106,6 +114,21 @@ export default function CustomersPage() {
     } else {
       setValue("rideHailingApps", [...current, app]);
     }
+  };
+
+  const addOtherApp = () => {
+    const name = otherAppInput.trim();
+    if (!name) return;
+    const current = watchApps || [];
+    if (!current.includes(name)) {
+      setValue("rideHailingApps", [...current, name]);
+    }
+    setOtherAppInput("");
+  };
+
+  const removeOtherApp = (app: string) => {
+    const current = watchApps || [];
+    setValue("rideHailingApps", current.filter(a => a !== app));
   };
 
   const handleSave = async (data: CustomerFormData) => {
@@ -369,7 +392,54 @@ export default function CustomersPage() {
                     {app}
                   </button>
                 ))}
+                <button
+                  type="button"
+                  onClick={() => setShowOtherInput(!showOtherInput)}
+                  className={`px-3 py-1.5 text-sm rounded-full border transition-colors ${
+                    showOtherInput || customApps.length > 0
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-background border-input hover:bg-muted"
+                  }`}
+                >
+                  Lainnya
+                </button>
               </div>
+              {(showOtherInput || customApps.length > 0) && (
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Nama aplikasi lain..."
+                      value={otherAppInput}
+                      onChange={(e) => setOtherAppInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          addOtherApp();
+                        }
+                      }}
+                      className="flex-1"
+                    />
+                    <Button type="button" variant="outline" size="sm" onClick={addOtherApp} disabled={!otherAppInput.trim()}>
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  {customApps.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {customApps.map(app => (
+                        <span
+                          key={app}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full bg-secondary text-secondary-foreground"
+                        >
+                          {app}
+                          <button type="button" onClick={() => removeOtherApp(app)} className="hover:text-destructive">
+                            <X className="h-3 w-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Penjamin */}

@@ -1852,3 +1852,113 @@ Every page navigation triggered full API re-fetch from server. Implemented SWR (
 - `packages/frontend/src/hooks/usePagination.ts` — Unchanged (manages UI state only)
 - All backend code — Zero changes
 - Tests — 129 tests passing (5 suites, unchanged)
+
+---
+
+## 2026-03-05 - Seed Script Best Practices & "Lainnya" Ride-Hailing Apps
+
+### Context
+
+Rewrote seed script with best practices (environment safeguards, idempotent operations, static typed data). Added "Lainnya" (Other) option for ride-hailing apps in customer forms.
+
+### What was changed
+
+**Seed Script Rewrite (`packages/backend/prisma/seed.ts`):**
+
+1. **Environment safeguard**: `--reset` in production requires `--force` flag. Prevents accidental data wipe.
+2. **Idempotent reference data**: Admin user and settings use `upsert` — safe to run multiple times.
+3. **Skip if data exists**: Without `--reset`, seed checks `contract.count()` and skips if data exists.
+4. **`--reset` flag**: Explicit opt-in for destructive wipe. Usage: `npx ts-node prisma/seed.ts --reset`
+5. **Static TypeScript data**: CSV data converted to typed `.ts` files (`prisma/data/customers.ts`, `prisma/data/contracts.ts`). Compile-time type safety, no runtime file I/O or CSV parsing.
+6. **Removed `csv-parse` dependency**: No longer needed since data is static TypeScript.
+
+**Seed Usage:**
+```bash
+# First seed or after schema change:
+npx ts-node prisma/seed.ts --reset
+
+# Re-run (idempotent, updates admin+settings only):
+npx ts-node prisma/seed.ts
+
+# Production (requires explicit --force):
+npx ts-node prisma/seed.ts --reset --force
+```
+
+**"Lainnya" Ride-Hailing Apps (Frontend):**
+
+1. **Customer create form** (`customers/page.tsx`): Added "Lainnya" toggle button that shows text input. Admin types custom app name, presses Enter → added as removable chip. Custom values stored alongside predefined ones in `rideHailingApps[]` array.
+2. **Customer edit dialog** (`customers/[id]/page.tsx`): Same "Lainnya" feature. Existing custom values auto-populate as chips on edit.
+3. **Predefined options**: Grab, Gojek, Maxim, Indrive, Shopee, Lalamove + "Lainnya" for any custom value.
+4. **No schema change needed**: `rideHailingApps` is already `String[]` — custom values like "Employee", "Security", "TNI", "Vgreen" stored as-is.
+
+### New Files
+
+| File | Description |
+|------|-------------|
+| `packages/backend/prisma/data/customers.ts` | 80 customers as typed TypeScript array |
+| `packages/backend/prisma/data/contracts.ts` | 79 contracts as typed TypeScript array |
+
+### Modified Files
+
+| File | Change |
+|------|--------|
+| `packages/backend/prisma/seed.ts` | Complete rewrite with best practices |
+| `packages/backend/package.json` | Removed `csv-parse` dependency |
+| `packages/frontend/src/app/(dashboard)/customers/page.tsx` | "Lainnya" option in create form |
+| `packages/frontend/src/app/(dashboard)/customers/[id]/page.tsx` | "Lainnya" option in edit dialog |
+| `railway.json` | Added `npx prisma db seed` to deploy startCommand |
+
+### Dependencies Removed
+
+- `csv-parse` (backend) — replaced by static TypeScript data files
+
+### Railway Auto-Seeding
+
+Updated `railway.json` `startCommand` to include `npx prisma db seed` before server start:
+
+```
+cd packages/backend && npx prisma db push --skip-generate && npx prisma db seed && node dist/index.js
+```
+
+Seed runs every deploy but is **idempotent** — skips if data already exists.
+
+### Seed Behavior per Environment
+
+| Environment | Command | Behavior |
+|-------------|---------|----------|
+| Development (local) | `npx prisma db seed` | Insert data jika belum ada, skip jika sudah |
+| Development (local) | `npx prisma db seed -- --reset` | Hapus semua data, insert ulang |
+| Staging/Production (Railway) | Auto-run setiap deploy | Insert data jika belum ada, skip jika sudah |
+| Production | `npx prisma db seed -- --reset` | **DITOLAK** (butuh `--force`) |
+| Production | `npx prisma db seed -- --reset --force` | Hapus semua data, insert ulang (hati-hati!) |
+
+### Cara Menambahkan/Mengubah Data Seeding
+
+1. **Tambah customer baru**: Edit `packages/backend/prisma/data/customers.ts`, tambahkan object baru ke array `customers` sesuai interface `CustomerSeed`.
+
+2. **Tambah kontrak baru**: Edit `packages/backend/prisma/data/contracts.ts`, tambahkan object baru ke array `contracts` sesuai interface `ContractSeed`. Pastikan `customerKtp` merujuk ke KTP customer yang ada di `customers.ts`.
+
+3. **Ubah data existing**: Edit langsung di file `.ts` yang bersangkutan.
+
+4. **Deploy perubahan**:
+   - **Kalau database masih kosong**: Cukup deploy, seed otomatis jalan.
+   - **Kalau database sudah ada data lama**: Jalankan manual di server:
+     ```bash
+     npx prisma db seed -- --reset --force
+     ```
+     Ini akan hapus data lama dan insert ulang semua data dari file terbaru.
+
+5. **Format data penting**:
+   - Tanggal di customers: string ISO `"2001-08-25"`
+   - Tanggal di contracts: tuple `[year, month, day]` → `[2025, 12, 30]` (month 1-indexed)
+   - Gender: `"MALE"` | `"FEMALE"` | `null`
+   - Motor model: `"ATHENA"` | `"VICTORY"` | `"EDPOWER"`
+   - Battery type: `"REGULAR"` | `"EXTENDED"`
+   - DP scheme: `"FULL"` | `"INSTALLMENT"`
+   - Status: `"ACTIVE"` | `"REPOSSESSED"` | `"CANCELLED"`
+   - `totalDaysPaid: null` → unit belum diterima
+
+### Tests
+
+- 129 tests passing (5 suites, unchanged)
+- Backend and frontend TypeScript compile clean

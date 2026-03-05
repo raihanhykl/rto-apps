@@ -41,7 +41,11 @@ import {
   Heart,
   Car,
   Pencil,
+  Plus,
+  X,
 } from "lucide-react";
+
+const RIDE_HAILING_OPTIONS = ["Grab", "Gojek", "Maxim", "Indrive", "Shopee", "Lalamove"];
 
 const statusBadgeVariant = (status: string) => {
   switch (status) {
@@ -95,10 +99,13 @@ export default function CustomerDetailPage() {
     rideHailingApps: [] as string[],
   });
 
-  const RIDE_APPS = ["Grab", "Gojek", "Maxim", "InDriver"];
+  const [otherAppInput, setOtherAppInput] = useState("");
+  const [showOtherInput, setShowOtherInput] = useState(false);
+  const customApps = editForm.rideHailingApps.filter(a => !RIDE_HAILING_OPTIONS.includes(a));
 
   const openEditDialog = () => {
     if (!customer) return;
+    const apps = customer.rideHailingApps || [];
     setEditForm({
       fullName: customer.fullName,
       phone: customer.phone,
@@ -111,8 +118,10 @@ export default function CustomerDetailPage() {
       guarantorPhone: customer.guarantorPhone || "",
       spouseName: customer.spouseName || "",
       notes: customer.notes || "",
-      rideHailingApps: customer.rideHailingApps || [],
+      rideHailingApps: apps,
     });
+    setOtherAppInput("");
+    setShowOtherInput(apps.some((a: string) => !RIDE_HAILING_OPTIONS.includes(a)));
     setEditDialogOpen(true);
   };
 
@@ -141,6 +150,19 @@ export default function CustomerDetailPage() {
         ? prev.rideHailingApps.filter(a => a !== app)
         : [...prev.rideHailingApps, app],
     }));
+  };
+
+  const addOtherApp = () => {
+    const name = otherAppInput.trim();
+    if (!name) return;
+    if (!editForm.rideHailingApps.includes(name)) {
+      setEditForm(prev => ({ ...prev, rideHailingApps: [...prev.rideHailingApps, name] }));
+    }
+    setOtherAppInput("");
+  };
+
+  const removeOtherApp = (app: string) => {
+    setEditForm(prev => ({ ...prev, rideHailingApps: prev.rideHailingApps.filter(a => a !== app) }));
   };
 
   if (loading) {
@@ -466,7 +488,7 @@ export default function CustomerDetailPage() {
             <div className="space-y-2">
               <h3 className="text-sm font-semibold text-muted-foreground uppercase">Aplikasi Ojol</h3>
               <div className="flex flex-wrap gap-2">
-                {RIDE_APPS.map(app => (
+                {RIDE_HAILING_OPTIONS.map(app => (
                   <Button
                     key={app}
                     type="button"
@@ -477,7 +499,51 @@ export default function CustomerDetailPage() {
                     {app}
                   </Button>
                 ))}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={showOtherInput || customApps.length > 0 ? "default" : "outline"}
+                  onClick={() => setShowOtherInput(!showOtherInput)}
+                >
+                  Lainnya
+                </Button>
               </div>
+              {(showOtherInput || customApps.length > 0) && (
+                <div className="space-y-2 mt-2">
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Nama aplikasi lain..."
+                      value={otherAppInput}
+                      onChange={(e) => setOtherAppInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          addOtherApp();
+                        }
+                      }}
+                      className="flex-1"
+                    />
+                    <Button type="button" variant="outline" size="sm" onClick={addOtherApp} disabled={!otherAppInput.trim()}>
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  {customApps.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {customApps.map(app => (
+                        <span
+                          key={app}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full bg-secondary text-secondary-foreground"
+                        >
+                          {app}
+                          <button type="button" onClick={() => removeOtherApp(app)} className="hover:text-destructive">
+                            <X className="h-3 w-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Penjamin */}
