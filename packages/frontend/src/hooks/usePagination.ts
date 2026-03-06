@@ -30,15 +30,16 @@ export function usePagination(options: UsePaginationOptions = {}) {
     return () => clearTimeout(debounceRef.current);
   }, [search]);
 
+  const sortByRef = useRef(sortBy);
+  sortByRef.current = sortBy;
+
   const handleSort = useCallback((field: string) => {
-    setSortBy((prev) => {
-      if (prev === field) {
-        setSortOrder((o) => (o === "asc" ? "desc" : "asc"));
-        return field;
-      }
+    if (sortByRef.current === field) {
+      setSortOrder((o) => (o === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(field);
       setSortOrder("asc");
-      return field;
-    });
+    }
     setPage(1);
   }, []);
 

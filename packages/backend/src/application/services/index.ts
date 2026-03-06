@@ -1,7 +1,7 @@
 export { AuthService } from './AuthService';
 export { CustomerService } from './CustomerService';
 export { ContractService } from './ContractService';
-export { InvoiceService } from './InvoiceService';
+export { PaymentService } from './PaymentService';
 export { DashboardService } from './DashboardService';
 export type { DashboardStats } from './DashboardService';
 export { ReportService } from './ReportService';
@@ -9,4 +9,3 @@ export type { ReportData } from './ReportService';
 export { AuditService } from './AuditService';
 export { SettingService } from './SettingService';
 export { PdfService } from './PdfService';
-export { BillingService } from './BillingService';

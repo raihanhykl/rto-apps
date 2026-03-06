@@ -142,9 +142,9 @@ describe('ContractService', () => {
       ).rejects.toThrow('Customer not found');
     });
 
-    it('should generate contract number with RTO prefix', async () => {
+    it('should generate contract number with WNUS-KTR format', async () => {
       const result = await contractService.create(defaultCreateDto({ customerId }), adminId);
-      expect(result.contract.contractNumber).toMatch(/^RTO-\d{6}-\d{4}$/);
+      expect(result.contract.contractNumber).toMatch(/^\d+\/WNUS-KTR\/[IVX]+\/\d{4}$/);
     });
 
     it('should create audit log', async () => {

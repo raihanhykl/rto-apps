@@ -17,6 +17,7 @@ export class InMemoryCustomerRepository implements ICustomerRepository {
       const q = params.search.toLowerCase();
       items = items.filter(c => c.fullName.toLowerCase().includes(q) || c.phone.includes(q) || c.email.toLowerCase().includes(q) || c.ktpNumber.includes(q));
     }
+    if (params.gender && params.gender !== 'ALL') { items = items.filter(c => c.gender === params.gender); }
     const sortBy = params.sortBy || 'createdAt';
     const sortOrder = params.sortOrder || 'desc';
     items.sort((a, b) => { const aVal = (a as any)[sortBy]; const bVal = (b as any)[sortBy]; if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1; if (aVal > bVal) return sortOrder === 'asc' ? 1 : -1; return 0; });

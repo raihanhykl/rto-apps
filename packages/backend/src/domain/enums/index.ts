@@ -32,13 +32,6 @@ export enum InvoiceType {
   MANUAL_PAYMENT = 'MANUAL_PAYMENT',
 }
 
-export enum BillingStatus {
-  ACTIVE = 'ACTIVE',
-  PAID = 'PAID',
-  EXPIRED = 'EXPIRED',
-  CANCELLED = 'CANCELLED',
-}
-
 export enum DPScheme {
   FULL = 'FULL',
   INSTALLMENT = 'INSTALLMENT',

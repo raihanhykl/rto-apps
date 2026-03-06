@@ -13,4 +13,5 @@ export interface IContractRepository {
   delete(id: string): Promise<boolean>;
   count(): Promise<number>;
   countByStatus(status: ContractStatus): Promise<number>;
+  findMaxContractSequence(): Promise<number>;
 }

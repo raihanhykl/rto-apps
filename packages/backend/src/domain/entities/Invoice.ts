@@ -2,7 +2,7 @@ import { PaymentStatus, InvoiceType } from '../enums';
 
 export interface Invoice {
   id: string;
-  invoiceNumber: string;
+  invoiceNumber: string; // PMT-YYMMDD-NNNN
   contractId: string;
   customerId: string;
   amount: number;
@@ -18,10 +18,14 @@ export interface Invoice {
   dokuPaymentUrl: string | null;
   dokuReferenceId: string | null;
 
-  // Billing period (for daily billing invoices)
-  billingPeriodStart: Date | null;
-  billingPeriodEnd: Date | null;
-  billingId: string | null; // reference to source billing
+  // Billing/payment period (for daily billing and manual payments)
+  dailyRate: number | null;
+  daysCount: number | null; // number of working days covered
+  periodStart: Date | null;
+  periodEnd: Date | null;
+  expiredAt: Date | null; // when payment was expired (rollover)
+  previousPaymentId: string | null; // reference to previous payment (for merged/rollover)
+  isHoliday: boolean; // true for Libur Bayar payments (amount=0, auto-PAID)
 
   createdAt: Date;
   updatedAt: Date;

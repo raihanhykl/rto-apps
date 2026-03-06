@@ -29,6 +29,9 @@ export class PrismaCustomerRepository implements ICustomerRepository {
         { ktpNumber: { contains: params.search } },
       ];
     }
+    if (params.gender && params.gender !== 'ALL') {
+      where.gender = params.gender as any;
+    }
 
     const page = params.page || 1;
     const limit = params.limit || 20;
