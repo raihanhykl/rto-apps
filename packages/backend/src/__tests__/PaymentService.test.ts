@@ -11,7 +11,8 @@ import {
   InvoiceType,
   DEFAULT_OWNERSHIP_TARGET_DAYS,
   DEFAULT_GRACE_PERIOD_DAYS,
-  DEFAULT_HOLIDAY_DAYS_PER_MONTH,
+  HolidayScheme,
+  DEFAULT_HOLIDAY_SCHEME,
 } from '../domain/enums';
 import { v4 as uuidv4 } from 'uuid';
 import { Contract, Invoice } from '../domain/entities';
@@ -61,9 +62,11 @@ describe('PaymentService', () => {
       billingStartDate: createDate(-3),
       bastPhoto: 'https://storage.example.com/bast/test.jpg',
       bastNotes: 'Test BAST',
-      holidayDaysPerMonth: DEFAULT_HOLIDAY_DAYS_PER_MONTH,
+      holidayScheme: DEFAULT_HOLIDAY_SCHEME,
       ownershipTargetDays: DEFAULT_OWNERSHIP_TARGET_DAYS,
       totalDaysPaid: 0,
+      workingDaysPaid: 0,
+      holidayDaysPaid: 0,
       ownershipProgress: 0,
       gracePeriodDays: DEFAULT_GRACE_PERIOD_DAYS,
       repossessedAt: null,
@@ -166,28 +169,51 @@ describe('PaymentService', () => {
       expect(payments.length).toBe(1);
     });
 
-    it('should create holiday payment on Libur Bayar Sunday', async () => {
-      const saturday = new Date(2026, 2, 7);
-      saturday.setHours(0, 0, 0, 0);
-      const sunday = new Date(2026, 2, 8); // Libur Bayar
-      sunday.setHours(0, 0, 0, 0);
-
-      await contractRepo.update(activeContract.id, {
-        endDate: new Date(saturday),
+    it('should create holiday payment on Libur Bayar Sunday (OLD_CONTRACT)', async () => {
+      // OLD_CONTRACT: all Sundays are holidays
+      const oldContract = await createActiveContract({
+        holidayScheme: HolidayScheme.OLD_CONTRACT,
         billingStartDate: new Date(2026, 2, 1),
+        endDate: new Date(2026, 2, 7), // Saturday
       });
 
-      const generated = await paymentService.generateDailyPayments(sunday);
-      expect(generated).toBeGreaterThanOrEqual(1);
+      const sunday = new Date(2026, 2, 8);
+      sunday.setHours(0, 0, 0, 0);
 
-      const payments = await invoiceRepo.findByContractId(activeContract.id);
+      await paymentService.generateDailyPayments(sunday);
+
+      const payments = await invoiceRepo.findByContractId(oldContract.id);
       const holidayPayment = payments.find((p: Invoice) => p.daysCount === 0);
       expect(holidayPayment).toBeDefined();
       expect(holidayPayment!.amount).toBe(0);
       expect(holidayPayment!.status).toBe(PaymentStatus.PAID);
-      expect(new Date(holidayPayment!.periodStart!).getDay()).toBe(0);
+      expect(holidayPayment!.isHoliday).toBe(true);
 
-      const contract = await contractRepo.findById(activeContract.id);
+      const contract = await contractRepo.findById(oldContract.id);
+      expect(contract!.totalDaysPaid).toBe(1);
+    });
+
+    it('should create holiday payment on date > 28 (NEW_CONTRACT)', async () => {
+      // NEW_CONTRACT: dates 29-31 are holidays
+      const newContract = await createActiveContract({
+        holidayScheme: HolidayScheme.NEW_CONTRACT,
+        billingStartDate: new Date(2026, 2, 1),
+        endDate: new Date(2026, 2, 28), // March 28
+      });
+
+      const march29 = new Date(2026, 2, 29);
+      march29.setHours(0, 0, 0, 0);
+
+      await paymentService.generateDailyPayments(march29);
+
+      const payments = await invoiceRepo.findByContractId(newContract.id);
+      const holidayPayment = payments.find((p: Invoice) => p.daysCount === 0);
+      expect(holidayPayment).toBeDefined();
+      expect(holidayPayment!.amount).toBe(0);
+      expect(holidayPayment!.status).toBe(PaymentStatus.PAID);
+      expect(holidayPayment!.isHoliday).toBe(true);
+
+      const contract = await contractRepo.findById(newContract.id);
       expect(contract!.totalDaysPaid).toBe(1);
     });
   });
@@ -442,44 +468,45 @@ describe('PaymentService', () => {
 
   // ============ Libur Bayar ============
 
-  describe('getSundayHolidays', () => {
-    it('should return correct number of holiday Sundays', () => {
-      const holidays2 = paymentService.getSundayHolidays(2026, 3, 2);
-      expect(holidays2.size).toBe(2);
-
-      const holidays4 = paymentService.getSundayHolidays(2026, 3, 4);
-      expect(holidays4.size).toBe(4);
-    });
-
-    it('should distribute holidays evenly', () => {
-      const holidays = paymentService.getSundayHolidays(2026, 3, 2);
-      expect(holidays.has(8)).toBe(true);
-      expect(holidays.has(22)).toBe(true);
-      expect(holidays.has(1)).toBe(false);
-      expect(holidays.has(15)).toBe(false);
-      expect(holidays.has(29)).toBe(false);
-    });
-
-    it('should cap at available Sundays', () => {
-      const holidays = paymentService.getSundayHolidays(2026, 3, 10);
-      expect(holidays.size).toBe(5);
-    });
-  });
-
   describe('isLiburBayar', () => {
-    it('should return true for designated Libur Bayar Sunday', () => {
-      const sunday8 = new Date('2026-03-08');
-      expect(paymentService.isLiburBayar(activeContract, sunday8)).toBe(true);
+    it('OLD_CONTRACT: should return true for any Sunday', async () => {
+      const oldContract = await createActiveContract({ holidayScheme: HolidayScheme.OLD_CONTRACT });
+      expect(paymentService.isLiburBayar(oldContract, new Date('2026-03-01'))).toBe(true); // Sunday
+      expect(paymentService.isLiburBayar(oldContract, new Date('2026-03-08'))).toBe(true); // Sunday
+      expect(paymentService.isLiburBayar(oldContract, new Date('2026-03-15'))).toBe(true); // Sunday
+      expect(paymentService.isLiburBayar(oldContract, new Date('2026-03-22'))).toBe(true); // Sunday
+      expect(paymentService.isLiburBayar(oldContract, new Date('2026-03-29'))).toBe(true); // Sunday
     });
 
-    it('should return false for non-designated Sunday', () => {
-      const sunday1 = new Date('2026-03-01');
-      expect(paymentService.isLiburBayar(activeContract, sunday1)).toBe(false);
+    it('OLD_CONTRACT: should return false for non-Sunday', async () => {
+      const oldContract = await createActiveContract({ holidayScheme: HolidayScheme.OLD_CONTRACT });
+      expect(paymentService.isLiburBayar(oldContract, new Date('2026-03-09'))).toBe(false); // Monday
+      expect(paymentService.isLiburBayar(oldContract, new Date('2026-03-14'))).toBe(false); // Saturday
     });
 
-    it('should return false for non-Sunday', () => {
-      const monday = new Date('2026-03-09');
-      expect(paymentService.isLiburBayar(activeContract, monday)).toBe(false);
+    it('NEW_CONTRACT: should return true for date > 28', async () => {
+      const newContract = await createActiveContract({ holidayScheme: HolidayScheme.NEW_CONTRACT });
+      expect(paymentService.isLiburBayar(newContract, new Date('2026-03-29'))).toBe(true);
+      expect(paymentService.isLiburBayar(newContract, new Date('2026-03-30'))).toBe(true);
+      expect(paymentService.isLiburBayar(newContract, new Date('2026-03-31'))).toBe(true);
+    });
+
+    it('NEW_CONTRACT: should return false for date <= 28', async () => {
+      const newContract = await createActiveContract({ holidayScheme: HolidayScheme.NEW_CONTRACT });
+      expect(paymentService.isLiburBayar(newContract, new Date('2026-03-28'))).toBe(false);
+      expect(paymentService.isLiburBayar(newContract, new Date('2026-03-01'))).toBe(false);
+      // Sunday but still <= 28, NOT a holiday for NEW_CONTRACT
+      expect(paymentService.isLiburBayar(newContract, new Date('2026-03-08'))).toBe(false);
+    });
+
+    it('NEW_CONTRACT: Feb non-leap year has no holidays', async () => {
+      const newContract = await createActiveContract({ holidayScheme: HolidayScheme.NEW_CONTRACT });
+      expect(paymentService.isLiburBayar(newContract, new Date('2027-02-28'))).toBe(false);
+    });
+
+    it('NEW_CONTRACT: Feb leap year, Feb 29 is holiday', async () => {
+      const newContract = await createActiveContract({ holidayScheme: HolidayScheme.NEW_CONTRACT });
+      expect(paymentService.isLiburBayar(newContract, new Date('2028-02-29'))).toBe(true);
     });
   });
 
@@ -688,9 +715,11 @@ describe('PaymentService', () => {
         billingStartDate: null,
         bastPhoto: null,
         bastNotes: '',
-        holidayDaysPerMonth: DEFAULT_HOLIDAY_DAYS_PER_MONTH,
+        holidayScheme: DEFAULT_HOLIDAY_SCHEME,
         ownershipTargetDays: DEFAULT_OWNERSHIP_TARGET_DAYS,
         totalDaysPaid: 0,
+        workingDaysPaid: 0,
+        holidayDaysPaid: 0,
         ownershipProgress: 0,
         gracePeriodDays: DEFAULT_GRACE_PERIOD_DAYS,
         repossessedAt: null,

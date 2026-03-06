@@ -28,7 +28,7 @@ import { SortableHeader } from "@/components/SortableHeader";
 import { usePagination } from "@/hooks/usePagination";
 import { useContractsPaginated, useCustomersList, useMotorRates, useInvalidate } from "@/hooks/useApi";
 import { api } from "@/lib/api";
-import { Contract, Customer, MotorModel, BatteryType, DPScheme, DP_AMOUNTS, MOTOR_DAILY_RATES } from "@/types";
+import { Contract, Customer, MotorModel, BatteryType, DPScheme, HolidayScheme, DP_AMOUNTS, MOTOR_DAILY_RATES } from "@/types";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { contractSchema, ContractFormData } from "@/lib/schemas";
 import { Plus, FileText, Search, X } from "lucide-react";
@@ -459,6 +459,28 @@ export default function ContractsPage() {
                 />
                 {errors.dpScheme && <p className="text-destructive text-xs">{errors.dpScheme.message}</p>}
               </div>
+              <div className="space-y-2">
+                <Label>Tipe Kontrak *</Label>
+                <Controller
+                  name="holidayScheme"
+                  control={control}
+                  render={({ field }) => (
+                    <Select value={field.value || ""} onValueChange={field.onChange}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Pilih tipe kontrak" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={HolidayScheme.OLD_CONTRACT}>Kontrak Lama (Libur Minggu)</SelectItem>
+                        <SelectItem value={HolidayScheme.NEW_CONTRACT}>Kontrak Baru (Libur tgl 29-31)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+                {errors.holidayScheme && <p className="text-destructive text-xs">{errors.holidayScheme.message}</p>}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Tanggal Mulai *</Label>
                 <Input type="date" {...register("startDate")} />

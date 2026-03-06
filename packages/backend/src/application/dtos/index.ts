@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { MotorModel, BatteryType, DPScheme, ContractStatus, PaymentStatus, Gender } from '../../domain/enums';
+import { MotorModel, BatteryType, DPScheme, ContractStatus, PaymentStatus, Gender, HolidayScheme } from '../../domain/enums';
 
 // Auth DTOs
 export const LoginDto = z.object({
@@ -48,6 +48,7 @@ export const CreateContractDto = z.object({
   vinNumber: z.string().optional().default(''),
   engineNumber: z.string().optional().default(''),
   notes: z.string().optional().default(''),
+  holidayScheme: z.nativeEnum(HolidayScheme).optional().default(HolidayScheme.NEW_CONTRACT),
 });
 export type CreateContractDto = z.infer<typeof CreateContractDto>;
 
@@ -64,6 +65,7 @@ export const UpdateContractDto = z.object({
   year: z.number().int().optional().nullable(),
   vinNumber: z.string().optional(),
   engineNumber: z.string().optional(),
+  holidayScheme: z.nativeEnum(HolidayScheme).optional(),
 });
 export type UpdateContractDto = z.infer<typeof UpdateContractDto>;
 

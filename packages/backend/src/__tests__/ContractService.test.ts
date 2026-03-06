@@ -3,7 +3,7 @@ import { InMemoryContractRepository } from '../infrastructure/repositories/InMem
 import { InMemoryCustomerRepository } from '../infrastructure/repositories/InMemoryCustomerRepository';
 import { InMemoryInvoiceRepository } from '../infrastructure/repositories/InMemoryInvoiceRepository';
 import { InMemoryAuditLogRepository } from '../infrastructure/repositories/InMemoryAuditLogRepository';
-import { MotorModel, BatteryType, DPScheme, ContractStatus, PaymentStatus, InvoiceType, DEFAULT_OWNERSHIP_TARGET_DAYS, DEFAULT_GRACE_PERIOD_DAYS, MOTOR_DAILY_RATES, DP_AMOUNTS } from '../domain/enums';
+import { MotorModel, BatteryType, DPScheme, ContractStatus, PaymentStatus, InvoiceType, HolidayScheme, DEFAULT_OWNERSHIP_TARGET_DAYS, DEFAULT_GRACE_PERIOD_DAYS, DEFAULT_HOLIDAY_SCHEME, MOTOR_DAILY_RATES, DP_AMOUNTS } from '../domain/enums';
 import { v4 as uuidv4 } from 'uuid';
 
 describe('ContractService', () => {
@@ -62,6 +62,7 @@ describe('ContractService', () => {
     vinNumber: '',
     engineNumber: '',
     notes: '',
+    holidayScheme: HolidayScheme.NEW_CONTRACT,
     ...overrides,
   });
 

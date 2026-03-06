@@ -79,9 +79,12 @@ export const DP_AMOUNTS: Record<string, number> = {
 export const MAX_RENTAL_DAYS = 7;
 export const DEFAULT_OWNERSHIP_TARGET_DAYS = 1278;
 export const DEFAULT_GRACE_PERIOD_DAYS = 7;
-export const DEFAULT_HOLIDAY_DAYS_PER_MONTH = 2;
-export const MIN_HOLIDAY_DAYS_PER_MONTH = 2;
-export const MAX_HOLIDAY_DAYS_PER_MONTH = 4;
+export enum HolidayScheme {
+  OLD_CONTRACT = 'OLD_CONTRACT',
+  NEW_CONTRACT = 'NEW_CONTRACT',
+}
+
+export const DEFAULT_HOLIDAY_SCHEME = HolidayScheme.NEW_CONTRACT;
 
 export const VALID_STATUS_TRANSITIONS: Record<ContractStatus, ContractStatus[]> = {
   [ContractStatus.ACTIVE]: [ContractStatus.OVERDUE, ContractStatus.COMPLETED, ContractStatus.CANCELLED, ContractStatus.REPOSSESSED],
