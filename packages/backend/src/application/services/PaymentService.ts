@@ -331,9 +331,21 @@ export class PaymentService {
       return this.invoiceRepo.create(newPayment);
     }
 
-    // Normal day: add today's rate to accumulated amount
-    const newAmount = expiredPayment.amount + contract.dailyRate;
-    const newDaysCount = (expiredPayment.daysCount || 0) + 1;
+    // Recalculate ALL unpaid working days from contract.endDate+1 to today
+    // This handles multi-day gaps correctly (e.g., server downtime)
+    const endDate = new Date(contract.endDate);
+    endDate.setHours(0, 0, 0, 0);
+    const firstUnpaidDay = new Date(endDate.getTime() + 86400000);
+    firstUnpaidDay.setHours(0, 0, 0, 0);
+
+    let workingDays = 0;
+    const cursor = new Date(firstUnpaidDay);
+    while (cursor <= today) {
+      if (!this.isLiburBayar(contract, cursor)) workingDays++;
+      cursor.setDate(cursor.getDate() + 1);
+    }
+
+    const newAmount = workingDays * contract.dailyRate;
 
     const periodEnd = new Date(today);
     periodEnd.setHours(23, 59, 59, 999);
@@ -350,12 +362,12 @@ export class PaymentService {
       qrCodeData: '',
       dueDate: periodEnd,
       paidAt: null,
-      extensionDays: newDaysCount,
+      extensionDays: workingDays,
       dokuPaymentUrl: null,
       dokuReferenceId: null,
       dailyRate: contract.dailyRate,
-      daysCount: newDaysCount,
-      periodStart: expiredPayment.periodStart!,
+      daysCount: workingDays,
+      periodStart: new Date(firstUnpaidDay),
       periodEnd,
       expiredAt: null,
       previousPaymentId: null,

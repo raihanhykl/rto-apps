@@ -342,10 +342,10 @@ async function seedContracts(adminId: string): Promise<{ contractCount: number; 
     // ====== Active payment for today (unpaid days for ACTIVE contracts) ======
     if (row.status === "ACTIVE" && unitReceivedDate && billingStartDate && totalDaysPaid > 0) {
       let unpaidDays = 0;
-      let accCursor = addDays(endDate, 1);
+      let accCursor = startOfDay(addDays(endDate, 1));
       while (accCursor <= TODAY) {
         if (!isLiburBayar(accCursor, row.holidayDaysPerMonth)) unpaidDays++;
-        accCursor = addDays(accCursor, 1);
+        accCursor = startOfDay(addDays(accCursor, 1));
       }
       if (unpaidDays > 0) {
         const pmtNum = `PMT-${fmtDateCompact(TODAY)}-${String(globalSeq++).padStart(4, "0")}`;

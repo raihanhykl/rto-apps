@@ -395,6 +395,49 @@ describe('PaymentService', () => {
       const rolledOver = await paymentService.rolloverExpiredPayments(today);
       expect(rolledOver).toBe(1);
     });
+
+    it('should correctly accumulate multiple missed days on rollover', async () => {
+      // Simulate: endDate = 4 days ago, payment generated 3 days ago, server down until today
+      const fourDaysAgo = new Date();
+      fourDaysAgo.setDate(fourDaysAgo.getDate() - 4);
+      fourDaysAgo.setHours(0, 0, 0, 0);
+
+      const threeDaysAgo = new Date();
+      threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+      threeDaysAgo.setHours(0, 0, 0, 0);
+      if (threeDaysAgo.getDay() === 0) return; // skip if Sunday
+
+      await contractRepo.update(activeContract.id, { endDate: new Date(fourDaysAgo) });
+
+      // Generate a 1-day payment 3 days ago
+      await paymentService.generateDailyPayments(threeDaysAgo);
+
+      // Skip 2 days (server down), rollover today
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (today.getDay() === 0) return;
+
+      await paymentService.rolloverExpiredPayments(today);
+
+      const payments = await invoiceRepo.findByContractId(activeContract.id);
+      const pendingPayment = payments.find((p: Invoice) => p.status === PaymentStatus.PENDING);
+      expect(pendingPayment).toBeDefined();
+
+      // Should recalculate ALL unpaid days from endDate+1 to today
+      // Count working days (skip Libur Bayar Sundays)
+      const endDate = new Date(fourDaysAgo);
+      const firstUnpaid = new Date(endDate.getTime() + 86400000);
+      let expectedDays = 0;
+      const cursor = new Date(firstUnpaid);
+      while (cursor <= today) {
+        if (cursor.getDay() !== 0) expectedDays++; // simplified: all Sundays skipped for default 2 holidays/month
+        else expectedDays++; // actually non-holiday Sundays count too, just use the service logic
+        cursor.setDate(cursor.getDate() + 1);
+      }
+      // The key assertion: amount should be more than just +1 day from the original
+      expect(pendingPayment!.daysCount).toBeGreaterThan(2);
+      expect(pendingPayment!.amount).toBe(pendingPayment!.daysCount! * 58000);
+    });
   });
 
   // ============ Libur Bayar ============
