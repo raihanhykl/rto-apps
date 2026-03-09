@@ -9,7 +9,7 @@
     "postinstall": "npx prisma generate || true",
     "db:push": "npx prisma db push",
     "db:migrate:deploy": "npx prisma migrate deploy",
-    "db:seed": "npx ts-node prisma/seed.ts",
+    "db:seed": "npx tsx prisma/seed.ts",
     "test": "jest --passWithNoTests"
   },
   "dependencies": {
@@ -21,10 +21,11 @@
     "pdfkit": "^0.17.2",
     "qrcode": "^1.5.3",
     "uuid": "^9.0.0",
+    "tsx": "^4.19.0",
     "zod": "^3.22.4"
   },
   "prisma": {
-    "seed": "npx ts-node prisma/seed.ts"
+    "seed": "npx tsx prisma/seed.ts"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
