@@ -85,7 +85,7 @@ async function bootstrap() {
 
   // Initialize Services
   const authService = new AuthService(userRepo, auditRepo);
-  const settingService = new SettingService(settingRepo, auditRepo);
+  const settingService = new SettingService(settingRepo, auditRepo, contractRepo);
   const customerService = new CustomerService(customerRepo, auditRepo, contractRepo);
   const contractService = new ContractService(contractRepo, customerRepo, invoiceRepo, auditRepo, settingService);
   const paymentService = new PaymentService(invoiceRepo, contractRepo, auditRepo, settingService);

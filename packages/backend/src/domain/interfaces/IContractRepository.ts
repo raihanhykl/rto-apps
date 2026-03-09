@@ -14,4 +14,5 @@ export interface IContractRepository {
   count(): Promise<number>;
   countByStatus(status: ContractStatus): Promise<number>;
   findMaxContractSequence(): Promise<number>;
+  updateGracePeriodByStatuses(gracePeriodDays: number, statuses: ContractStatus[]): Promise<number>;
 }

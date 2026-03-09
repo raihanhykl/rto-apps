@@ -1,13 +1,15 @@
-import { ISettingRepository, IAuditLogRepository } from '../../domain/interfaces';
+import { ISettingRepository, IAuditLogRepository, IContractRepository } from '../../domain/interfaces';
 import { Setting } from '../../domain/entities';
-import { AuditAction } from '../../domain/enums';
+import { AuditAction, ContractStatus } from '../../domain/enums';
 import { UpdateSettingDto } from '../dtos';
 import { v4 as uuidv4 } from 'uuid';
+import { getWibToday } from '../../domain/utils/dateUtils';
 
 export class SettingService {
   constructor(
     private settingRepo: ISettingRepository,
-    private auditRepo: IAuditLogRepository
+    private auditRepo: IAuditLogRepository,
+    private contractRepo?: IContractRepository
   ) {}
 
   async getAll(): Promise<Setting[]> {
@@ -47,6 +49,56 @@ export class SettingService {
       ipAddress: '',
       createdAt: new Date(),
     });
+
+    // Auto-sync grace_period_days ke semua kontrak ACTIVE + OVERDUE
+    if (dto.key === 'grace_period_days' && this.contractRepo) {
+      const days = parseInt(dto.value, 10);
+      if (!isNaN(days) && days > 0) {
+        const updatedCount = await this.contractRepo.updateGracePeriodByStatuses(
+          days,
+          [ContractStatus.ACTIVE, ContractStatus.OVERDUE]
+        );
+
+        // Recalculate status: ACTIVE → OVERDUE atau OVERDUE → ACTIVE
+        const today = getWibToday();
+        let newOverdueCount = 0;
+        let reactivatedCount = 0;
+
+        // ACTIVE contracts yang seharusnya OVERDUE dengan grace period baru
+        const activeContracts = await this.contractRepo.findByStatus(ContractStatus.ACTIVE);
+        for (const contract of activeContracts) {
+          const graceEnd = new Date(contract.endDate);
+          graceEnd.setDate(graceEnd.getDate() + days);
+          if (graceEnd < today) {
+            await this.contractRepo.update(contract.id, { status: ContractStatus.OVERDUE });
+            newOverdueCount++;
+          }
+        }
+
+        // OVERDUE contracts yang seharusnya kembali ACTIVE dengan grace period baru
+        const overdueContracts = await this.contractRepo.findByStatus(ContractStatus.OVERDUE);
+        for (const contract of overdueContracts) {
+          const graceEnd = new Date(contract.endDate);
+          graceEnd.setDate(graceEnd.getDate() + days);
+          if (graceEnd >= today) {
+            await this.contractRepo.update(contract.id, { status: ContractStatus.ACTIVE });
+            reactivatedCount++;
+          }
+        }
+
+        await this.auditRepo.create({
+          id: uuidv4(),
+          userId: adminId,
+          action: AuditAction.UPDATE,
+          module: 'contract',
+          entityId: 'bulk',
+          description: `Synced grace period to ${days} days for ${updatedCount} contracts (${newOverdueCount} → OVERDUE, ${reactivatedCount} → ACTIVE)`,
+          metadata: { gracePeriodDays: days, contractsUpdated: updatedCount, newOverdueCount, reactivatedCount },
+          ipAddress: '',
+          createdAt: new Date(),
+        });
+      }
+    }
 
     return result;
   }
