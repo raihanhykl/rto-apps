@@ -37,6 +37,11 @@ export enum DPScheme {
   INSTALLMENT = 'INSTALLMENT',
 }
 
+export enum HolidayScheme {
+  OLD_CONTRACT = 'OLD_CONTRACT',
+  NEW_CONTRACT = 'NEW_CONTRACT',
+}
+
 export const MOTOR_DAILY_RATES: Record<string, number> = {
   'ATHENA_REGULAR': 58000,
   'ATHENA_EXTENDED': 63000,
@@ -124,10 +129,12 @@ export interface Contract {
   billingStartDate: string | null;
   bastPhoto: string | null;
   bastNotes: string;
-  holidayDaysPerMonth: number;
+  holidayScheme: string;
   // RTO fields
   ownershipTargetDays: number;
   totalDaysPaid: number;
+  workingDaysPaid: number;
+  holidayDaysPaid: number;
   ownershipProgress: number;
   gracePeriodDays: number;
   repossessedAt: string | null;

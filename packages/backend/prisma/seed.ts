@@ -57,34 +57,28 @@ function fmtDateCompact(d: Date): string {
 }
 
 // ====== Libur Bayar ======
-function getSundayHolidays(year: number, month: number, holidayPerMonth: number): Set<number> {
-  const sundays: number[] = [];
-  const daysInMonth = new Date(year, month, 0).getDate();
-  for (let d = 1; d <= daysInMonth; d++) {
-    if (new Date(year, month - 1, d).getDay() === 0) sundays.push(d);
+function isLiburBayar(d: Date, scheme: "OLD_CONTRACT" | "NEW_CONTRACT"): boolean {
+  if (scheme === "OLD_CONTRACT") {
+    return d.getDay() === 0; // Semua Minggu = libur
+  } else {
+    return d.getDate() > 28; // Tanggal 29-31 = libur
   }
-  const N = sundays.length;
-  const K = Math.min(holidayPerMonth, N);
-  const result = new Set<number>();
-  for (let i = 0; i < K; i++) {
-    result.add(sundays[Math.floor((i * N) / K + N / (2 * K))]);
-  }
-  return result;
 }
 
-function isLiburBayar(d: Date, holidayPerMonth: number): boolean {
-  if (d.getDay() !== 0) return false;
-  return getSundayHolidays(d.getFullYear(), d.getMonth() + 1, holidayPerMonth).has(d.getDate());
-}
-
-function advanceWorkingDays(from: Date, days: number, holidayPerMonth: number): Date {
-  let current = new Date(from);
-  let remaining = days;
-  while (remaining > 0) {
-    current = addDays(current, 1);
-    if (!isLiburBayar(current, holidayPerMonth)) remaining--;
+// Walk calendar from billingStart, count N working days + all holidays in between
+function countCalendarDays(billingStart: Date, workingDays: number, scheme: "OLD_CONTRACT" | "NEW_CONTRACT") {
+  let cursor = new Date(billingStart);
+  let workingCount = 0;
+  let holidayCount = 0;
+  while (workingCount < workingDays) {
+    if (isLiburBayar(cursor, scheme)) {
+      holidayCount++;
+    } else {
+      workingCount++;
+    }
+    if (workingCount < workingDays) cursor = addDays(cursor, 1);
   }
-  return current;
+  return { totalDaysPaid: workingCount + holidayCount, workingCount, holidayCount, lastDate: cursor };
 }
 
 // ====== Constants ======
@@ -108,7 +102,7 @@ const DEFAULT_SETTINGS = [
   { key: "ownership_target_days", value: "1278", description: "Target hari kepemilikan penuh" },
   { key: "grace_period_days", value: "7", description: "Masa tenggang sebelum repossession" },
   { key: "late_fee_per_day", value: "10000", description: "Denda keterlambatan per hari" },
-  { key: "holiday_days_per_month", value: "2", description: "Jumlah hari libur bayar per bulan (Minggu)" },
+  { key: "default_holiday_scheme", value: "NEW_CONTRACT", description: "Skema libur bayar default (OLD_CONTRACT / NEW_CONTRACT)" },
 ];
 
 // ====== Seed Functions ======
@@ -208,26 +202,21 @@ async function seedContracts(adminId: string): Promise<{ contractCount: number; 
     const unitReceivedDate = row.unitReceivedDate ? toDate(row.unitReceivedDate) : null;
     const repossessedAt = row.repossessedAt ? toDate(row.repossessedAt) : null;
     const cancelledAt = row.cancelledAt ? toDate(row.cancelledAt) : null;
-    const totalDaysPaid = row.totalDaysPaid ?? 0;
+    const workingDaysPaid = row.workingDaysPaid ?? 0;
 
     const billingStartDate = unitReceivedDate ? addDays(unitReceivedDate, 1) : null;
 
-    // Calculate endDate (advance working days from startDate, skipping Libur Bayar)
+    // Calculate totalDaysPaid (working + holidays), endDate, and workingDays
+    let totalDaysPaid = 0;
+    let workingDays = 0;
     let endDate: Date;
-    if (billingStartDate && totalDaysPaid > 0) {
-      endDate = advanceWorkingDays(startDate, totalDaysPaid, row.holidayDaysPerMonth);
+    if (billingStartDate && workingDaysPaid > 0) {
+      const calc = countCalendarDays(billingStartDate, workingDaysPaid, row.holidayScheme);
+      totalDaysPaid = calc.totalDaysPaid;
+      workingDays = calc.workingCount;
+      endDate = calc.lastDate;
     } else {
       endDate = startDate;
-    }
-
-    // Calculate working days for totalAmount
-    let workingDays = 0;
-    if (billingStartDate && totalDaysPaid > 0) {
-      let cursor = new Date(billingStartDate);
-      for (let i = 0; i < totalDaysPaid; i++) {
-        if (!isLiburBayar(cursor, row.holidayDaysPerMonth)) workingDays++;
-        cursor = addDays(cursor, 1);
-      }
     }
 
     const totalAmount = workingDays * dailyRate;
@@ -264,9 +253,11 @@ async function seedContracts(adminId: string): Promise<{ contractCount: number; 
         billingStartDate,
         bastPhoto: unitReceivedDate ? "https://storage.example.com/bast/sample.jpg" : null,
         bastNotes: row.bastNotes,
-        holidayDaysPerMonth: row.holidayDaysPerMonth,
+        holidayScheme: row.holidayScheme as any,
         ownershipTargetDays: OWN_TARGET,
         totalDaysPaid,
+        workingDaysPaid: workingDays,
+        holidayDaysPaid: totalDaysPaid - workingDays,
         ownershipProgress,
         gracePeriodDays: GRACE_DAYS,
         repossessedAt,
@@ -304,11 +295,12 @@ async function seedContracts(adminId: string): Promise<{ contractCount: number; 
       });
     }
 
-    // ====== Daily payments for paid days ======
-    if (billingStartDate && totalDaysPaid > 0) {
+    // ====== Daily payments for paid days (walk calendar, not linear count) ======
+    if (billingStartDate && workingDaysPaid > 0) {
       let currentDate = new Date(billingStartDate);
-      for (let dayIdx = 0; dayIdx < totalDaysPaid; dayIdx++) {
-        const isHoliday = isLiburBayar(currentDate, row.holidayDaysPerMonth);
+      let generatedWorkingDays = 0;
+      while (generatedWorkingDays < workingDaysPaid) {
+        const isHoliday = isLiburBayar(currentDate, row.holidayScheme);
         const sd = startOfDay(currentDate);
         const ed = endOfDay(currentDate);
 
@@ -334,17 +326,18 @@ async function seedContracts(adminId: string): Promise<{ contractCount: number; 
             dailyRate, daysCount: 1, periodStart: sd, periodEnd: ed, isHoliday: false,
             createdAt: sd,
           });
+          generatedWorkingDays++;
         }
         currentDate = addDays(currentDate, 1);
       }
     }
 
     // ====== Active payment for today (unpaid days for ACTIVE contracts) ======
-    if (row.status === "ACTIVE" && unitReceivedDate && billingStartDate && totalDaysPaid > 0) {
+    if (row.status === "ACTIVE" && unitReceivedDate && billingStartDate && workingDaysPaid > 0) {
       let unpaidDays = 0;
       let accCursor = startOfDay(addDays(endDate, 1));
       while (accCursor <= TODAY) {
-        if (!isLiburBayar(accCursor, row.holidayDaysPerMonth)) unpaidDays++;
+        if (!isLiburBayar(accCursor, row.holidayScheme)) unpaidDays++;
         accCursor = startOfDay(addDays(accCursor, 1));
       }
       if (unpaidDays > 0) {

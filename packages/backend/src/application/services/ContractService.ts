@@ -19,7 +19,7 @@ import {
   MAX_RENTAL_DAYS,
   DEFAULT_OWNERSHIP_TARGET_DAYS,
   DEFAULT_GRACE_PERIOD_DAYS,
-  DEFAULT_HOLIDAY_DAYS_PER_MONTH,
+  DEFAULT_HOLIDAY_SCHEME,
   VALID_STATUS_TRANSITIONS,
 } from '../../domain/enums';
 import { CreateContractDto, UpdateContractStatusDto, ExtendContractDto, UpdateContractDto, CancelContractDto } from '../dtos';
@@ -122,10 +122,12 @@ export class ContractService {
       billingStartDate: null,
       bastPhoto: null,
       bastNotes: '',
-      holidayDaysPerMonth: DEFAULT_HOLIDAY_DAYS_PER_MONTH,
+      holidayScheme: dto.holidayScheme || DEFAULT_HOLIDAY_SCHEME,
       // RTO fields
       ownershipTargetDays,
       totalDaysPaid: 0,
+      workingDaysPaid: 0,
+      holidayDaysPaid: 0,
       ownershipProgress: 0,
       gracePeriodDays,
       repossessedAt: null,

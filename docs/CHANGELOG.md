@@ -28,6 +28,9 @@
 - [SWR Caching (2026-03-04)](#2026-03-04---frontend-api-caching-with-swr)
 - [Seed Best Practices & Lainnya (2026-03-05)](#2026-03-05---seed-script-best-practices--lainnya-ride-hailing-apps)
 - [Billing + Invoice Unification (2026-03-05)](#2026-03-05---billing--invoice-unification-into-unified-payment-pmt-xxx)
+- [Holiday Scheme Overhaul (2026-03-06)](#2026-03-06---holiday-scheme-overhaul-holidayscheme-enum)
+- [Fix: totalDaysPaid Seed Calculation (2026-03-06)](#2026-03-06---fix-totaldayspaid-seed-calculation-include-holidays)
+- [Separate workingDaysPaid & holidayDaysPaid (2026-03-06)](#2026-03-06---separate-workingdayspaid--holidaydayspaid-fields)
 - [Development Roadmap](#development-roadmap)
 
 ---
@@ -999,6 +1002,114 @@ Sistem sebelumnya punya 2 entitas terpisah: **Billing** (BIL-xxx, transient life
 | CANCELLED | VOID |
 
 ### Tests: 127 tests, 4 suites (AuthService, CustomerService, ContractService, PaymentService)
+
+---
+
+## 2026-03-06 - Holiday Scheme Overhaul (HolidayScheme Enum)
+
+### Context
+Perubahan model bisnis Libur Bayar dari sistem "pilih N Minggu per bulan" (`holidayDaysPerMonth`) menjadi 2 tipe kontrak berbasis enum `HolidayScheme`:
+- **OLD_CONTRACT**: Semua hari Minggu = Libur Bayar
+- **NEW_CONTRACT**: Tanggal 29-31 = Libur Bayar (bayar hanya 1-28)
+
+Perubahan interpretasi `ownershipTargetDays=1278`: sekarang SUDAH TERMASUK hari libur (sebelumnya pure hari bayar).
+
+### What was changed
+
+**Domain Layer:**
+- Tambah enum `HolidayScheme { OLD_CONTRACT, NEW_CONTRACT }` + constant `DEFAULT_HOLIDAY_SCHEME`
+- Hapus constants: `DEFAULT_HOLIDAY_DAYS_PER_MONTH`, `MIN_HOLIDAY_DAYS_PER_MONTH`, `MAX_HOLIDAY_DAYS_PER_MONTH`
+- Entity `Contract`: ganti field `holidayDaysPerMonth: number` → `holidayScheme: HolidayScheme`
+
+**Application Layer:**
+- `PaymentService`: hapus `getSundayHolidays()`, rewrite `isLiburBayar()` dengan logic berbasis scheme
+- `ContractService`: update `create()` untuk menerima `holidayScheme` dari DTO
+- DTOs: tambah `holidayScheme` ke `CreateContractDto` dan `UpdateContractDto`
+
+**Infrastructure Layer:**
+- Prisma schema: tambah enum `HolidayScheme`, ganti field di model Contract
+- `PrismaContractRepository`: update field mapping
+- Seed data + scripts: semua helper functions dan data diupdate ke scheme baru
+
+**Frontend:**
+- Types: tambah enum `HolidayScheme`, update interface `Contract`
+- Form create contract: tambah dropdown "Tipe Kontrak"
+- Contract detail: tampilkan label scheme yang sesuai
+- Schema: tambah validasi `holidayScheme`
+
+**Tests:**
+- Hapus test `getSundayHolidays`, rewrite test `isLiburBayar` untuk kedua scheme
+- Tambah test holiday payment generation untuk NEW_CONTRACT
+- Update semua test helpers dari `holidayDaysPerMonth` ke `holidayScheme`
+- 129 tests passing
+
+### Files modified
+- `packages/backend/src/domain/enums/index.ts`
+- `packages/backend/src/domain/entities/Contract.ts`
+- `packages/backend/prisma/schema.prisma`
+- `packages/backend/src/application/dtos/index.ts`
+- `packages/backend/src/application/services/PaymentService.ts`
+- `packages/backend/src/application/services/ContractService.ts`
+- `packages/backend/src/infrastructure/repositories/PrismaContractRepository.ts`
+- `packages/backend/src/infrastructure/seed.ts`
+- `packages/backend/prisma/data/contracts.ts`
+- `packages/backend/prisma/seed.ts`
+- `packages/backend/src/__tests__/PaymentService.test.ts`
+- `packages/backend/src/__tests__/ContractService.test.ts`
+- `packages/frontend/src/types/index.ts`
+- `packages/frontend/src/lib/schemas.ts`
+- `packages/frontend/src/app/(dashboard)/contracts/page.tsx`
+- `packages/frontend/src/app/(dashboard)/contracts/[id]/page.tsx`
+- `CLAUDE.md`
+
+---
+
+## 2026-03-06 - Fix: totalDaysPaid Seed Calculation (Include Holidays)
+
+### Context
+Setelah migrasi HolidayScheme, ditemukan bahwa `totalDaysPaid` di seed data hanya menghitung hari kerja (working days), padahal model baru mensyaratkan `ownershipTargetDays=1278` sudah termasuk hari libur. Contoh: customer dengan 50 hari kerja + 9 hari Minggu libur seharusnya punya `totalDaysPaid=59`.
+
+### What was changed
+- **Seed data interface**: Rename `totalDaysPaid` → `workingDaysPaid` di `ContractSeed` untuk kejelasan (data = working days only)
+- **Prisma seed script**: Tambah `countCalendarDays()` helper yang walk kalender dari billingStartDate, hitung working + holiday days. Fix perhitungan `totalDaysPaid` (now includes holidays), `endDate`, `totalAmount` (working days only × rate), `ownershipProgress`. Fix daily payment loop: walk calendar days instead of linear count.
+- **InMemory seed script**: Sama — tambah `countCalendarDays()`, fix semua perhitungan contract fields.
+
+### Files modified
+- `packages/backend/prisma/data/contracts.ts` — rename field di interface + 79 entries
+- `packages/backend/prisma/seed.ts` — `countCalendarDays()`, fix `seedContracts()`
+- `packages/backend/src/infrastructure/seed.ts` — `countCalendarDays()`, fix contract calculation
+
+---
+
+## 2026-03-06 - Separate workingDaysPaid & holidayDaysPaid Fields
+
+### Context
+`totalDaysPaid` menggabungkan hari kerja + hari libur jadi satu angka, membingungkan admin karena tidak bisa lihat breakdown berapa hari customer benar-benar bayar vs berapa hari gratis (libur). Ditambahkan 2 field baru agar informasi terpisah jelas.
+
+### What was changed
+- **Prisma schema**: Tambah kolom `working_days_paid` dan `holiday_days_paid` (default 0)
+- **Domain entity**: Tambah `workingDaysPaid` dan `holidayDaysPaid` di Contract interface
+- **PaymentService**: `creditDayToContract()` sekarang update field yang sesuai berdasarkan `isHoliday`. `revertPaymentFromContract()` kurangi `workingDaysPaid` saat revert.
+- **ContractService**: Set field baru ke 0 saat create contract
+- **Seed scripts**: Set `workingDaysPaid` dan `holidayDaysPaid` dari `countCalendarDays()` hasil (kedua Prisma dan InMemory)
+- **PrismaContractRepository**: Include field baru di create
+- **ReportService**: Tambah kolom di CSV dan XLSV export
+- **Frontend types**: Tambah field baru di Contract interface
+- **Frontend UI**: Contract detail menampilkan breakdown: "Hari Kerja Dibayar", "Hari Libur (Gratis)", "Total Hari", "Sisa Hari"
+- **Tests**: Update test helpers dengan field baru, 129 tests passing
+
+### Files modified
+- `packages/backend/prisma/schema.prisma`
+- `packages/backend/src/domain/entities/Contract.ts`
+- `packages/backend/src/application/services/PaymentService.ts`
+- `packages/backend/src/application/services/ContractService.ts`
+- `packages/backend/src/application/services/ReportService.ts`
+- `packages/backend/prisma/seed.ts`
+- `packages/backend/src/infrastructure/seed.ts`
+- `packages/backend/src/infrastructure/repositories/PrismaContractRepository.ts`
+- `packages/backend/src/__tests__/PaymentService.test.ts`
+- `packages/frontend/src/types/index.ts`
+- `packages/frontend/src/app/(dashboard)/contracts/[id]/page.tsx`
 
 ---
 

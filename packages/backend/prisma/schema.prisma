@@ -63,6 +63,11 @@ enum AuditAction {
   EXPORT
 }
 
+enum HolidayScheme {
+  OLD_CONTRACT
+  NEW_CONTRACT
+}
+
 enum UserRole {
   SUPER_ADMIN
   ADMIN
@@ -147,11 +152,13 @@ model Contract {
   billingStartDate    DateTime? @map("billing_start_date")
   bastPhoto           String?   @map("bast_photo")
   bastNotes           String    @default("") @map("bast_notes")
-  holidayDaysPerMonth Int       @default(2) @map("holiday_days_per_month")
+  holidayScheme       HolidayScheme @default(NEW_CONTRACT) @map("holiday_scheme")
 
   // RTO fields
   ownershipTargetDays Int       @default(1278) @map("ownership_target_days")
   totalDaysPaid       Int       @default(0) @map("total_days_paid")
+  workingDaysPaid     Int       @default(0) @map("working_days_paid")
+  holidayDaysPaid     Int       @default(0) @map("holiday_days_paid")
   ownershipProgress   Float     @default(0) @map("ownership_progress")
   gracePeriodDays     Int       @default(7) @map("grace_period_days")
   repossessedAt       DateTime? @map("repossessed_at")

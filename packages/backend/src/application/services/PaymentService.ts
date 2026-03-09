@@ -11,6 +11,7 @@ import {
   PaymentStatus,
   InvoiceType,
   AuditAction,
+  HolidayScheme,
 } from '../../domain/enums';
 import { getWibToday, getWibDateParts } from '../../domain/utils/dateUtils';
 import { SettingService } from './SettingService';
@@ -57,35 +58,12 @@ export class PaymentService {
 
   // ============ Libur Bayar Logic ============
 
-  getSundayHolidays(year: number, month: number, holidayDaysPerMonth: number): Set<number> {
-    const sundays: number[] = [];
-    const daysInMonth = new Date(year, month, 0).getDate();
-    for (let d = 1; d <= daysInMonth; d++) {
-      if (new Date(year, month - 1, d).getDay() === 0) {
-        sundays.push(d);
-      }
-    }
-
-    const N = sundays.length;
-    const K = Math.min(holidayDaysPerMonth, N);
-
-    const result = new Set<number>();
-    for (let i = 0; i < K; i++) {
-      const idx = Math.floor(i * N / K + N / (2 * K));
-      result.add(sundays[idx]);
-    }
-
-    return result;
-  }
-
   isLiburBayar(contract: Contract, date: Date): boolean {
-    if (date.getDay() !== 0) return false;
-    const holidays = this.getSundayHolidays(
-      date.getFullYear(),
-      date.getMonth() + 1,
-      contract.holidayDaysPerMonth,
-    );
-    return holidays.has(date.getDate());
+    if (contract.holidayScheme === HolidayScheme.OLD_CONTRACT) {
+      return date.getDay() === 0; // Semua Minggu = libur
+    } else {
+      return date.getDate() > 28; // Tanggal 29-31 = libur
+    }
   }
 
   // ============ Daily Payment Generation (Scheduler) ============
@@ -473,11 +451,13 @@ export class PaymentService {
       endDate: newEndDate,
     };
 
-    if (!isHoliday) {
+    if (isHoliday) {
+      updateData.holidayDaysPaid = contract.holidayDaysPaid + days;
+      updateData.durationDays = contract.durationDays + days;
+    } else {
+      updateData.workingDaysPaid = contract.workingDaysPaid + days;
       updateData.durationDays = contract.durationDays + days;
       updateData.totalAmount = contract.totalAmount + (contract.dailyRate * days);
-    } else {
-      updateData.durationDays = contract.durationDays + days;
     }
 
     if (isCompleted) {
@@ -887,6 +867,7 @@ export class PaymentService {
 
     const updateData: Partial<Contract> = {
       totalDaysPaid: newTotalDaysPaid,
+      workingDaysPaid: Math.max(0, contract.workingDaysPaid - invoice.extensionDays),
       ownershipProgress: Math.min(newProgress, 100),
       durationDays: Math.max(0, contract.durationDays - invoice.extensionDays),
       totalAmount: Math.max(0, contract.totalAmount - invoice.amount - (invoice.lateFee || 0)),

@@ -219,15 +219,28 @@ Domain (paling dalam) → Application → Infrastructure → Presentation (palin
 
 ### Libur Bayar (Holiday System)
 
-**Aturan penting — sering salah dipahami:**
-- Libur Bayar HANYA berlaku pada hari **Minggu tertentu**, BUKAN semua Minggu.
-- Jumlah Libur Bayar per bulan: ditentukan oleh `holidayDaysPerMonth` per contract.
-  - Default: 2 hari/bulan
-  - Minimum: 2, Maksimum: 4
-- **Algoritma pemilihan Minggu**: `getSundayHolidays(year, month, holidayDaysPerMonth)` — pilih Minggu yang evenly distributed dalam bulan tersebut menggunakan index-based algorithm.
-- **Minggu yang BUKAN Libur Bayar** = hari kerja biasa yang HARUS dibayar.
-- **Tagihan di hari Libur Bayar**: amount Rp 0, status auto-PAID, isHoliday=true, tetap credit 1 hari ke ownership progress.
-- **endDate advancement**: saat credit hari kerja ke contract, skip hanya Libur Bayar Sundays (bukan semua Sundays).
+**Contract dibagi 2 tipe berdasarkan `holidayScheme` (enum `HolidayScheme`):**
+
+- **`OLD_CONTRACT` (Kontrak Lama)**: Setiap hari **Minggu** di setiap bulan = Libur Bayar (semua Minggu, tanpa exception).
+- **`NEW_CONTRACT` (Kontrak Baru)**: Customer hanya bayar tanggal **1-28** setiap bulan. Tanggal **29-31** = Libur Bayar.
+  - Februari non-leap year: 28 hari, tidak ada libur.
+  - Februari leap year: hanya 29 Feb yang libur.
+  - Bulan 30 hari: 2 hari libur (29-30). Bulan 31 hari: 3 hari libur (29-31).
+
+**Target Kepemilikan**: `ownershipTargetDays = 1278` **SUDAH TERMASUK** hari libur. Hari libur tetap credit ke `totalDaysPaid` (amount=0, auto-PAID).
+
+**Tracking Hari di Contract** (3 field terpisah agar tidak rancu):
+- `totalDaysPaid` = working + holiday (untuk progress calculation: `totalDaysPaid / 1278 * 100`)
+- `workingDaysPaid` = jumlah hari kerja yang dibayar (ada uang masuk)
+- `holidayDaysPaid` = jumlah hari libur yang di-credit gratis (amount=0)
+- Invariant: `totalDaysPaid = workingDaysPaid + holidayDaysPaid`
+
+**Logic `isLiburBayar(contract, date)`** di `PaymentService`:
+- `OLD_CONTRACT`: `date.getDay() === 0` (Minggu)
+- `NEW_CONTRACT`: `date.getDate() > 28` (tanggal 29-31)
+
+**Tagihan di hari Libur Bayar**: amount Rp 0, status auto-PAID, isHoliday=true, tetap credit 1 hari ke ownership progress.
+**endDate advancement**: saat credit hari kerja ke contract, skip hari Libur Bayar sesuai scheme.
 
 ### Contract Status Machine
 
@@ -277,7 +290,7 @@ OVERDUE → CANCELLED   (manual oleh admin)
 
 - Schema: `packages/backend/prisma/schema.prisma`
 - 6 models: User, Customer, Contract, Invoice, AuditLog, Setting
-- 9 enums: MotorModel, BatteryType, ContractStatus, PaymentStatus, InvoiceType, DPScheme, Gender, AuditAction, UserRole
+- 10 enums: MotorModel, BatteryType, ContractStatus, PaymentStatus, InvoiceType, DPScheme, HolidayScheme, Gender, AuditAction, UserRole
 - Column naming: snake_case via `@map`/`@@map` (field names tetap camelCase di TypeScript)
 - Client singleton: `packages/backend/src/infrastructure/prisma/client.ts`
 
