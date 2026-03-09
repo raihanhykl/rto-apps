@@ -193,4 +193,15 @@ export class PrismaContractRepository implements IContractRepository {
     }
     return max;
   }
+
+  async updateGracePeriodByStatuses(gracePeriodDays: number, statuses: ContractStatus[]): Promise<number> {
+    const result = await this.prisma.contract.updateMany({
+      where: {
+        status: { in: statuses as any },
+        isDeleted: false,
+      },
+      data: { gracePeriodDays },
+    });
+    return result.count;
+  }
 }

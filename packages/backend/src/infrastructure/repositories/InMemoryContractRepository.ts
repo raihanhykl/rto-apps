@@ -87,4 +87,16 @@ export class InMemoryContractRepository implements IContractRepository {
     }
     return max;
   }
+
+  async updateGracePeriodByStatuses(gracePeriodDays: number, statuses: ContractStatus[]): Promise<number> {
+    let count = 0;
+    for (const contract of this.contracts.values()) {
+      if (!contract.isDeleted && statuses.includes(contract.status)) {
+        contract.gracePeriodDays = gracePeriodDays;
+        contract.updatedAt = new Date();
+        count++;
+      }
+    }
+    return count;
+  }
 }
