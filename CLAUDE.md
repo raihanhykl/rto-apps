@@ -340,7 +340,7 @@ cd packages/backend && npx prisma db seed -- --reset --force
 - Framework: Jest + ts-jest
 - Lokasi: `packages/backend/src/__tests__/`
 - 4 test suites: AuthService, CustomerService, ContractService, PaymentService
-- **127 tests** saat ini
+- **146 tests** saat ini
 - Semua tests menggunakan InMemory repositories — TIDAK butuh PostgreSQL.
 - Jalankan: `cd packages/backend && npm test`
 - Saat menambah fitur baru, WAJIB tambah/update tests yang relevan.

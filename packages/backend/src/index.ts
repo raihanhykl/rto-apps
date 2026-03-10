@@ -8,12 +8,14 @@ import {
   InMemoryInvoiceRepository,
   InMemoryAuditLogRepository,
   InMemorySettingRepository,
+  InMemoryPaymentDayRepository,
   PrismaUserRepository,
   PrismaCustomerRepository,
   PrismaContractRepository,
   PrismaInvoiceRepository,
   PrismaAuditLogRepository,
   PrismaSettingRepository,
+  PrismaPaymentDayRepository,
 } from './infrastructure/repositories';
 import {
   AuthService,
@@ -44,6 +46,7 @@ import { IContractRepository } from './domain/interfaces/IContractRepository';
 import { IInvoiceRepository } from './domain/interfaces/IInvoiceRepository';
 import { IAuditLogRepository } from './domain/interfaces/IAuditLogRepository';
 import { ISettingRepository } from './domain/interfaces/ISettingRepository';
+import { IPaymentDayRepository } from './domain/interfaces/IPaymentDayRepository';
 
 async function bootstrap() {
   const app = express();
@@ -61,6 +64,7 @@ async function bootstrap() {
   let invoiceRepo: IInvoiceRepository;
   let auditRepo: IAuditLogRepository;
   let settingRepo: ISettingRepository;
+  let paymentDayRepo: IPaymentDayRepository;
 
   if (usePrisma) {
     const { prisma } = await import('./infrastructure/prisma/client');
@@ -73,6 +77,7 @@ async function bootstrap() {
     invoiceRepo = new PrismaInvoiceRepository(prisma);
     auditRepo = new PrismaAuditLogRepository(prisma);
     settingRepo = new PrismaSettingRepository(prisma);
+    paymentDayRepo = new PrismaPaymentDayRepository(prisma);
   } else {
     console.log('Using In-Memory repositories');
     userRepo = new InMemoryUserRepository();
@@ -81,14 +86,15 @@ async function bootstrap() {
     invoiceRepo = new InMemoryInvoiceRepository();
     auditRepo = new InMemoryAuditLogRepository();
     settingRepo = new InMemorySettingRepository();
+    paymentDayRepo = new InMemoryPaymentDayRepository();
   }
 
   // Initialize Services
   const authService = new AuthService(userRepo, auditRepo);
   const settingService = new SettingService(settingRepo, auditRepo, contractRepo);
   const customerService = new CustomerService(customerRepo, auditRepo, contractRepo);
-  const contractService = new ContractService(contractRepo, customerRepo, invoiceRepo, auditRepo, settingService);
-  const paymentService = new PaymentService(invoiceRepo, contractRepo, auditRepo, settingService);
+  const contractService = new ContractService(contractRepo, customerRepo, invoiceRepo, paymentDayRepo, auditRepo, settingService);
+  const paymentService = new PaymentService(invoiceRepo, contractRepo, paymentDayRepo, auditRepo, settingService);
   const dashboardService = new DashboardService(contractRepo, customerRepo, invoiceRepo, auditRepo);
   const reportService = new ReportService(contractRepo, customerRepo, invoiceRepo);
   const auditService = new AuditService(auditRepo);

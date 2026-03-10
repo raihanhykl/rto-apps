@@ -3,6 +3,7 @@ import { InMemoryContractRepository } from '../infrastructure/repositories/InMem
 import { InMemoryCustomerRepository } from '../infrastructure/repositories/InMemoryCustomerRepository';
 import { InMemoryInvoiceRepository } from '../infrastructure/repositories/InMemoryInvoiceRepository';
 import { InMemoryAuditLogRepository } from '../infrastructure/repositories/InMemoryAuditLogRepository';
+import { InMemoryPaymentDayRepository } from '../infrastructure/repositories/InMemoryPaymentDayRepository';
 import { MotorModel, BatteryType, DPScheme, ContractStatus, PaymentStatus, InvoiceType, HolidayScheme, DEFAULT_OWNERSHIP_TARGET_DAYS, DEFAULT_GRACE_PERIOD_DAYS, DEFAULT_HOLIDAY_SCHEME, MOTOR_DAILY_RATES, DP_AMOUNTS } from '../domain/enums';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -12,6 +13,7 @@ describe('ContractService', () => {
   let customerRepo: InMemoryCustomerRepository;
   let invoiceRepo: InMemoryInvoiceRepository;
   let auditRepo: InMemoryAuditLogRepository;
+  let paymentDayRepo: InMemoryPaymentDayRepository;
   let customerId: string;
   const adminId = 'admin-1';
 
@@ -20,7 +22,8 @@ describe('ContractService', () => {
     customerRepo = new InMemoryCustomerRepository();
     invoiceRepo = new InMemoryInvoiceRepository();
     auditRepo = new InMemoryAuditLogRepository();
-    contractService = new ContractService(contractRepo, customerRepo, invoiceRepo, auditRepo);
+    paymentDayRepo = new InMemoryPaymentDayRepository();
+    contractService = new ContractService(contractRepo, customerRepo, invoiceRepo, paymentDayRepo, auditRepo);
 
     // Seed a customer
     customerId = uuidv4();

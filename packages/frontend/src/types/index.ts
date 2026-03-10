@@ -42,6 +42,14 @@ export enum HolidayScheme {
   NEW_CONTRACT = 'NEW_CONTRACT',
 }
 
+export enum PaymentDayStatus {
+  UNPAID = 'UNPAID',
+  PENDING = 'PENDING',
+  PAID = 'PAID',
+  HOLIDAY = 'HOLIDAY',
+  VOIDED = 'VOIDED',
+}
+
 export const MOTOR_DAILY_RATES: Record<string, number> = {
   'ATHENA_REGULAR': 58000,
   'ATHENA_EXTENDED': 63000,

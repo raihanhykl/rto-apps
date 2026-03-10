@@ -200,6 +200,52 @@ export class PaymentController {
     }
   };
 
+  // ============ Admin Correction ============
+
+  updatePaymentDayStatus = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { contractId, date } = req.params;
+      const { status, notes } = req.body;
+      const adminId = (req as any).user?.id || 'system';
+
+      const parsedDate = new Date(date + 'T00:00:00');
+      if (isNaN(parsedDate.getTime())) {
+        return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD' });
+      }
+
+      const result = await this.paymentService.updatePaymentDayStatus(
+        contractId,
+        parsedDate,
+        status,
+        adminId,
+        notes,
+      );
+
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  // ============ Reduce Payment ============
+
+  reducePayment = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { id } = req.params;
+      const { newDaysCount, notes } = req.body;
+      const adminId = (req as any).user?.id || 'system';
+
+      if (!newDaysCount || typeof newDaysCount !== 'number' || newDaysCount < 1) {
+        return res.status(400).json({ error: 'newDaysCount must be a positive number' });
+      }
+
+      const result = await this.paymentService.reducePayment(id, newDaysCount, adminId, notes);
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
   // ============ PDF ============
 
   downloadPdf = async (req: Request, res: Response, next: NextFunction) => {

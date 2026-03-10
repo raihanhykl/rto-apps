@@ -59,6 +59,9 @@ export class Scheduler {
     console.log(`⏰ Running daily tasks at ${now.toISOString()}`);
 
     try {
+      // 0. Extend PaymentDay records 30 days ahead
+      await this.paymentService.extendPaymentDayRecords();
+
       // 1. Rollover expired payments from previous day(s)
       const rolledOver = await this.paymentService.rolloverExpiredPayments();
       if (rolledOver > 0) {

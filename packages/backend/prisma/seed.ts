@@ -54,6 +54,10 @@ function endOfDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
 }
 
+function toDateKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 function fmtDateCompact(d: Date): string {
   return `${d.getFullYear().toString().slice(-2)}${(d.getMonth() + 1).toString().padStart(2, "0")}${d.getDate().toString().padStart(2, "0")}`;
 }
@@ -178,13 +182,14 @@ async function seedSettings() {
 async function resetData() {
   console.log("\n[RESET] Deleting existing data...");
   const counts = {
+    paymentDays: await prisma.paymentDay.deleteMany({}),
     auditLogs: await prisma.auditLog.deleteMany({}),
     invoices: await prisma.invoice.deleteMany({}),
     contracts: await prisma.contract.deleteMany({}),
     customers: await prisma.customer.deleteMany({}),
   };
   console.log(
-    `  Deleted: ${counts.auditLogs.count} audit logs, ${counts.invoices.count} payments, ${counts.contracts.count} contracts, ${counts.customers.count} customers`,
+    `  Deleted: ${counts.paymentDays.count} payment days, ${counts.auditLogs.count} audit logs, ${counts.invoices.count} payments, ${counts.contracts.count} contracts, ${counts.customers.count} customers`,
   );
 }
 
@@ -233,7 +238,7 @@ async function seedCustomers(): Promise<number> {
 
 async function seedContracts(
   adminId: string,
-): Promise<{ contractCount: number; paymentCount: number }> {
+): Promise<{ contractCount: number; paymentCount: number; paymentDayCount: number }> {
   const TODAY = startOfDay(getWibToday());
   const existingContracts = new Set(
     (await prisma.contract.findMany({ select: { contractNumber: true } })).map(
@@ -242,6 +247,7 @@ async function seedContracts(
   );
 
   const allPayments: any[] = [];
+  const allPaymentDays: any[] = [];
   const allAuditLogs: any[] = [];
   let globalSeq = 1;
   let contractsCreated = 0;
@@ -495,6 +501,74 @@ async function seedContracts(
       }
     }
 
+    // ====== PaymentDay records ======
+    if (billingStartDate) {
+      // Build a map: dateKey -> paymentId+status for payments of this contract
+      const paymentDateMap = new Map<string, { id: string; status: string }>();
+      for (const pmt of allPayments) {
+        if (pmt.contractId !== row.id) continue;
+        if (pmt.type !== "DAILY_BILLING") continue;
+        if (!pmt.periodStart || !pmt.periodEnd) continue;
+        let d = startOfDay(new Date(pmt.periodStart));
+        const end = startOfDay(new Date(pmt.periodEnd));
+        while (d <= end) {
+          paymentDateMap.set(toDateKey(d), { id: pmt.id, status: pmt.status });
+          d = addDays(d, 1);
+        }
+      }
+
+      // Walk from billingStartDate to today+30 (or terminate date for cancelled/repossessed)
+      const terminateDate =
+        finalStatus === "CANCELLED" || finalStatus === "REPOSSESSED"
+          ? (repossessedAt || cancelledAt || TODAY)
+          : null;
+      const pdEnd = addDays(TODAY, 30);
+
+      let pdCursor = new Date(billingStartDate);
+      while (pdCursor <= pdEnd) {
+        const d = startOfDay(new Date(pdCursor));
+        const key = toDateKey(d);
+        const isHoliday = isLiburBayar(d, row.holidayScheme);
+        const pmt = paymentDateMap.get(key);
+
+        let status: string;
+        let paymentId: string | null = null;
+        const amount = isHoliday ? 0 : dailyRate;
+
+        if (isHoliday) {
+          status = "HOLIDAY";
+          if (pmt) paymentId = pmt.id;
+        } else if (pmt && pmt.status === "PAID") {
+          status = "PAID";
+          paymentId = pmt.id;
+        } else if (pmt && pmt.status === "PENDING") {
+          status = "PENDING";
+          paymentId = pmt.id;
+        } else {
+          status = "UNPAID";
+        }
+
+        // Cancelled/repossessed: VOID all UNPAID days after terminate date
+        if (terminateDate && d > terminateDate && status === "UNPAID") {
+          status = "VOIDED";
+        }
+
+        allPaymentDays.push({
+          id: uuidv4(),
+          contractId: row.id,
+          date: d,
+          status,
+          paymentId,
+          dailyRate,
+          amount,
+          notes: null,
+          createdAt: d,
+        });
+
+        pdCursor = addDays(pdCursor, 1);
+      }
+    }
+
     // ====== Audit log ======
     allAuditLogs.push({
       id: uuidv4(),
@@ -528,11 +602,19 @@ async function seedContracts(
     });
   }
 
+  for (let i = 0; i < allPaymentDays.length; i += BATCH) {
+    await prisma.paymentDay.createMany({
+      data: allPaymentDays.slice(i, i + BATCH),
+      skipDuplicates: true,
+    });
+  }
+
   console.log(`  Contracts: ${contractsCreated} created`);
   console.log(`  Payments: ${allPayments.length} (DP + daily)`);
+  console.log(`  Payment days: ${allPaymentDays.length}`);
   console.log(`  Audit logs: ${allAuditLogs.length}`);
 
-  return { contractCount: contractsCreated, paymentCount: allPayments.length };
+  return { contractCount: contractsCreated, paymentCount: allPayments.length, paymentDayCount: allPaymentDays.length };
 }
 
 // ====== Main ======

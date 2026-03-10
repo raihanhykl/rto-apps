@@ -14,6 +14,8 @@ import {
   AuditAction,
   DPScheme,
   InvoiceType,
+  HolidayScheme,
+  PaymentDayStatus,
   MOTOR_DAILY_RATES,
   DP_AMOUNTS,
   MAX_RENTAL_DAYS,
@@ -22,6 +24,8 @@ import {
   DEFAULT_HOLIDAY_SCHEME,
   VALID_STATUS_TRANSITIONS,
 } from '../../domain/enums';
+import { IPaymentDayRepository } from '../../domain/interfaces';
+import { PaymentDay } from '../../domain/entities';
 import { CreateContractDto, UpdateContractStatusDto, ExtendContractDto, UpdateContractDto, CancelContractDto } from '../dtos';
 import { SettingService } from './SettingService';
 import { v4 as uuidv4 } from 'uuid';
@@ -36,6 +40,7 @@ export class ContractService {
     private contractRepo: IContractRepository,
     private customerRepo: ICustomerRepository,
     private invoiceRepo: IInvoiceRepository,
+    private paymentDayRepo: IPaymentDayRepository,
     private auditRepo: IAuditLogRepository,
     private settingService?: SettingService
   ) {}
@@ -310,6 +315,35 @@ export class ContractService {
     });
     if (!updated) throw new Error('Failed to update contract');
 
+    // Generate PaymentDay records for 60 days from billingStartDate
+    const records: PaymentDay[] = [];
+    const cursor = new Date(tomorrow);
+    for (let i = 0; i < 60; i++) {
+      const d = new Date(cursor);
+      d.setHours(0, 0, 0, 0);
+      const isSunday = d.getDay() === 0;
+      const isDate29Plus = d.getDate() > 28;
+      const isHoliday = existing.holidayScheme === HolidayScheme.OLD_CONTRACT ? isSunday : isDate29Plus;
+
+      records.push({
+        id: uuidv4(),
+        contractId: existing.id,
+        date: d,
+        status: isHoliday ? PaymentDayStatus.HOLIDAY : PaymentDayStatus.UNPAID,
+        paymentId: null,
+        dailyRate: existing.dailyRate,
+        amount: isHoliday ? 0 : existing.dailyRate,
+        notes: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    if (records.length > 0) {
+      await this.paymentDayRepo.createMany(records);
+    }
+
     const customer = await this.customerRepo.findById(existing.customerId);
 
     await this.auditRepo.create({
@@ -443,6 +477,16 @@ export class ContractService {
       }
     }
 
+    // Void all UNPAID and PENDING PaymentDays
+    const unpaidDays = await this.paymentDayRepo.findByContractAndStatus(id, PaymentDayStatus.UNPAID);
+    const pendingDays = await this.paymentDayRepo.findByContractAndStatus(id, PaymentDayStatus.PENDING);
+    for (const day of [...unpaidDays, ...pendingDays]) {
+      await this.paymentDayRepo.update(day.id, {
+        status: PaymentDayStatus.VOIDED,
+        paymentId: null,
+      });
+    }
+
     const updated = await this.contractRepo.update(id, {
       status: ContractStatus.REPOSSESSED,
       repossessedAt: new Date(),
@@ -526,6 +570,16 @@ export class ContractService {
       if (inv.status === PaymentStatus.PENDING || inv.status === PaymentStatus.FAILED) {
         await this.invoiceRepo.update(inv.id, { status: PaymentStatus.VOID });
       }
+    }
+
+    // Void all UNPAID and PENDING PaymentDays
+    const unpaidDays = await this.paymentDayRepo.findByContractAndStatus(id, PaymentDayStatus.UNPAID);
+    const pendingDays = await this.paymentDayRepo.findByContractAndStatus(id, PaymentDayStatus.PENDING);
+    for (const day of [...unpaidDays, ...pendingDays]) {
+      await this.paymentDayRepo.update(day.id, {
+        status: PaymentDayStatus.VOIDED,
+        paymentId: null,
+      });
     }
 
     const updated = await this.contractRepo.update(id, {

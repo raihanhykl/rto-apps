@@ -5,22 +5,24 @@ import {
   PaginationParams,
   PaginatedResult,
 } from '../../domain/interfaces';
-import { Invoice, Contract } from '../../domain/entities';
+import { Invoice, Contract, PaymentDay } from '../../domain/entities';
 import {
   ContractStatus,
   PaymentStatus,
   InvoiceType,
   AuditAction,
   HolidayScheme,
+  PaymentDayStatus,
 } from '../../domain/enums';
-import { getWibToday, getWibDateParts } from '../../domain/utils/dateUtils';
+import { IPaymentDayRepository } from '../../domain/interfaces';
+import { getWibToday, getWibDateParts, toDateKey } from '../../domain/utils/dateUtils';
 import { SettingService } from './SettingService';
 import { v4 as uuidv4 } from 'uuid';
 import QRCode from 'qrcode';
 
 export interface CalendarDay {
   date: string; // YYYY-MM-DD
-  status: 'paid' | 'pending' | 'overdue' | 'holiday' | 'not_issued';
+  status: 'paid' | 'pending' | 'overdue' | 'holiday' | 'not_issued' | 'voided';
   amount?: number;
 }
 
@@ -31,6 +33,7 @@ export class PaymentService {
   constructor(
     private invoiceRepo: IInvoiceRepository,
     private contractRepo: IContractRepository,
+    private paymentDayRepo: IPaymentDayRepository,
     private auditRepo: IAuditLogRepository,
     private settingService?: SettingService,
   ) {}
@@ -66,6 +69,112 @@ export class PaymentService {
     }
   }
 
+  // ============ PaymentDay Management ============
+
+  /**
+   * Generate PaymentDay records dari startDate sejumlah daysAhead calendar days ke depan.
+   * Idempotent — skip tanggal yang sudah ada record-nya.
+   * Holiday dates langsung set status=HOLIDAY, amount=0.
+   * Working dates set status=UNPAID, amount=dailyRate.
+   */
+  async generatePaymentDaysForPeriod(
+    contract: Contract,
+    startDate: Date,
+    daysAhead: number
+  ): Promise<void> {
+    const records: PaymentDay[] = [];
+    const current = new Date(startDate);
+    current.setHours(0, 0, 0, 0);
+
+    for (let i = 0; i < daysAhead; i++) {
+      const dateKey = new Date(current);
+      dateKey.setHours(0, 0, 0, 0);
+
+      const existing = await this.paymentDayRepo.findByContractAndDate(contract.id, dateKey);
+      if (!existing) {
+        const isHoliday = this.isLiburBayar(contract, dateKey);
+        records.push({
+          id: uuidv4(),
+          contractId: contract.id,
+          date: new Date(dateKey),
+          status: isHoliday ? PaymentDayStatus.HOLIDAY : PaymentDayStatus.UNPAID,
+          paymentId: null,
+          dailyRate: contract.dailyRate,
+          amount: isHoliday ? 0 : contract.dailyRate,
+          notes: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+      }
+
+      current.setDate(current.getDate() + 1);
+    }
+
+    if (records.length > 0) {
+      await this.paymentDayRepo.createMany(records);
+    }
+  }
+
+  /**
+   * Untuk setiap kontrak ACTIVE/OVERDUE, pastikan PaymentDay records
+   * tersedia sampai 30 hari ke depan dari hari ini.
+   */
+  async extendPaymentDayRecords(): Promise<void> {
+    const today = getWibToday();
+    const contracts = [
+      ...(await this.contractRepo.findByStatus(ContractStatus.ACTIVE)),
+      ...(await this.contractRepo.findByStatus(ContractStatus.OVERDUE)),
+    ];
+
+    for (const contract of contracts) {
+      if (!contract.billingStartDate) continue;
+      await this.generatePaymentDaysForPeriod(contract, today, 30);
+    }
+  }
+
+  /**
+   * Recalculate contract summary fields (totalDaysPaid, workingDaysPaid,
+   * holidayDaysPaid, ownershipProgress, endDate) dari PaymentDay records.
+   */
+  private async syncContractFromPaymentDays(contractId: string): Promise<void> {
+    const contract = await this.contractRepo.findById(contractId);
+    if (!contract) return;
+
+    const paidCount = await this.paymentDayRepo.countByContractAndStatus(contractId, PaymentDayStatus.PAID);
+    const holidayCount = await this.paymentDayRepo.countByContractAndStatus(contractId, PaymentDayStatus.HOLIDAY);
+    const totalPaid = paidCount + holidayCount;
+
+    const lastDate = await this.paymentDayRepo.findLastPaidOrHolidayDate(contractId);
+
+    const progress = contract.ownershipTargetDays > 0
+      ? parseFloat(((totalPaid / contract.ownershipTargetDays) * 100).toFixed(2))
+      : 0;
+
+    // Calculate totalAmount from PAID PaymentDay records (non-holiday)
+    const paidDays = await this.paymentDayRepo.findByContractAndStatus(contractId, PaymentDayStatus.PAID);
+    const totalAmount = paidDays.reduce((sum, pd) => sum + pd.amount, 0);
+
+    const updates: Partial<Contract> = {
+      totalDaysPaid: totalPaid,
+      workingDaysPaid: paidCount,
+      holidayDaysPaid: holidayCount,
+      ownershipProgress: Math.min(progress, 100),
+      durationDays: totalPaid,
+      totalAmount,
+    };
+
+    if (lastDate) {
+      updates.endDate = lastDate;
+    }
+
+    if (totalPaid >= contract.ownershipTargetDays && contract.status !== ContractStatus.COMPLETED) {
+      updates.status = ContractStatus.COMPLETED;
+      updates.completedAt = new Date();
+    }
+
+    await this.contractRepo.update(contractId, updates);
+  }
+
   // ============ Daily Payment Generation (Scheduler) ============
 
   async generateDailyPayments(today?: Date): Promise<number> {
@@ -85,76 +194,89 @@ export class PaymentService {
 
       if (now < billingStart) continue;
 
+      // Ensure PaymentDay records exist from billingStartDate to today (for gap billing)
+      const daysFromStart = Math.floor((now.getTime() - billingStart.getTime()) / 86400000) + 1;
+      await this.generatePaymentDaysForPeriod(contract, billingStart, daysFromStart);
+
+      // Check if today is a Libur Bayar
+      if (this.isLiburBayar(contract, now)) {
+        // Check if holiday payment already exists for today
+        const todayPd = await this.paymentDayRepo.findByContractAndDate(contract.id, now);
+        if (todayPd && todayPd.status === PaymentDayStatus.HOLIDAY) {
+          // Check if holiday invoice already created for today
+          const existingPayments = await this.invoiceRepo.findByContractId(contract.id);
+          const alreadyHasHoliday = existingPayments.some(p =>
+            p.isHoliday && p.status === PaymentStatus.PAID && p.periodStart &&
+            toDateKey(new Date(p.periodStart)) === toDateKey(now)
+          );
+          if (!alreadyHasHoliday) {
+            const holidayPayment = await this.createHolidayPayment(contract, now);
+            // Link holiday PaymentDay to payment
+            await this.paymentDayRepo.updateByContractAndDate(contract.id, now, {
+              paymentId: holidayPayment.id,
+            });
+            generated++;
+          }
+        }
+        continue;
+      }
+
       // Check if there's already an active (PENDING) payment for this contract
       const activePayment = await this.invoiceRepo.findActiveByContractId(contract.id);
       if (activePayment) continue;
 
-      // Determine first unpaid day
-      const endDate = new Date(contract.endDate);
-      endDate.setHours(0, 0, 0, 0);
+      // Opsi B: Query ALL UNPAID PaymentDays where date <= today
+      const allUnpaid = await this.paymentDayRepo.findByContractAndStatus(contract.id, PaymentDayStatus.UNPAID);
+      const unpaidDays = allUnpaid.filter(pd => {
+        const pdDate = new Date(pd.date);
+        pdDate.setHours(0, 0, 0, 0);
+        return pdDate <= now;
+      });
 
-      const firstUnpaidDay = new Date(Math.max(endDate.getTime() + 86400000, billingStart.getTime()));
-      firstUnpaidDay.setHours(0, 0, 0, 0);
+      if (unpaidDays.length === 0) continue;
 
-      if (firstUnpaidDay > now) continue;
+      const totalAmount = unpaidDays.reduce((sum, pd) => sum + pd.amount, 0);
+      const periodStart = new Date(unpaidDays[0].date);
+      periodStart.setHours(0, 0, 0, 0);
+      const periodEnd = new Date(unpaidDays[unpaidDays.length - 1].date);
+      periodEnd.setHours(23, 59, 59, 999);
 
-      if (firstUnpaidDay < now) {
-        // Accumulated unpaid days
-        let unpaidWorkingDays = 0;
-        const cursor = new Date(firstUnpaidDay);
-        while (cursor <= now) {
-          if (!this.isLiburBayar(contract, cursor)) {
-            unpaidWorkingDays++;
-          }
-          cursor.setDate(cursor.getDate() + 1);
-        }
+      const payment: Invoice = {
+        id: uuidv4(),
+        invoiceNumber: await this.generatePaymentNumber(),
+        contractId: contract.id,
+        customerId: contract.customerId,
+        amount: totalAmount,
+        lateFee: 0,
+        type: InvoiceType.DAILY_BILLING,
+        status: PaymentStatus.PENDING,
+        qrCodeData: '',
+        dueDate: periodEnd,
+        paidAt: null,
+        extensionDays: unpaidDays.length,
+        dokuPaymentUrl: null,
+        dokuReferenceId: null,
+        dailyRate: contract.dailyRate,
+        daysCount: unpaidDays.length,
+        periodStart,
+        periodEnd,
+        expiredAt: null,
+        previousPaymentId: null,
+        isHoliday: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
 
-        if (unpaidWorkingDays > 0) {
-          const periodStart = new Date(firstUnpaidDay);
-          periodStart.setHours(0, 0, 0, 0);
-          const periodEnd = new Date(now);
-          periodEnd.setHours(23, 59, 59, 999);
+      const newPayment = await this.invoiceRepo.create(payment);
 
-          const payment: Invoice = {
-            id: uuidv4(),
-            invoiceNumber: await this.generatePaymentNumber(),
-            contractId: contract.id,
-            customerId: contract.customerId,
-            amount: unpaidWorkingDays * contract.dailyRate,
-            lateFee: 0,
-            type: InvoiceType.DAILY_BILLING,
-            status: PaymentStatus.PENDING,
-            qrCodeData: '',
-            dueDate: periodEnd,
-            paidAt: null,
-            extensionDays: unpaidWorkingDays,
-            dokuPaymentUrl: null,
-            dokuReferenceId: null,
-            dailyRate: contract.dailyRate,
-            daysCount: unpaidWorkingDays,
-            periodStart,
-            periodEnd,
-            expiredAt: null,
-            previousPaymentId: null,
-            isHoliday: false,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          };
-
-          await this.invoiceRepo.create(payment);
-          generated++;
-        }
-        continue;
+      // Link all UNPAID days to new payment → PENDING
+      for (const pd of unpaidDays) {
+        await this.paymentDayRepo.update(pd.id, {
+          status: PaymentDayStatus.PENDING,
+          paymentId: newPayment.id,
+        });
       }
 
-      // firstUnpaidDay === now
-      if (this.isLiburBayar(contract, now)) {
-        await this.createHolidayPayment(contract, now);
-        generated++;
-        continue;
-      }
-
-      await this.createDailyPayment(contract, now);
       generated++;
     }
 
@@ -273,30 +395,54 @@ export class PaymentService {
       expiredAt: new Date(),
     });
 
-    // Check if today is a Libur Bayar
-    if (this.isLiburBayar(contract, today)) {
-      await this.creditDayToContract(contract, 1, true);
+    // Unlink all PaymentDay from expired payment → back to UNPAID
+    await this.paymentDayRepo.updateManyByPaymentId(expiredPayment.id, {
+      status: PaymentDayStatus.UNPAID,
+      paymentId: null,
+    });
 
+    // Ensure PaymentDay records exist from billingStartDate to today (for gap billing)
+    if (contract.billingStartDate) {
+      const billingStart = new Date(contract.billingStartDate);
+      billingStart.setHours(0, 0, 0, 0);
+      const daysFromStart = Math.floor((today.getTime() - billingStart.getTime()) / 86400000) + 1;
+      await this.generatePaymentDaysForPeriod(contract, billingStart, daysFromStart);
+    } else {
+      await this.generatePaymentDaysForPeriod(contract, today, 1);
+    }
+
+    // Check if today is a Libur Bayar — holiday already handled by generateDailyPayments
+    // so just create the rollover invoice with accumulated UNPAID days
+
+    // Opsi B: Link ALL UNPAID days (including gap) to new payment
+    const allUnpaid = await this.paymentDayRepo.findByContractAndStatus(contract.id, PaymentDayStatus.UNPAID);
+    const unpaidDays = allUnpaid.filter(pd => {
+      const pdDate = new Date(pd.date);
+      pdDate.setHours(0, 0, 0, 0);
+      return pdDate <= today;
+    });
+
+    if (unpaidDays.length === 0) {
+      // Edge case: no unpaid days (all holidays?), create minimal rollover
       const periodEnd = new Date(today);
       periodEnd.setHours(23, 59, 59, 999);
-
       const newPayment: Invoice = {
         id: uuidv4(),
         invoiceNumber: await this.generatePaymentNumber(),
         contractId: contract.id,
         customerId: contract.customerId,
-        amount: expiredPayment.amount,
+        amount: 0,
         lateFee: 0,
         type: InvoiceType.DAILY_BILLING,
         status: PaymentStatus.PENDING,
         qrCodeData: '',
         dueDate: periodEnd,
         paidAt: null,
-        extensionDays: expiredPayment.daysCount,
+        extensionDays: 0,
         dokuPaymentUrl: null,
         dokuReferenceId: null,
         dailyRate: contract.dailyRate,
-        daysCount: expiredPayment.daysCount!,
+        daysCount: 0,
         periodStart: expiredPayment.periodStart!,
         periodEnd,
         expiredAt: null,
@@ -305,27 +451,13 @@ export class PaymentService {
         createdAt: new Date(),
         updatedAt: new Date(),
       };
-
       return this.invoiceRepo.create(newPayment);
     }
 
-    // Recalculate ALL unpaid working days from contract.endDate+1 to today
-    // This handles multi-day gaps correctly (e.g., server downtime)
-    const endDate = new Date(contract.endDate);
-    endDate.setHours(0, 0, 0, 0);
-    const firstUnpaidDay = new Date(endDate.getTime() + 86400000);
-    firstUnpaidDay.setHours(0, 0, 0, 0);
-
-    let workingDays = 0;
-    const cursor = new Date(firstUnpaidDay);
-    while (cursor <= today) {
-      if (!this.isLiburBayar(contract, cursor)) workingDays++;
-      cursor.setDate(cursor.getDate() + 1);
-    }
-
-    const newAmount = workingDays * contract.dailyRate;
-
-    const periodEnd = new Date(today);
+    const totalAmount = unpaidDays.reduce((sum, pd) => sum + pd.amount, 0);
+    const periodStart = new Date(unpaidDays[0].date);
+    periodStart.setHours(0, 0, 0, 0);
+    const periodEnd = new Date(unpaidDays[unpaidDays.length - 1].date);
     periodEnd.setHours(23, 59, 59, 999);
 
     const newPayment: Invoice = {
@@ -333,19 +465,19 @@ export class PaymentService {
       invoiceNumber: await this.generatePaymentNumber(),
       contractId: contract.id,
       customerId: contract.customerId,
-      amount: newAmount,
+      amount: totalAmount,
       lateFee: 0,
       type: InvoiceType.DAILY_BILLING,
       status: PaymentStatus.PENDING,
       qrCodeData: '',
       dueDate: periodEnd,
       paidAt: null,
-      extensionDays: workingDays,
+      extensionDays: unpaidDays.length,
       dokuPaymentUrl: null,
       dokuReferenceId: null,
       dailyRate: contract.dailyRate,
-      daysCount: workingDays,
-      periodStart: new Date(firstUnpaidDay),
+      daysCount: unpaidDays.length,
+      periodStart,
       periodEnd,
       expiredAt: null,
       previousPaymentId: null,
@@ -354,7 +486,17 @@ export class PaymentService {
       updatedAt: new Date(),
     };
 
-    return this.invoiceRepo.create(newPayment);
+    const created = await this.invoiceRepo.create(newPayment);
+
+    // Link all UNPAID days to new payment
+    for (const pd of unpaidDays) {
+      await this.paymentDayRepo.update(pd.id, {
+        status: PaymentDayStatus.PENDING,
+        paymentId: created.id,
+      });
+    }
+
+    return created;
   }
 
   // ============ Pay / Mark Paid ============
@@ -383,12 +525,17 @@ export class PaymentService {
     });
     if (!updated) throw new Error('Failed to update payment');
 
+    // Update PaymentDay records → PAID
+    if (payment.type === InvoiceType.DAILY_BILLING || payment.type === InvoiceType.MANUAL_PAYMENT) {
+      await this.paymentDayRepo.updateManyByPaymentId(payment.id, {
+        status: PaymentDayStatus.PAID,
+      });
+    }
+
     // Credit days to contract
     if (payment.type === InvoiceType.DAILY_BILLING || payment.type === InvoiceType.MANUAL_PAYMENT) {
-      const days = payment.daysCount || payment.extensionDays || 0;
-      if (days > 0) {
-        await this.creditDayToContract(contract, days, false);
-      }
+      // Recalculate contract from PaymentDay data (replaces manual creditDayToContract)
+      await this.syncContractFromPaymentDays(payment.contractId);
     } else {
       // DP / DP_INSTALLMENT
       await this.applyDPPayment(payment, contract);
@@ -480,63 +627,69 @@ export class PaymentService {
     }
     if (!contract.billingStartDate) throw new Error('Billing has not started yet');
 
-    const amount = days * contract.dailyRate;
+    const today = getWibToday();
 
-    const periodStart = new Date(contract.endDate);
-    periodStart.setDate(periodStart.getDate() + 1);
-    periodStart.setHours(0, 0, 0, 0);
-
-    // Advance by N working days (skipping Libur Bayar)
-    let remaining = days;
-    const cursor = new Date(periodStart);
-    while (remaining > 0) {
-      if (!this.isLiburBayar(contract, cursor)) {
-        remaining--;
-        if (remaining > 0) cursor.setDate(cursor.getDate() + 1);
-      } else {
-        cursor.setDate(cursor.getDate() + 1);
-      }
-    }
-    const periodEnd = new Date(cursor);
-    periodEnd.setHours(23, 59, 59, 999);
+    // Ensure PaymentDay records exist from billingStartDate to today + 7 days
+    const billingStart = new Date(contract.billingStartDate);
+    billingStart.setHours(0, 0, 0, 0);
+    const futureEnd = new Date(today);
+    futureEnd.setDate(futureEnd.getDate() + 7);
+    const totalDaysToGenerate = Math.floor((futureEnd.getTime() - billingStart.getTime()) / 86400000) + 1;
+    await this.generatePaymentDaysForPeriod(contract, billingStart, totalDaysToGenerate);
 
     // Check for existing active payment
     const existingActive = await this.invoiceRepo.findActiveByContractId(contractId);
     let previousPaymentId: string | null = null;
-    let mergedAmount = amount;
-    let mergedDaysCount = days;
-    let mergedPeriodStart = periodStart;
+    let existingDaysCount = 0;
 
     if (existingActive) {
-      // Cancel existing active payment
+      existingDaysCount = existingActive.daysCount || 0;
+
+      // Void existing active payment and unlink its PaymentDays → UNPAID
       await this.invoiceRepo.update(existingActive.id, {
         status: PaymentStatus.VOID,
       });
+      await this.paymentDayRepo.updateManyByPaymentId(existingActive.id, {
+        status: PaymentDayStatus.UNPAID,
+        paymentId: null,
+      });
 
-      mergedAmount = existingActive.amount + amount;
-      mergedDaysCount = (existingActive.daysCount || 0) + days;
-      mergedPeriodStart = new Date(existingActive.periodStart!);
       previousPaymentId = existingActive.id;
     }
+
+    // FIFO: query ALL UNPAID working days, sorted by date ASC (oldest first)
+    const allUnpaid = await this.paymentDayRepo.findByContractAndStatus(contract.id, PaymentDayStatus.UNPAID);
+    const unpaidWorkingDays = allUnpaid.filter(pd => pd.amount > 0); // exclude holidays (amount=0)
+
+    const totalDaysNeeded = existingDaysCount + days;
+    const selectedDays = unpaidWorkingDays.slice(0, totalDaysNeeded);
+
+    if (selectedDays.length === 0) throw new Error('No unpaid days available');
+
+    const totalAmount = selectedDays.reduce((sum, pd) => sum + pd.amount, 0);
+    const periodStart = new Date(selectedDays[0].date);
+    periodStart.setHours(0, 0, 0, 0);
+    const periodEnd = new Date(selectedDays[selectedDays.length - 1].date);
+    periodEnd.setHours(23, 59, 59, 999);
 
     const payment: Invoice = {
       id: uuidv4(),
       invoiceNumber: await this.generatePaymentNumber(),
       contractId: contract.id,
       customerId: contract.customerId,
-      amount: mergedAmount,
+      amount: totalAmount,
       lateFee: 0,
       type: InvoiceType.MANUAL_PAYMENT,
       status: PaymentStatus.PENDING,
       qrCodeData: '',
       dueDate: periodEnd,
       paidAt: null,
-      extensionDays: mergedDaysCount,
+      extensionDays: selectedDays.length,
       dokuPaymentUrl: null,
       dokuReferenceId: null,
       dailyRate: contract.dailyRate,
-      daysCount: mergedDaysCount,
-      periodStart: mergedPeriodStart,
+      daysCount: selectedDays.length,
+      periodStart,
       periodEnd,
       expiredAt: null,
       previousPaymentId,
@@ -547,17 +700,25 @@ export class PaymentService {
 
     const created = await this.invoiceRepo.create(payment);
 
+    // Link selected UNPAID days to new payment → PENDING
+    for (const pd of selectedDays) {
+      await this.paymentDayRepo.update(pd.id, {
+        status: PaymentDayStatus.PENDING,
+        paymentId: created.id,
+      });
+    }
+
     await this.auditRepo.create({
       id: uuidv4(),
       userId: adminId,
       action: AuditAction.CREATE,
       module: 'payment',
       entityId: created.id,
-      description: `Manual payment created: ${days} days, Rp ${amount.toLocaleString('id-ID')}${existingActive ? ` (merged with ${existingActive.invoiceNumber})` : ''}`,
+      description: `Manual payment created: ${days} days, Rp ${(days * contract.dailyRate).toLocaleString('id-ID')}${existingActive ? ` (merged with ${existingActive.invoiceNumber}, total ${selectedDays.length} days)` : ''}`,
       metadata: {
         paymentNumber: created.invoiceNumber,
         days,
-        amount: mergedAmount,
+        amount: totalAmount,
         contractId,
         previousPaymentId,
       },
@@ -579,6 +740,12 @@ export class PaymentService {
       status: PaymentStatus.VOID,
     });
 
+    // Kembalikan PaymentDay ke UNPAID
+    await this.paymentDayRepo.updateManyByPaymentId(paymentId, {
+      status: PaymentDayStatus.UNPAID,
+      paymentId: null,
+    });
+
     // If merged payment, reactivate the previous one
     if (payment.previousPaymentId) {
       const previous = await this.invoiceRepo.findById(payment.previousPaymentId);
@@ -586,6 +753,26 @@ export class PaymentService {
         await this.invoiceRepo.update(previous.id, {
           status: PaymentStatus.PENDING,
         });
+
+        // Re-link PaymentDay to reactivated previous payment
+        if (previous.periodStart && previous.periodEnd) {
+          const prevContract = await this.contractRepo.findById(payment.contractId);
+          if (prevContract) {
+            const d = new Date(previous.periodStart);
+            d.setHours(0, 0, 0, 0);
+            const end = new Date(previous.periodEnd);
+            end.setHours(0, 0, 0, 0);
+            while (d <= end) {
+              if (!this.isLiburBayar(prevContract, d)) {
+                await this.paymentDayRepo.updateByContractAndDate(payment.contractId, new Date(d), {
+                  status: PaymentDayStatus.PENDING,
+                  paymentId: previous.id,
+                });
+              }
+              d.setDate(d.getDate() + 1);
+            }
+          }
+        }
       }
     }
 
@@ -614,89 +801,56 @@ export class PaymentService {
     const contract = await this.contractRepo.findById(contractId);
     if (!contract) throw new Error('Contract not found');
 
-    const payments = await this.invoiceRepo.findByContractId(contractId);
-    // Filter to daily billing / manual payments only (for calendar)
-    const billingPayments = payments.filter(p =>
-      p.type === InvoiceType.DAILY_BILLING || p.type === InvoiceType.MANUAL_PAYMENT
-    );
+    const startDate = new Date(year, month - 1, 1);
+    startDate.setHours(0, 0, 0, 0);
+    const endDate = new Date(year, month, 0);
+    endDate.setHours(0, 0, 0, 0);
+    const daysInMonth = endDate.getDate();
 
     const today = getWibToday();
 
-    const daysInMonth = new Date(year, month, 0).getDate();
-    const result: CalendarDay[] = [];
+    const paymentDays = await this.paymentDayRepo.findByContractAndDateRange(contractId, startDate, endDate);
 
-    const billingStart = contract.billingStartDate ? new Date(contract.billingStartDate) : null;
-    if (billingStart) billingStart.setHours(0, 0, 0, 0);
-
-    // Collect holiday dates from holiday payments (isHoliday=true or daysCount=0, PAID)
-    const holidayDates = new Set<string>();
-    billingPayments.filter(p => (p.isHoliday || p.daysCount === 0) && p.status === PaymentStatus.PAID).forEach(p => {
-      if (p.periodStart) {
-        const d = new Date(p.periodStart);
-        holidayDates.add(toDateKey(d));
-      }
+    const dayMap = new Map<string, PaymentDay>();
+    paymentDays.forEach(pd => {
+      dayMap.set(toDateKey(pd.date), pd);
     });
 
-    let coveredEndDate: Date | null = null;
-    if (billingStart && contract.totalDaysPaid > 0) {
-      coveredEndDate = new Date(contract.endDate);
-      coveredEndDate.setHours(0, 0, 0, 0);
-    }
-
-    // Find active (PENDING) billing payment
-    const activePayment = billingPayments.find(p => p.status === PaymentStatus.PENDING);
+    const result: CalendarDay[] = [];
 
     for (let d = 1; d <= daysInMonth; d++) {
       const date = new Date(year, month - 1, d);
       date.setHours(0, 0, 0, 0);
-      const dateKey = toDateKey(date);
+      const dateKeyStr = toDateKey(date);
 
-      if (!billingStart || date < billingStart) {
-        result.push({ date: dateKey, status: 'not_issued' });
+      const pd = dayMap.get(dateKeyStr);
+
+      if (!pd) {
+        result.push({ date: dateKeyStr, status: 'not_issued' });
         continue;
       }
 
-      if (coveredEndDate && date <= coveredEndDate) {
-        if (this.isLiburBayar(contract, date) || holidayDates.has(dateKey)) {
-          result.push({ date: dateKey, status: 'holiday' });
-        } else {
-          result.push({ date: dateKey, status: 'paid' });
-        }
-        continue;
+      switch (pd.status) {
+        case PaymentDayStatus.PAID:
+          result.push({ date: dateKeyStr, status: 'paid', amount: pd.amount });
+          break;
+        case PaymentDayStatus.PENDING:
+          result.push({ date: dateKeyStr, status: 'pending', amount: pd.amount });
+          break;
+        case PaymentDayStatus.HOLIDAY:
+          result.push({ date: dateKeyStr, status: 'holiday' });
+          break;
+        case PaymentDayStatus.VOIDED:
+          result.push({ date: dateKeyStr, status: 'voided' });
+          break;
+        case PaymentDayStatus.UNPAID:
+          result.push({
+            date: dateKeyStr,
+            status: date <= today ? 'overdue' : 'not_issued',
+            amount: pd.amount,
+          });
+          break;
       }
-
-      if (activePayment && activePayment.periodStart && activePayment.periodEnd) {
-        const activeStart = new Date(activePayment.periodStart);
-        activeStart.setHours(0, 0, 0, 0);
-        const activeEnd = new Date(activePayment.periodEnd);
-        activeEnd.setHours(0, 0, 0, 0);
-
-        const isInPeriod = date >= activeStart && date <= activeEnd;
-        const isToday = date.getTime() === today.getTime();
-
-        if (isInPeriod || isToday) {
-          if (this.isLiburBayar(contract, date)) {
-            result.push({ date: dateKey, status: 'holiday' });
-          } else if (date < today) {
-            result.push({ date: dateKey, status: 'overdue', amount: activePayment.amount });
-          } else {
-            result.push({ date: dateKey, status: 'pending', amount: activePayment.amount });
-          }
-          continue;
-        }
-      }
-
-      if (this.isLiburBayar(contract, date)) {
-        result.push({ date: dateKey, status: 'holiday' });
-        continue;
-      }
-
-      if (date < today) {
-        result.push({ date: dateKey, status: 'overdue' });
-        continue;
-      }
-
-      result.push({ date: dateKey, status: 'not_issued' });
     }
 
     return result;
@@ -776,15 +930,19 @@ export class PaymentService {
     if (!updated) throw new Error('Failed to update payment');
 
     if (status === PaymentStatus.PAID) {
+      // Update PaymentDay records → PAID
+      if (payment.type === InvoiceType.DAILY_BILLING || payment.type === InvoiceType.MANUAL_PAYMENT) {
+        await this.paymentDayRepo.updateManyByPaymentId(payment.id, {
+          status: PaymentDayStatus.PAID,
+        });
+      }
+
       const contract = await this.contractRepo.findById(payment.contractId);
       if (contract) {
         if (payment.type === InvoiceType.DP || payment.type === InvoiceType.DP_INSTALLMENT) {
           await this.applyDPPayment(payment, contract);
         } else {
-          const days = payment.daysCount || payment.extensionDays || 0;
-          if (days > 0) {
-            await this.creditDayToContract(contract, days, false);
-          }
+          await this.syncContractFromPaymentDays(payment.contractId);
         }
       }
     }
@@ -827,6 +985,12 @@ export class PaymentService {
 
     const updated = await this.invoiceRepo.update(paymentId, { status: PaymentStatus.VOID });
     if (!updated) throw new Error('Failed to update payment');
+
+    // Kembalikan PaymentDay ke UNPAID
+    await this.paymentDayRepo.updateManyByPaymentId(paymentId, {
+      status: PaymentDayStatus.UNPAID,
+      paymentId: null,
+    });
 
     await this.auditRepo.create({
       id: uuidv4(),
@@ -892,7 +1056,39 @@ export class PaymentService {
     const previousStatus = payment.status;
 
     if (previousStatus === PaymentStatus.PAID) {
-      await this.revertPaymentFromContract(payment);
+      // Revert PAID → PENDING: keep paymentId linked, just change status back to PENDING
+      await this.paymentDayRepo.updateManyByPaymentId(payment.id, {
+        status: PaymentDayStatus.PENDING,
+      });
+
+      // Handle DP revert separately (not tracked via PaymentDay)
+      if (payment.type === InvoiceType.DP || payment.type === InvoiceType.DP_INSTALLMENT) {
+        await this.revertPaymentFromContract(payment);
+      } else {
+        // Recalculate contract from PaymentDay data
+        await this.syncContractFromPaymentDays(payment.contractId);
+      }
+    } else if (previousStatus === PaymentStatus.VOID || previousStatus === PaymentStatus.EXPIRED) {
+      // Revert VOID/EXPIRED → PENDING: re-link UNPAID days in the payment's period range
+      if (payment.periodStart && payment.periodEnd &&
+          (payment.type === InvoiceType.DAILY_BILLING || payment.type === InvoiceType.MANUAL_PAYMENT)) {
+        const unpaidDays = await this.paymentDayRepo.findByContractAndDateRange(
+          payment.contractId,
+          new Date(payment.periodStart),
+          new Date(payment.periodEnd),
+        );
+        const daysToRelink = unpaidDays
+          .filter(pd => pd.status === PaymentDayStatus.UNPAID && pd.amount > 0);
+
+        for (const pd of daysToRelink) {
+          await this.paymentDayRepo.update(pd.id, {
+            status: PaymentDayStatus.PENDING,
+            paymentId: payment.id,
+          });
+        }
+
+        await this.syncContractFromPaymentDays(payment.contractId);
+      }
     }
 
     const updated = await this.invoiceRepo.update(paymentId, {
@@ -920,6 +1116,239 @@ export class PaymentService {
     });
 
     return updated;
+  }
+
+  // ============ Admin Correction ============
+
+  async updatePaymentDayStatus(
+    contractId: string,
+    date: Date,
+    newStatus: PaymentDayStatus,
+    adminId: string,
+    notes?: string,
+  ): Promise<PaymentDay> {
+    date.setHours(0, 0, 0, 0);
+    const pd = await this.paymentDayRepo.findByContractAndDate(contractId, date);
+    if (!pd) throw new Error('PaymentDay not found for this date');
+
+    if (pd.status === PaymentDayStatus.VOIDED) {
+      throw new Error('Cannot modify a voided day');
+    }
+
+    const updated = await this.paymentDayRepo.update(pd.id, {
+      status: newStatus,
+      notes: notes || pd.notes,
+      paymentId: newStatus === PaymentDayStatus.UNPAID ? null : pd.paymentId,
+      amount: newStatus === PaymentDayStatus.HOLIDAY ? 0 : pd.dailyRate,
+    });
+    if (!updated) throw new Error('Failed to update PaymentDay');
+
+    await this.syncContractFromPaymentDays(contractId);
+
+    await this.auditRepo.create({
+      id: uuidv4(),
+      userId: adminId,
+      action: AuditAction.UPDATE,
+      module: 'payment_day',
+      entityId: pd.id,
+      description: `Admin correction: ${pd.status} → ${newStatus} for ${toDateKey(date)}`,
+      metadata: { contractId, date: toDateKey(date), oldStatus: pd.status, newStatus, notes },
+      ipAddress: '',
+      createdAt: new Date(),
+    });
+
+    return updated;
+  }
+
+  // ============ Reduce Payment (Partial Payment) ============
+
+  async reducePayment(
+    paymentId: string,
+    newDaysCount: number,
+    adminId: string,
+    notes?: string,
+  ): Promise<Invoice> {
+    const payment = await this.invoiceRepo.findById(paymentId);
+    if (!payment) throw new Error('Payment not found');
+    if (payment.status !== PaymentStatus.PENDING) {
+      throw new Error('Can only reduce PENDING payments');
+    }
+    if (newDaysCount < 1) throw new Error('newDaysCount must be at least 1');
+    if (newDaysCount >= (payment.daysCount || 0)) {
+      throw new Error('newDaysCount must be less than current daysCount');
+    }
+
+    const contract = await this.contractRepo.findById(payment.contractId);
+    if (!contract) throw new Error('Contract not found');
+
+    // Step 1: Void invoice lama
+    await this.invoiceRepo.update(payment.id, { status: PaymentStatus.VOID });
+
+    // Unlink semua PaymentDay dari invoice lama → UNPAID
+    await this.paymentDayRepo.updateManyByPaymentId(payment.id, {
+      status: PaymentDayStatus.UNPAID,
+      paymentId: null,
+    });
+
+    // Step 2: Ambil PaymentDay UNPAID, sorted by date ascending, pilih newDaysCount hari paling awal
+    const allUnpaid = await this.paymentDayRepo.findByContractAndStatus(
+      contract.id,
+      PaymentDayStatus.UNPAID,
+    );
+    const eligibleDays = allUnpaid
+      .filter(pd => {
+        const d = new Date(pd.date);
+        d.setHours(0, 0, 0, 0);
+        return d <= getWibToday();
+      })
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      .slice(0, newDaysCount);
+
+    if (eligibleDays.length === 0) throw new Error('No eligible UNPAID days found');
+
+    const periodStart = new Date(eligibleDays[0].date);
+    const periodEnd = new Date(eligibleDays[eligibleDays.length - 1].date);
+    const totalAmount = eligibleDays.reduce((sum, pd) => sum + pd.amount, 0);
+
+    // Step 3: Buat invoice baru
+    const newPayment: Invoice = {
+      id: uuidv4(),
+      invoiceNumber: await this.generatePaymentNumber(),
+      contractId: contract.id,
+      customerId: contract.customerId,
+      amount: totalAmount,
+      lateFee: 0,
+      type: InvoiceType.DAILY_BILLING,
+      status: PaymentStatus.PENDING,
+      qrCodeData: '',
+      dueDate: new Date(periodEnd.getTime()),
+      paidAt: null,
+      extensionDays: eligibleDays.length,
+      dokuPaymentUrl: null,
+      dokuReferenceId: null,
+      dailyRate: contract.dailyRate,
+      daysCount: eligibleDays.length,
+      periodStart,
+      periodEnd,
+      expiredAt: null,
+      previousPaymentId: payment.id,
+      isHoliday: false,
+      description: `Reduced payment: ${eligibleDays.length} days (from ${payment.daysCount} days)`,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as Invoice;
+    const created = await this.invoiceRepo.create(newPayment);
+
+    // Step 4: Link PaymentDay yang ter-cover ke invoice baru → PENDING
+    for (const pd of eligibleDays) {
+      await this.paymentDayRepo.update(pd.id, {
+        status: PaymentDayStatus.PENDING,
+        paymentId: created.id,
+      });
+    }
+
+    // Audit log
+    await this.auditRepo.create({
+      id: uuidv4(),
+      userId: adminId,
+      action: AuditAction.UPDATE,
+      module: 'payment',
+      entityId: created.id,
+      description: `Reduced payment from ${payment.daysCount} days to ${eligibleDays.length} days. Old: ${payment.invoiceNumber}, New: ${created.invoiceNumber}`,
+      metadata: {
+        oldPaymentId: payment.id,
+        newPaymentId: created.id,
+        oldDaysCount: payment.daysCount,
+        newDaysCount: eligibleDays.length,
+        remainingUnpaidDays: allUnpaid.length - eligibleDays.length,
+        notes,
+      },
+      ipAddress: '',
+      createdAt: new Date(),
+    });
+
+    return created;
+  }
+
+  // ============ Data Migration ============
+
+  async migrateExistingContracts(): Promise<number> {
+    const today = getWibToday();
+    const contracts = await this.contractRepo.findAll();
+    let migrated = 0;
+
+    for (const contract of contracts) {
+      if (!contract.billingStartDate) continue;
+
+      const billingStart = new Date(contract.billingStartDate);
+      billingStart.setHours(0, 0, 0, 0);
+      const endDate = new Date(contract.endDate);
+      endDate.setHours(0, 0, 0, 0);
+
+      const targetEnd = new Date(today);
+      targetEnd.setDate(targetEnd.getDate() + 30);
+
+      let current = new Date(billingStart);
+      while (current <= targetEnd) {
+        const d = new Date(current);
+        d.setHours(0, 0, 0, 0);
+
+        const existing = await this.paymentDayRepo.findByContractAndDate(contract.id, d);
+        if (!existing) {
+          const isHoliday = this.isLiburBayar(contract, d);
+
+          let status: PaymentDayStatus;
+          if (isHoliday) {
+            status = PaymentDayStatus.HOLIDAY;
+          } else if (d <= endDate && contract.totalDaysPaid > 0) {
+            status = PaymentDayStatus.PAID;
+          } else {
+            status = PaymentDayStatus.UNPAID;
+          }
+
+          // Check PENDING
+          if (status === PaymentDayStatus.UNPAID) {
+            const activePayment = await this.invoiceRepo.findActiveByContractId(contract.id);
+            if (activePayment && activePayment.periodStart && activePayment.periodEnd) {
+              const ps = new Date(activePayment.periodStart);
+              ps.setHours(0, 0, 0, 0);
+              const pe = new Date(activePayment.periodEnd);
+              pe.setHours(0, 0, 0, 0);
+              if (d >= ps && d <= pe) {
+                status = PaymentDayStatus.PENDING;
+              }
+            }
+          }
+
+          await this.paymentDayRepo.create({
+            id: uuidv4(),
+            contractId: contract.id,
+            date: d,
+            status,
+            paymentId: null,
+            dailyRate: contract.dailyRate,
+            amount: isHoliday ? 0 : contract.dailyRate,
+            notes: status === PaymentDayStatus.PAID ? 'Migrated from legacy data' : null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          });
+        }
+
+        current.setDate(current.getDate() + 1);
+      }
+
+      // Void future days for cancelled/repossessed contracts
+      if (contract.status === ContractStatus.CANCELLED || contract.status === ContractStatus.REPOSSESSED) {
+        const unpaidDays = await this.paymentDayRepo.findByContractAndStatus(contract.id, PaymentDayStatus.UNPAID);
+        for (const day of unpaidDays) {
+          await this.paymentDayRepo.update(day.id, { status: PaymentDayStatus.VOIDED });
+        }
+      }
+
+      migrated++;
+    }
+
+    return migrated;
   }
 
   // ============ Stats ============
@@ -957,8 +1386,4 @@ export class PaymentService {
 
     return { success, failed };
   }
-}
-
-function toDateKey(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
