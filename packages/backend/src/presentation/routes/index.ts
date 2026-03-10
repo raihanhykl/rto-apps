@@ -7,6 +7,7 @@ import { DashboardController } from '../controllers/DashboardController';
 import { ReportController } from '../controllers/ReportController';
 import { AuditController } from '../controllers/AuditController';
 import { SettingController } from '../controllers/SettingController';
+import { SavingController } from '../controllers/SavingController';
 
 interface RouteControllers {
   authController: AuthController;
@@ -17,6 +18,7 @@ interface RouteControllers {
   reportController: ReportController;
   auditController: AuditController;
   settingController: SettingController;
+  savingController: SavingController;
   authMiddleware: any;
 }
 
@@ -91,6 +93,14 @@ export function createRoutes(controllers: RouteControllers): Router {
     res.json(MOTOR_DAILY_RATES);
   });
   router.put('/settings', authMiddleware, controllers.settingController.update);
+
+  // Saving
+  router.get('/savings/contract/:contractId', authMiddleware, controllers.savingController.getByContractId);
+  router.get('/savings/contract/:contractId/balance', authMiddleware, controllers.savingController.getBalance);
+  router.post('/savings/contract/:contractId/debit/service', authMiddleware, controllers.savingController.debitForService);
+  router.post('/savings/contract/:contractId/debit/transfer', authMiddleware, controllers.savingController.debitForTransfer);
+  router.post('/savings/contract/:contractId/claim', authMiddleware, controllers.savingController.claimSaving);
+  router.post('/savings/contract/:contractId/recalculate', authMiddleware, controllers.savingController.recalculateBalance);
 
   return router;
 }

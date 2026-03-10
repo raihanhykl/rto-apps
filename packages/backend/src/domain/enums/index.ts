@@ -94,6 +94,16 @@ export enum PaymentDayStatus {
   VOIDED = 'VOIDED',
 }
 
+export enum SavingTransactionType {
+  CREDIT = 'CREDIT',
+  DEBIT_SERVICE = 'DEBIT_SERVICE',
+  DEBIT_TRANSFER = 'DEBIT_TRANSFER',
+  DEBIT_CLAIM = 'DEBIT_CLAIM',
+  REVERSAL = 'REVERSAL',
+}
+
+export const SAVING_PER_DAY = 5000; // Rp 5.000 per hari kerja
+
 export const VALID_STATUS_TRANSITIONS: Record<ContractStatus, ContractStatus[]> = {
   [ContractStatus.ACTIVE]: [ContractStatus.OVERDUE, ContractStatus.COMPLETED, ContractStatus.CANCELLED, ContractStatus.REPOSSESSED],
   [ContractStatus.OVERDUE]: [ContractStatus.ACTIVE, ContractStatus.COMPLETED, ContractStatus.CANCELLED, ContractStatus.REPOSSESSED],

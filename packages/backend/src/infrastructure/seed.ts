@@ -209,6 +209,7 @@ export async function seedDummyData(
       holidayDaysPaid: actualTotalDaysPaid - workingCount,
       ownershipProgress: progress,
       gracePeriodDays: DEFAULT_GRACE_PERIOD_DAYS,
+      savingBalance: 0,
       repossessedAt: scenario.status === ContractStatus.REPOSSESSED ? daysAgo(5) : null,
       completedAt: null,
       isDeleted: false,

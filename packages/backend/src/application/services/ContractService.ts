@@ -135,6 +135,7 @@ export class ContractService {
       holidayDaysPaid: 0,
       ownershipProgress: 0,
       gracePeriodDays,
+      savingBalance: 0,
       repossessedAt: null,
       completedAt: null,
       isDeleted: false,

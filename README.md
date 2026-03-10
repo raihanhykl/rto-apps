@@ -219,6 +219,16 @@ cd packages/frontend && npm run build
 | GET | /api/settings/rates | Get motor daily rates |
 | GET | /api/audit-logs | Get audit logs (paginated) |
 
+### Saving (Tabungan per Kontrak)
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | /api/savings/contract/:contractId | Get saving data (balance + transactions) |
+| GET | /api/savings/contract/:contractId/balance | Get saving balance only |
+| POST | /api/savings/contract/:contractId/debit-service | Debit saving untuk biaya servis motor |
+| POST | /api/savings/contract/:contractId/debit-transfer | Debit saving untuk biaya balik nama STNK/BPKB |
+| POST | /api/savings/contract/:contractId/claim | Claim sisa saving oleh customer |
+| POST | /api/savings/contract/:contractId/recalculate | Recalculate saving balance dari transaksi |
+
 ### Webhook
 | Method | Path | Description |
 |--------|------|-------------|

@@ -50,6 +50,14 @@ export enum PaymentDayStatus {
   VOIDED = 'VOIDED',
 }
 
+export enum SavingTransactionType {
+  CREDIT = 'CREDIT',
+  DEBIT_SERVICE = 'DEBIT_SERVICE',
+  DEBIT_TRANSFER = 'DEBIT_TRANSFER',
+  DEBIT_CLAIM = 'DEBIT_CLAIM',
+  REVERSAL = 'REVERSAL',
+}
+
 export const MOTOR_DAILY_RATES: Record<string, number> = {
   'ATHENA_REGULAR': 58000,
   'ATHENA_EXTENDED': 63000,
@@ -145,6 +153,7 @@ export interface Contract {
   holidayDaysPaid: number;
   ownershipProgress: number;
   gracePeriodDays: number;
+  savingBalance: number;
   repossessedAt: string | null;
   completedAt: string | null;
   isDeleted: boolean;
@@ -179,6 +188,27 @@ export interface Invoice {
   isHoliday: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface SavingTransaction {
+  id: string;
+  contractId: string;
+  type: SavingTransactionType;
+  amount: number;
+  balanceBefore: number;
+  balanceAfter: number;
+  paymentId: string | null;
+  daysCount: number | null;
+  description: string | null;
+  photo: string | null;
+  createdBy: string;
+  notes: string | null;
+  createdAt: string;
+}
+
+export interface SavingData {
+  balance: number;
+  transactions: SavingTransaction[];
 }
 
 export interface ReportData {

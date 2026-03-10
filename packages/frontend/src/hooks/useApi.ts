@@ -184,6 +184,23 @@ export function useMotorRates() {
   });
 }
 
+// --- Saving ---
+export function useSavingByContract(contractId: string | undefined) {
+  return useSWR(
+    contractId ? `/savings/contract/${contractId}` : null,
+    () => api.getSavingByContract(contractId!),
+    { dedupingInterval: TTL.SHORT }
+  );
+}
+
+export function useSavingBalance(contractId: string | undefined) {
+  return useSWR(
+    contractId ? `/savings/contract/${contractId}/balance` : null,
+    () => api.getSavingBalance(contractId!),
+    { dedupingInterval: TTL.SHORT }
+  );
+}
+
 // ===================== INVALIDATION =====================
 
 export function useInvalidate() {

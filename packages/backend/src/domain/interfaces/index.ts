@@ -6,3 +6,4 @@ export type { IAuditLogRepository } from './IAuditLogRepository';
 export type { ISettingRepository } from './ISettingRepository';
 export type { PaginationParams, PaginatedResult } from './Pagination';
 export type { IPaymentDayRepository } from './IPaymentDayRepository';
+export type { ISavingTransactionRepository } from './ISavingTransactionRepository';
