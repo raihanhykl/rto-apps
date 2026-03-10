@@ -93,3 +93,18 @@ export const UpdateSettingDto = z.object({
   description: z.string().optional().default(''),
 });
 export type UpdateSettingDto = z.infer<typeof UpdateSettingDto>;
+
+// Saving DTOs
+export const DebitSavingDto = z.object({
+  amount: z.number().int().positive('Nominal harus lebih dari 0'),
+  description: z.string().min(1, 'Deskripsi wajib diisi'),
+  photo: z.string().optional().nullable().default(null),
+  notes: z.string().optional().nullable().default(null),
+});
+export type DebitSavingDto = z.infer<typeof DebitSavingDto>;
+
+export const ClaimSavingDto = z.object({
+  amount: z.number().int().positive('Nominal harus lebih dari 0').optional(),  // Jika tidak diisi = claim semua sisa
+  notes: z.string().optional().nullable().default(null),
+});
+export type ClaimSavingDto = z.infer<typeof ClaimSavingDto>;

@@ -14,8 +14,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { api } from "@/lib/api";
-import { useContractDetail, usePaymentsByContract, useActivePayment, useInvalidate } from "@/hooks/useApi";
-import { Contract, Customer, Invoice } from "@/types";
+import { useContractDetail, usePaymentsByContract, useActivePayment, useSavingByContract, useInvalidate } from "@/hooks/useApi";
+import { Contract, Customer, Invoice, SavingTransactionType } from "@/types";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -44,6 +44,7 @@ import {
   Undo2,
   ChevronDown,
   ChevronUp,
+  Wallet,
 } from "lucide-react";
 import {
   Dialog,
@@ -127,6 +128,7 @@ export default function ContractDetailPage() {
   const { data: detailData, isLoading: detailLoading } = useContractDetail(id);
   const { data: paymentsData } = usePaymentsByContract(id);
   const { data: activePaymentData } = useActivePayment(id);
+  const { data: savingData, mutate: mutateSaving } = useSavingByContract(id);
 
   const contract = (detailData as any)?.contract as Contract | undefined ?? null;
   const customer = (detailData as any)?.customer as Customer | undefined ?? null;
@@ -136,7 +138,86 @@ export default function ContractDetailPage() {
   const loading = detailLoading;
 
   const refreshAll = () => {
-    invalidate("/contracts", "/payments", "/dashboard");
+    invalidate("/contracts", "/payments", "/dashboard", "/savings");
+  };
+
+  const savingTransactions = (savingData as any)?.transactions || [];
+  const SAVING_PAGE_SIZE = 5;
+
+  const getSavingTypeLabel = (type: string) => {
+    switch (type) {
+      case "CREDIT": return "Masuk";
+      case "DEBIT_SERVICE": return "Servis Motor";
+      case "DEBIT_TRANSFER": return "Balik Nama";
+      case "DEBIT_CLAIM": return "Claim";
+      case "REVERSAL": return "Pembalikan";
+      default: return type;
+    }
+  };
+
+  const getSavingTypeBadge = (type: string) => {
+    switch (type) {
+      case "CREDIT": return "default";
+      case "DEBIT_SERVICE": return "destructive";
+      case "DEBIT_TRANSFER": return "destructive";
+      case "DEBIT_CLAIM": return "warning";
+      case "REVERSAL": return "secondary";
+      default: return "outline";
+    }
+  };
+
+  const handleDebitSaving = async (debitType: "service" | "transfer") => {
+    if (!contract) return;
+    const amt = parseInt(savingAmount);
+    if (!amt || amt <= 0 || !savingDescription.trim()) {
+      toastError("Gagal", "Nominal dan deskripsi wajib diisi.");
+      return;
+    }
+    setProcessing(true);
+    try {
+      const fn = debitType === "service" ? api.debitSavingForService : api.debitSavingForTransfer;
+      await fn.call(api, contract.id, {
+        amount: amt,
+        description: savingDescription,
+        photo: savingPhoto || undefined,
+        notes: savingNotes || undefined,
+      });
+      toastSuccess("Berhasil", `Saving berhasil digunakan untuk ${debitType === "service" ? "servis" : "balik nama"}.`);
+      setServiceDialogOpen(false);
+      setTransferDialogOpen(false);
+      setSavingAmount("");
+      setSavingDescription("");
+      setSavingPhoto("");
+      setSavingNotes("");
+      mutateSaving();
+      refreshAll();
+    } catch (error: any) {
+      toastError("Gagal", error?.message || "Gagal menggunakan saving.");
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleClaimSaving = async () => {
+    if (!contract) return;
+    setProcessing(true);
+    try {
+      const amt = claimAmount ? parseInt(claimAmount) : undefined;
+      await api.claimSaving(contract.id, {
+        amount: amt,
+        notes: claimNotes || undefined,
+      });
+      toastSuccess("Berhasil", "Saving berhasil di-claim.");
+      setClaimDialogOpen(false);
+      setClaimAmount("");
+      setClaimNotes("");
+      mutateSaving();
+      refreshAll();
+    } catch (error: any) {
+      toastError("Gagal", error?.message || "Gagal claim saving.");
+    } finally {
+      setProcessing(false);
+    }
   };
 
   const [processing, setProcessing] = useState(false);
@@ -165,6 +246,21 @@ export default function ContractDetailPage() {
   const [receiveUnitDialogOpen, setReceiveUnitDialogOpen] = useState(false);
   const [bastPhoto, setBastPhoto] = useState("");
   const [bastNotes, setBastNotes] = useState("");
+
+  // Saving dialogs
+  const [savingOpen, setSavingOpen] = useState(false);
+  const [serviceDialogOpen, setServiceDialogOpen] = useState(false);
+  const [transferDialogOpen, setTransferDialogOpen] = useState(false);
+  const [claimDialogOpen, setClaimDialogOpen] = useState(false);
+  const [savingAmount, setSavingAmount] = useState("");
+  const [savingDescription, setSavingDescription] = useState("");
+  const [savingPhoto, setSavingPhoto] = useState("");
+  const [savingNotes, setSavingNotes] = useState("");
+  const [claimAmount, setClaimAmount] = useState("");
+  const [claimNotes, setClaimNotes] = useState("");
+  const [savingPage, setSavingPage] = useState(1);
+  const savingTotalPages = Math.ceil(savingTransactions.length / SAVING_PAGE_SIZE);
+  const savingSlice = savingTransactions.slice((savingPage - 1) * SAVING_PAGE_SIZE, savingPage * SAVING_PAGE_SIZE);
 
   // Collapsible sections
   const [timelineOpen, setTimelineOpen] = useState(false);
@@ -564,6 +660,10 @@ export default function ContractDetailPage() {
                 <p className="text-xs text-muted-foreground">Total Bayar</p>
                 <p className="font-bold text-lg">{formatCurrency(contract.totalAmount)}</p>
               </div>
+              <div className="px-4 py-2 rounded-lg bg-white/60 dark:bg-gray-900/40">
+                <p className="text-xs text-muted-foreground">Saving</p>
+                <p className="font-bold text-lg">{formatCurrency(contract.savingBalance)}</p>
+              </div>
             </div>
           </div>
         </CardContent>
@@ -639,6 +739,89 @@ export default function ContractDetailPage() {
             )}
           </div>
         </CardContent>
+      </Card>
+
+      {/* Saving */}
+      <Card>
+        <CardHeader className="cursor-pointer" onClick={() => setSavingOpen(!savingOpen)}>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Wallet className="h-5 w-5" /> Dana Sisihan (Saving)
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-primary">{formatCurrency(contract.savingBalance)}</span>
+              {contract.status === "COMPLETED" && contract.savingBalance > 0 && (
+                <Badge variant="default">Bisa Claim</Badge>
+              )}
+              {(contract.status === "CANCELLED" || contract.status === "REPOSSESSED") && (
+                <Badge variant="secondary">Tidak Dapat Di-claim</Badge>
+              )}
+              {savingOpen ? <ChevronUp className="h-5 w-5 text-muted-foreground" /> : <ChevronDown className="h-5 w-5 text-muted-foreground" />}
+            </div>
+          </div>
+        </CardHeader>
+        {savingOpen && (
+          <CardContent>
+            <div className="space-y-4">
+              {/* Action Buttons */}
+              <div className="flex flex-wrap gap-2">
+                {(contract.status === "ACTIVE" || contract.status === "OVERDUE" || contract.status === "COMPLETED") && contract.savingBalance > 0 && (
+                  <Button variant="outline" size="sm" onClick={() => setServiceDialogOpen(true)}>
+                    <Zap className="h-4 w-4 mr-2" /> Gunakan untuk Servis
+                  </Button>
+                )}
+                {contract.status === "COMPLETED" && contract.savingBalance > 0 && (
+                  <>
+                    <Button variant="outline" size="sm" onClick={() => setTransferDialogOpen(true)}>
+                      <RefreshCw className="h-4 w-4 mr-2" /> Gunakan untuk Balik Nama
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setClaimDialogOpen(true)}>
+                      <FileDown className="h-4 w-4 mr-2" /> Claim Saving
+                    </Button>
+                  </>
+                )}
+              </div>
+
+              {/* Transaction History */}
+              {savingTransactions.length > 0 ? (
+                <div className="border-t pt-4">
+                  <p className="text-sm font-semibold mb-3">Riwayat Transaksi Saving ({savingTransactions.length})</p>
+                  <div className="space-y-2">
+                    {savingSlice.map((tx: any) => (
+                      <div key={tx.id} className="flex items-center justify-between text-sm p-3 border rounded-lg">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Badge variant={getSavingTypeBadge(tx.type) as any}>
+                              {getSavingTypeLabel(tx.type)}
+                            </Badge>
+                            {tx.daysCount && <span className="text-xs text-muted-foreground">({tx.daysCount} hari)</span>}
+                          </div>
+                          <p className="text-xs text-muted-foreground">{formatDateTime(tx.createdAt)}</p>
+                          {tx.description && <p className="text-xs mt-1">{tx.description}</p>}
+                        </div>
+                        <div className="text-right">
+                          <p className={`font-bold ${tx.type === "CREDIT" ? "text-green-600" : "text-red-600"}`}>
+                            {tx.type === "CREDIT" ? "+" : "-"} {formatCurrency(tx.amount)}
+                          </p>
+                          <p className="text-xs text-muted-foreground">Saldo: {formatCurrency(tx.balanceAfter)}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {savingTotalPages > 1 && (
+                    <div className="flex items-center justify-center gap-2 mt-3 pt-3 border-t">
+                      <Button variant="outline" size="sm" disabled={savingPage <= 1} onClick={() => setSavingPage(savingPage - 1)}>Sebelumnya</Button>
+                      <span className="text-xs text-muted-foreground">{savingPage} / {savingTotalPages}</span>
+                      <Button variant="outline" size="sm" disabled={savingPage >= savingTotalPages} onClick={() => setSavingPage(savingPage + 1)}>Selanjutnya</Button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-muted-foreground text-sm text-center py-4 border-t">Belum ada riwayat saving.</p>
+              )}
+            </div>
+          </CardContent>
+        )}
       </Card>
 
       {/* Active Payment */}
@@ -1554,6 +1737,121 @@ export default function ContractDetailPage() {
             <Button variant="outline" onClick={() => { setRevertDialogOpen(false); setRevertTarget(null); }}>Batal</Button>
             <Button variant="destructive" onClick={handleRevertInvoice} disabled={processing}>
               {processing ? "Memproses..." : "Ya, Revert"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Debit Servis */}
+      <Dialog open={serviceDialogOpen} onOpenChange={setServiceDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Gunakan Saving untuk Servis Motor</DialogTitle>
+            <DialogDescription>
+              Saldo saat ini: {contract ? formatCurrency(contract.savingBalance) : "-"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Nominal *</Label>
+              <Input type="number" placeholder="Masukkan nominal" value={savingAmount} onChange={(e) => setSavingAmount(e.target.value)} />
+            </div>
+            <div>
+              <Label>Deskripsi *</Label>
+              <Input placeholder="Contoh: Service rem depan + ganti kampas" value={savingDescription} onChange={(e) => setSavingDescription(e.target.value)} />
+            </div>
+            <div>
+              <Label>Foto Bukti</Label>
+              <Input placeholder="URL foto nota servis" value={savingPhoto} onChange={(e) => setSavingPhoto(e.target.value)} />
+            </div>
+            <div>
+              <Label>Catatan</Label>
+              <Textarea placeholder="Catatan tambahan (opsional)" value={savingNotes} onChange={(e) => setSavingNotes(e.target.value)} />
+            </div>
+            {savingAmount && parseInt(savingAmount) > 0 && contract && (
+              <div className="bg-muted/50 rounded-lg p-3 text-sm space-y-1">
+                <p>Saldo saat ini: <strong>{formatCurrency(contract.savingBalance)}</strong></p>
+                <p>Akan digunakan: <strong>{formatCurrency(parseInt(savingAmount))}</strong></p>
+                <p>Sisa setelah: <strong>{formatCurrency(Math.max(0, contract.savingBalance - parseInt(savingAmount)))}</strong></p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setServiceDialogOpen(false); setSavingAmount(""); setSavingDescription(""); setSavingPhoto(""); setSavingNotes(""); }}>Batal</Button>
+            <Button onClick={() => handleDebitSaving("service")} disabled={processing}>
+              {processing ? "Memproses..." : "Konfirmasi"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Debit Balik Nama */}
+      <Dialog open={transferDialogOpen} onOpenChange={setTransferDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Gunakan Saving untuk Balik Nama</DialogTitle>
+            <DialogDescription>
+              Saldo saat ini: {contract ? formatCurrency(contract.savingBalance) : "-"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Nominal *</Label>
+              <Input type="number" placeholder="Masukkan nominal" value={savingAmount} onChange={(e) => setSavingAmount(e.target.value)} />
+            </div>
+            <div>
+              <Label>Deskripsi *</Label>
+              <Input placeholder="Contoh: Biaya balik nama STNK + BPKB" value={savingDescription} onChange={(e) => setSavingDescription(e.target.value)} />
+            </div>
+            <div>
+              <Label>Foto Bukti</Label>
+              <Input placeholder="URL foto kwitansi" value={savingPhoto} onChange={(e) => setSavingPhoto(e.target.value)} />
+            </div>
+            <div>
+              <Label>Catatan</Label>
+              <Textarea placeholder="Catatan tambahan (opsional)" value={savingNotes} onChange={(e) => setSavingNotes(e.target.value)} />
+            </div>
+            {savingAmount && parseInt(savingAmount) > 0 && contract && (
+              <div className="bg-muted/50 rounded-lg p-3 text-sm space-y-1">
+                <p>Saldo saat ini: <strong>{formatCurrency(contract.savingBalance)}</strong></p>
+                <p>Akan digunakan: <strong>{formatCurrency(parseInt(savingAmount))}</strong></p>
+                <p>Sisa setelah: <strong>{formatCurrency(Math.max(0, contract.savingBalance - parseInt(savingAmount)))}</strong></p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setTransferDialogOpen(false); setSavingAmount(""); setSavingDescription(""); setSavingPhoto(""); setSavingNotes(""); }}>Batal</Button>
+            <Button onClick={() => handleDebitSaving("transfer")} disabled={processing}>
+              {processing ? "Memproses..." : "Konfirmasi"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Claim Saving */}
+      <Dialog open={claimDialogOpen} onOpenChange={setClaimDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Claim Sisa Saving</DialogTitle>
+            <DialogDescription>
+              Saldo saat ini: {contract ? formatCurrency(contract.savingBalance) : "-"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Nominal Claim</Label>
+              <Input type="number" placeholder={contract ? `Kosongkan untuk claim semua (${formatCurrency(contract.savingBalance)})` : ""} value={claimAmount} onChange={(e) => setClaimAmount(e.target.value)} />
+              <p className="text-xs text-muted-foreground mt-1">Kosongkan untuk claim semua sisa saving.</p>
+            </div>
+            <div>
+              <Label>Catatan</Label>
+              <Textarea placeholder="Catatan tambahan (opsional)" value={claimNotes} onChange={(e) => setClaimNotes(e.target.value)} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setClaimDialogOpen(false); setClaimAmount(""); setClaimNotes(""); }}>Batal</Button>
+            <Button onClick={handleClaimSaving} disabled={processing}>
+              {processing ? "Memproses..." : "Claim"}
             </Button>
           </DialogFooter>
         </DialogContent>

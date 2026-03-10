@@ -9,6 +9,7 @@ import {
   InMemoryAuditLogRepository,
   InMemorySettingRepository,
   InMemoryPaymentDayRepository,
+  InMemorySavingTransactionRepository,
   PrismaUserRepository,
   PrismaCustomerRepository,
   PrismaContractRepository,
@@ -16,6 +17,7 @@ import {
   PrismaAuditLogRepository,
   PrismaSettingRepository,
   PrismaPaymentDayRepository,
+  PrismaSavingTransactionRepository,
 } from './infrastructure/repositories';
 import {
   AuthService,
@@ -26,6 +28,7 @@ import {
   ReportService,
   AuditService,
   SettingService,
+  SavingService,
 } from './application/services';
 import { AuthController } from './presentation/controllers/AuthController';
 import { CustomerController } from './presentation/controllers/CustomerController';
@@ -35,6 +38,7 @@ import { DashboardController } from './presentation/controllers/DashboardControl
 import { ReportController } from './presentation/controllers/ReportController';
 import { AuditController } from './presentation/controllers/AuditController';
 import { SettingController } from './presentation/controllers/SettingController';
+import { SavingController } from './presentation/controllers/SavingController';
 import { createRoutes } from './presentation/routes';
 import { createAuthMiddleware } from './infrastructure/middleware/authMiddleware';
 import { errorHandler } from './infrastructure/middleware/errorHandler';
@@ -47,6 +51,7 @@ import { IInvoiceRepository } from './domain/interfaces/IInvoiceRepository';
 import { IAuditLogRepository } from './domain/interfaces/IAuditLogRepository';
 import { ISettingRepository } from './domain/interfaces/ISettingRepository';
 import { IPaymentDayRepository } from './domain/interfaces/IPaymentDayRepository';
+import { ISavingTransactionRepository } from './domain/interfaces/ISavingTransactionRepository';
 
 async function bootstrap() {
   const app = express();
@@ -65,6 +70,7 @@ async function bootstrap() {
   let auditRepo: IAuditLogRepository;
   let settingRepo: ISettingRepository;
   let paymentDayRepo: IPaymentDayRepository;
+  let savingTxRepo: ISavingTransactionRepository;
 
   if (usePrisma) {
     const { prisma } = await import('./infrastructure/prisma/client');
@@ -78,6 +84,7 @@ async function bootstrap() {
     auditRepo = new PrismaAuditLogRepository(prisma);
     settingRepo = new PrismaSettingRepository(prisma);
     paymentDayRepo = new PrismaPaymentDayRepository(prisma);
+    savingTxRepo = new PrismaSavingTransactionRepository(prisma);
   } else {
     console.log('Using In-Memory repositories');
     userRepo = new InMemoryUserRepository();
@@ -87,6 +94,7 @@ async function bootstrap() {
     auditRepo = new InMemoryAuditLogRepository();
     settingRepo = new InMemorySettingRepository();
     paymentDayRepo = new InMemoryPaymentDayRepository();
+    savingTxRepo = new InMemorySavingTransactionRepository();
   }
 
   // Initialize Services
@@ -95,6 +103,11 @@ async function bootstrap() {
   const customerService = new CustomerService(customerRepo, auditRepo, contractRepo);
   const contractService = new ContractService(contractRepo, customerRepo, invoiceRepo, paymentDayRepo, auditRepo, settingService);
   const paymentService = new PaymentService(invoiceRepo, contractRepo, paymentDayRepo, auditRepo, settingService);
+  const savingService = new SavingService(savingTxRepo, contractRepo, invoiceRepo, auditRepo);
+
+  // Wire saving service ke payment service (setter injection)
+  paymentService.setSavingService(savingService);
+
   const dashboardService = new DashboardService(contractRepo, customerRepo, invoiceRepo, auditRepo);
   const reportService = new ReportService(contractRepo, customerRepo, invoiceRepo);
   const auditService = new AuditService(auditRepo);
@@ -124,6 +137,7 @@ async function bootstrap() {
   const reportController = new ReportController(reportService, auditRepo);
   const auditController = new AuditController(auditService);
   const settingController = new SettingController(settingService);
+  const savingController = new SavingController(savingService);
 
   // Auth Middleware
   const authMiddleware = createAuthMiddleware(authService);
@@ -138,6 +152,7 @@ async function bootstrap() {
     reportController,
     auditController,
     settingController,
+    savingController,
     authMiddleware,
   });
 

@@ -410,6 +410,42 @@ class ApiClient {
       body: JSON.stringify(data),
     });
   }
+
+  // Saving
+  async getSavingByContract(contractId: string) {
+    return this.request<{ balance: number; transactions: any[] }>(`/savings/contract/${contractId}`);
+  }
+
+  async getSavingBalance(contractId: string) {
+    return this.request<{ balance: number }>(`/savings/contract/${contractId}/balance`);
+  }
+
+  async debitSavingForService(contractId: string, data: { amount: number; description: string; photo?: string; notes?: string }) {
+    return this.request<any>(`/savings/contract/${contractId}/debit/service`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async debitSavingForTransfer(contractId: string, data: { amount: number; description: string; photo?: string; notes?: string }) {
+    return this.request<any>(`/savings/contract/${contractId}/debit/transfer`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async claimSaving(contractId: string, data?: { amount?: number; notes?: string }) {
+    return this.request<any>(`/savings/contract/${contractId}/claim`, {
+      method: 'POST',
+      body: JSON.stringify(data || {}),
+    });
+  }
+
+  async recalculateSavingBalance(contractId: string) {
+    return this.request<{ balance: number }>(`/savings/contract/${contractId}/recalculate`, {
+      method: 'POST',
+    });
+  }
 }
 
 export const api = new ApiClient();

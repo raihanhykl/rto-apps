@@ -82,6 +82,14 @@ enum PaymentDayStatus {
   VOIDED
 }
 
+enum SavingTransactionType {
+  CREDIT
+  DEBIT_SERVICE
+  DEBIT_TRANSFER
+  DEBIT_CLAIM
+  REVERSAL
+}
+
 // ============ MODELS ============
 
 model User {
@@ -169,6 +177,7 @@ model Contract {
   holidayDaysPaid     Int       @default(0) @map("holiday_days_paid")
   ownershipProgress   Float     @default(0) @map("ownership_progress")
   gracePeriodDays     Int       @default(7) @map("grace_period_days")
+  savingBalance       Int       @default(0) @map("saving_balance")
   repossessedAt       DateTime? @map("repossessed_at")
   completedAt         DateTime? @map("completed_at")
   isDeleted           Boolean   @default(false) @map("is_deleted")
@@ -176,9 +185,10 @@ model Contract {
   createdAt           DateTime  @default(now()) @map("created_at")
   updatedAt           DateTime  @updatedAt @map("updated_at")
 
-  customer    Customer     @relation(fields: [customerId], references: [id])
-  invoices    Invoice[]
-  paymentDays PaymentDay[]
+  customer           Customer             @relation(fields: [customerId], references: [id])
+  invoices           Invoice[]
+  paymentDays        PaymentDay[]
+  savingTransactions SavingTransaction[]
 
   @@index([customerId])
   @@index([status])
@@ -216,11 +226,12 @@ model Invoice {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  contract        Contract     @relation(fields: [contractId], references: [id])
-  customer        Customer     @relation(fields: [customerId], references: [id])
-  previousPayment Invoice?     @relation("PaymentChain", fields: [previousPaymentId], references: [id])
-  nextPayments    Invoice[]    @relation("PaymentChain")
-  paymentDays     PaymentDay[]
+  contract           Contract             @relation(fields: [contractId], references: [id])
+  customer           Customer             @relation(fields: [customerId], references: [id])
+  previousPayment    Invoice?             @relation("PaymentChain", fields: [previousPaymentId], references: [id])
+  nextPayments       Invoice[]            @relation("PaymentChain")
+  paymentDays        PaymentDay[]
+  savingTransactions SavingTransaction[]
 
   @@index([contractId])
   @@index([customerId])
@@ -276,4 +287,36 @@ model PaymentDay {
   @@index([paymentId])
   @@index([contractId, date])
   @@map("payment_days")
+}
+
+model SavingTransaction {
+  id            String                 @id @default(uuid())
+  contractId    String                 @map("contract_id")
+  type          SavingTransactionType
+  amount        Int                    // Selalu positif. Arah ditentukan oleh type (CREDIT=masuk, DEBIT_*=keluar, REVERSAL=keluar)
+  balanceBefore Int                    @map("balance_before")
+  balanceAfter  Int                    @map("balance_after")
+
+  // Referensi sumber transaksi
+  paymentId     String?                @map("payment_id")     // FK ke Invoice (untuk CREDIT / REVERSAL)
+  daysCount     Int?                   @map("days_count")     // Jumlah hari yang menghasilkan saving (untuk CREDIT)
+
+  // Detail transaksi (untuk DEBIT)
+  description   String?                // "Service rem + ganti kampas", "Biaya balik nama STNK", dll.
+  photo         String?                // URL foto bukti (nota servis, kwitansi, dll.)
+
+  // Admin & audit
+  createdBy     String                 @map("created_by")     // Admin user ID yang melakukan transaksi
+  notes         String?                // Catatan tambahan admin
+
+  createdAt     DateTime               @default(now()) @map("created_at")
+
+  // Relations
+  contract      Contract               @relation(fields: [contractId], references: [id])
+  payment       Invoice?               @relation(fields: [paymentId], references: [id])
+
+  @@index([contractId])
+  @@index([paymentId])
+  @@index([type])
+  @@map("saving_transactions")
 }

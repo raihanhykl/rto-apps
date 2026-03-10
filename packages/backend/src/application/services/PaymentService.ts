@@ -17,6 +17,7 @@ import {
 import { IPaymentDayRepository } from '../../domain/interfaces';
 import { getWibToday, getWibDateParts, toDateKey } from '../../domain/utils/dateUtils';
 import { SettingService } from './SettingService';
+import { SavingService } from './SavingService';
 import { v4 as uuidv4 } from 'uuid';
 import QRCode from 'qrcode';
 
@@ -29,6 +30,7 @@ export interface CalendarDay {
 export class PaymentService {
   private static paymentCounter = 0;
   private static countersInitialized = false;
+  private savingService?: SavingService;
 
   constructor(
     private invoiceRepo: IInvoiceRepository,
@@ -37,6 +39,10 @@ export class PaymentService {
     private auditRepo: IAuditLogRepository,
     private settingService?: SettingService,
   ) {}
+
+  setSavingService(savingService: SavingService): void {
+    this.savingService = savingService;
+  }
 
   private async initCounters(): Promise<void> {
     if (!PaymentService.countersInitialized) {
@@ -539,6 +545,16 @@ export class PaymentService {
     } else {
       // DP / DP_INSTALLMENT
       await this.applyDPPayment(payment, contract);
+    }
+
+    // Auto-credit saving
+    if (this.savingService && !payment.isHoliday && payment.daysCount && payment.daysCount > 0) {
+      try {
+        await this.savingService.creditFromPayment(payment.id, adminId);
+      } catch (error) {
+        console.error('Failed to credit saving:', error);
+        // Tidak throw — saving credit failure TIDAK boleh menggagalkan pembayaran
+      }
     }
 
     // Audit log
@@ -1067,6 +1083,16 @@ export class PaymentService {
       } else {
         // Recalculate contract from PaymentDay data
         await this.syncContractFromPaymentDays(payment.contractId);
+      }
+
+      // Auto-reverse saving
+      if (this.savingService) {
+        try {
+          await this.savingService.reverseCreditFromPayment(payment.id, adminId);
+        } catch (error) {
+          console.error('Failed to reverse saving:', error);
+          // Tidak throw — saving reversal failure TIDAK boleh menggagalkan revert
+        }
       }
     } else if (previousStatus === PaymentStatus.VOID || previousStatus === PaymentStatus.EXPIRED) {
       // Revert VOID/EXPIRED → PENDING: re-link UNPAID days in the payment's period range

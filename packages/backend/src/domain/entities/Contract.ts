@@ -41,6 +41,7 @@ export interface Contract {
   holidayDaysPaid: number; // holiday days credited for free (amount=0)
   ownershipProgress: number; // percentage (0-100)
   gracePeriodDays: number; // days allowed after endDate before repossession
+  savingBalance: number;
   repossessedAt: Date | null;
   completedAt: Date | null; // date when ownership was achieved
   isDeleted: boolean;

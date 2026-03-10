@@ -5,3 +5,4 @@ export type { Invoice } from './Invoice';
 export type { AuditLog } from './AuditLog';
 export type { Setting } from './Setting';
 export type { PaymentDay } from './PaymentDay';
+export type { SavingTransaction } from './SavingTransaction';

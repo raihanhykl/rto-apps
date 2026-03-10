@@ -32,6 +32,7 @@
 - [Fix: totalDaysPaid Seed Calculation (2026-03-06)](#2026-03-06---fix-totaldayspaid-seed-calculation-include-holidays)
 - [Separate workingDaysPaid & holidayDaysPaid (2026-03-06)](#2026-03-06---separate-workingdayspaid--holidaydayspaid-fields)
 - [PaymentDay: Static Per-Date Records (2026-03-09)](#2026-03-09---paymentday-static-per-date-records)
+- [Saving Feature: Dana Sisihan Per Kontrak (2026-03-10)](#2026-03-10---saving-feature-dana-sisihan-per-kontrak)
 - [Development Roadmap](#development-roadmap)
 
 ---
@@ -1167,6 +1168,95 @@ Sistem kalender pembayaran sebelumnya menghitung status per-tanggal secara **din
 - `packages/frontend/src/lib/api.ts` — 2 new API methods
 
 ### Test count: 146 tests (4 suites)
+
+---
+
+## 2026-03-10 - Saving Feature: Dana Sisihan Per Kontrak
+
+### Context
+Fitur saving otomatis menyisihkan Rp 5.000 per hari kerja dari setiap pembayaran harian customer. Dana saving disimpan per kontrak dan bisa digunakan untuk servis motor, balik nama STNK/BPKB, atau di-claim customer setelah kontrak selesai (COMPLETED).
+
+### What was built
+
+**Prisma Schema:**
+- Enum `SavingTransactionType` (CREDIT, DEBIT_SERVICE, DEBIT_TRANSFER, DEBIT_CLAIM, REVERSAL)
+- Model `SavingTransaction` (15 fields, 3 indexes: contractId, paymentId, type)
+- Field `savingBalance Int @default(0)` di Contract
+- Relasi `savingTransactions` di Contract dan Invoice
+
+**Domain Layer:**
+- Entity `SavingTransaction` (immutable — no update/delete)
+- Interface `ISavingTransactionRepository` (6 methods: findById, findByContractId, findByPaymentId, findByContractAndType, create, count)
+- Enum `SavingTransactionType` + constant `SAVING_PER_DAY = 5000`
+- Field `savingBalance` di Contract entity
+
+**Infrastructure Layer:**
+- `InMemorySavingTransactionRepository` (Map-based, untuk dev/test)
+- `PrismaSavingTransactionRepository` (PostgreSQL, untuk production)
+
+**Application Layer:**
+- `SavingService` (8 methods): creditFromPayment, reverseCreditFromPayment, debitForService, debitForTransfer, claimSaving, getBalance, getTransactionHistory, recalculateBalance
+- DTOs: `DebitSavingDto`, `ClaimSavingDto` (Zod schemas)
+- Integrasi PaymentService: auto-credit saving saat payment PAID, auto-reverse saat payment revert (try-catch — saving error tidak gagalkan payment)
+- Setter injection `setSavingService()` di PaymentService untuk hindari circular dependency
+
+**Presentation Layer:**
+- `SavingController` (6 endpoint handlers)
+- 6 API routes:
+  - `GET /api/savings/contract/:contractId` — Data saving (balance + transactions)
+  - `GET /api/savings/contract/:contractId/balance` — Balance only
+  - `POST /api/savings/contract/:contractId/debit-service` — Debit untuk servis motor
+  - `POST /api/savings/contract/:contractId/debit-transfer` — Debit untuk balik nama
+  - `POST /api/savings/contract/:contractId/claim` — Claim sisa saving
+  - `POST /api/savings/contract/:contractId/recalculate` — Recalculate balance
+
+**Frontend:**
+- Types: `SavingTransactionType` enum, `SavingTransaction` & `SavingData` interfaces
+- API client: 6 methods di `api.ts`
+- SWR hooks: `useSavingByContract`, `useSavingBalance` (TTL.SHORT)
+- Zod schemas: `debitSavingSchema`, `claimSavingSchema`
+- Contract detail page: kartu saldo saving, tombol aksi (Servis/Balik Nama/Claim), riwayat transaksi dengan pagination, 3 dialog forms
+
+**Tests:**
+- `SavingService.test.ts`: 31 test cases (credit, debit service, debit transfer, claim, reversal, history, recalculate, full flow)
+
+### Business rules
+- CREDIT hanya dari hari kerja (bukan holiday, bukan DP)
+- DEBIT_SERVICE: contract ACTIVE/OVERDUE/COMPLETED, amount ≤ savingBalance
+- DEBIT_TRANSFER: contract HARUS COMPLETED
+- DEBIT_CLAIM: contract HARUS COMPLETED (bukan CANCELLED/REPOSSESSED)
+- REVERSAL: otomatis saat payment revert, saldo tidak boleh negatif
+- `savingBalance` di Contract = denormalized (source of truth = SavingTransaction records)
+
+### Files modified
+- `packages/backend/prisma/schema.prisma`
+- `packages/backend/src/domain/enums/index.ts`
+- `packages/backend/src/domain/entities/SavingTransaction.ts` (NEW)
+- `packages/backend/src/domain/entities/Contract.ts`
+- `packages/backend/src/domain/entities/index.ts`
+- `packages/backend/src/domain/interfaces/ISavingTransactionRepository.ts` (NEW)
+- `packages/backend/src/domain/interfaces/index.ts`
+- `packages/backend/src/infrastructure/repositories/InMemorySavingTransactionRepository.ts` (NEW)
+- `packages/backend/src/infrastructure/repositories/PrismaSavingTransactionRepository.ts` (NEW)
+- `packages/backend/src/infrastructure/repositories/index.ts`
+- `packages/backend/src/infrastructure/seed.ts`
+- `packages/backend/src/application/dtos/index.ts`
+- `packages/backend/src/application/services/SavingService.ts` (NEW)
+- `packages/backend/src/application/services/PaymentService.ts`
+- `packages/backend/src/application/services/ContractService.ts`
+- `packages/backend/src/application/services/index.ts`
+- `packages/backend/src/presentation/controllers/SavingController.ts` (NEW)
+- `packages/backend/src/presentation/routes/index.ts`
+- `packages/backend/src/index.ts`
+- `packages/backend/src/__tests__/SavingService.test.ts` (NEW)
+- `packages/backend/src/__tests__/PaymentService.test.ts`
+- `packages/frontend/src/types/index.ts`
+- `packages/frontend/src/lib/api.ts`
+- `packages/frontend/src/hooks/useApi.ts`
+- `packages/frontend/src/lib/schemas.ts`
+- `packages/frontend/src/app/(dashboard)/contracts/[id]/page.tsx`
+
+### Test count: 177 tests (5 suites)
 
 ---
 
