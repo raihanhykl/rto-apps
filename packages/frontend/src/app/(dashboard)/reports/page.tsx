@@ -16,7 +16,7 @@ import {
 import { useReport } from "@/hooks/useApi";
 import { api } from "@/lib/api";
 import { formatCurrency } from "@/lib/utils";
-import { ReportData, ContractStatus, MotorModel } from "@/types";
+import { ReportData, ContractStatus, MotorModel, BatteryType } from "@/types";
 import {
   BarChart3,
   FileJson,
@@ -34,6 +34,7 @@ interface ReportFilters {
   endDate: string;
   status: string;
   motorModel: string;
+  batteryType: string;
 }
 
 export default function ReportsPage() {
@@ -43,12 +44,14 @@ export default function ReportsPage() {
     endDate: "",
     status: "",
     motorModel: "",
+    batteryType: "",
   });
   const [appliedFilters, setAppliedFilters] = useState<ReportFilters>({
     startDate: "",
     endDate: "",
     status: "",
     motorModel: "",
+    batteryType: "",
   });
 
   const buildFilterParams = (f: ReportFilters) => {
@@ -57,6 +60,7 @@ export default function ReportsPage() {
     if (f.endDate) params.endDate = f.endDate;
     if (f.status) params.status = f.status;
     if (f.motorModel) params.motorModel = f.motorModel;
+    if (f.batteryType) params.batteryType = f.batteryType;
     return Object.keys(params).length > 0 ? params : undefined;
   };
 
@@ -67,7 +71,7 @@ export default function ReportsPage() {
   };
 
   const handleClearFilters = () => {
-    const empty = { startDate: "", endDate: "", status: "", motorModel: "" };
+    const empty = { startDate: "", endDate: "", status: "", motorModel: "", batteryType: "" };
     setFilters(empty);
     setAppliedFilters(empty);
   };
@@ -193,7 +197,7 @@ export default function ReportsPage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 items-end">
             <div>
               <Label className="text-xs">Dari Tanggal</Label>
               <Input
@@ -254,6 +258,27 @@ export default function ReportsPage() {
                   <SelectItem value="ATHENA">Athena</SelectItem>
                   <SelectItem value="VICTORY">Victory</SelectItem>
                   <SelectItem value="EDPOWER">EdPower</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs">Tipe Baterai</Label>
+              <Select
+                value={filters.batteryType || "ALL"}
+                onValueChange={(v) =>
+                  setFilters((f) => ({
+                    ...f,
+                    batteryType: v === "ALL" ? "" : v,
+                  }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">Semua</SelectItem>
+                  <SelectItem value="REGULAR">Regular</SelectItem>
+                  <SelectItem value="EXTENDED">Extended</SelectItem>
                 </SelectContent>
               </Select>
             </div>

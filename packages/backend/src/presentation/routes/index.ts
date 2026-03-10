@@ -2,19 +2,17 @@ import { Router } from 'express';
 import { AuthController } from '../controllers/AuthController';
 import { CustomerController } from '../controllers/CustomerController';
 import { ContractController } from '../controllers/ContractController';
-import { InvoiceController } from '../controllers/InvoiceController';
+import { PaymentController } from '../controllers/PaymentController';
 import { DashboardController } from '../controllers/DashboardController';
 import { ReportController } from '../controllers/ReportController';
 import { AuditController } from '../controllers/AuditController';
 import { SettingController } from '../controllers/SettingController';
-import { BillingController } from '../controllers/BillingController';
 
 interface RouteControllers {
   authController: AuthController;
   customerController: CustomerController;
   contractController: ContractController;
-  invoiceController: InvoiceController;
-  billingController: BillingController;
+  paymentController: PaymentController;
   dashboardController: DashboardController;
   reportController: ReportController;
   auditController: AuditController;
@@ -56,26 +54,25 @@ export function createRoutes(controllers: RouteControllers): Router {
   router.delete('/contracts/:id', authMiddleware, controllers.contractController.softDelete);
   router.patch('/contracts/:id/status', authMiddleware, controllers.contractController.updateStatus);
 
-  // Invoices
-  router.get('/invoices', authMiddleware, controllers.invoiceController.getAll);
-  router.get('/invoices/:id', authMiddleware, controllers.invoiceController.getById);
-  router.get('/invoices/:id/qr', authMiddleware, controllers.invoiceController.getQRCode);
-  router.post('/invoices/:id/payment', authMiddleware, controllers.invoiceController.simulatePayment);
-  router.patch('/invoices/:id/void', authMiddleware, controllers.invoiceController.voidInvoice);
-  router.patch('/invoices/:id/mark-paid', authMiddleware, controllers.invoiceController.markPaid);
-  router.patch('/invoices/:id/revert', authMiddleware, controllers.invoiceController.revertStatus);
-  router.post('/invoices/bulk-pay', authMiddleware, controllers.invoiceController.bulkMarkPaid);
-
-  // Invoices - PDF
-  router.get('/invoices/:id/pdf', authMiddleware, controllers.invoiceController.downloadPdf);
-
-  // Billings
-  router.get('/billings/contract/:contractId', authMiddleware, controllers.billingController.getByContractId);
-  router.get('/billings/contract/:contractId/active', authMiddleware, controllers.billingController.getActiveByContractId);
-  router.get('/billings/contract/:contractId/calendar', authMiddleware, controllers.billingController.getCalendarData);
-  router.post('/billings/contract/:contractId/manual', authMiddleware, controllers.billingController.createManualBilling);
-  router.post('/billings/:id/pay', authMiddleware, controllers.billingController.payBilling);
-  router.patch('/billings/:id/cancel', authMiddleware, controllers.billingController.cancelBilling);
+  // Payments (unified billing + invoice)
+  router.get('/payments', authMiddleware, controllers.paymentController.getAll);
+  router.get('/payments/search', authMiddleware, controllers.paymentController.search);
+  router.get('/payments/contract/:contractId', authMiddleware, controllers.paymentController.getByContractId);
+  router.get('/payments/contract/:contractId/active', authMiddleware, controllers.paymentController.getActiveByContractId);
+  router.get('/payments/contract/:contractId/calendar', authMiddleware, controllers.paymentController.getCalendarData);
+  router.post('/payments/contract/:contractId/manual', authMiddleware, controllers.paymentController.createManualPayment);
+  router.patch('/payments/contract/:contractId/day/:date', authMiddleware, controllers.paymentController.updatePaymentDayStatus);
+  router.post('/payments/bulk-pay', authMiddleware, controllers.paymentController.bulkMarkPaid);
+  router.get('/payments/:id', authMiddleware, controllers.paymentController.getById);
+  router.get('/payments/:id/qr', authMiddleware, controllers.paymentController.getQRCode);
+  router.get('/payments/:id/pdf', authMiddleware, controllers.paymentController.downloadPdf);
+  router.post('/payments/:id/pay', authMiddleware, controllers.paymentController.payPayment);
+  router.post('/payments/:id/simulate', authMiddleware, controllers.paymentController.simulatePayment);
+  router.patch('/payments/:id/mark-paid', authMiddleware, controllers.paymentController.markPaid);
+  router.patch('/payments/:id/void', authMiddleware, controllers.paymentController.voidPayment);
+  router.patch('/payments/:id/revert', authMiddleware, controllers.paymentController.revertStatus);
+  router.patch('/payments/:id/cancel', authMiddleware, controllers.paymentController.cancelPayment);
+  router.post('/payments/:id/reduce', authMiddleware, controllers.paymentController.reducePayment);
 
   // Reports
   router.get('/reports', authMiddleware, controllers.reportController.getReport);

@@ -7,32 +7,40 @@ import {
   PaginatedResult,
 } from '../../domain/interfaces';
 import { Contract, Invoice, Customer } from '../../domain/entities';
+import { getWibToday, getWibDateParts } from '../../domain/utils/dateUtils';
 import {
   ContractStatus,
   PaymentStatus,
   AuditAction,
   DPScheme,
   InvoiceType,
+  HolidayScheme,
+  PaymentDayStatus,
   MOTOR_DAILY_RATES,
   DP_AMOUNTS,
   MAX_RENTAL_DAYS,
   DEFAULT_OWNERSHIP_TARGET_DAYS,
   DEFAULT_GRACE_PERIOD_DAYS,
-  DEFAULT_HOLIDAY_DAYS_PER_MONTH,
+  DEFAULT_HOLIDAY_SCHEME,
   VALID_STATUS_TRANSITIONS,
 } from '../../domain/enums';
+import { IPaymentDayRepository } from '../../domain/interfaces';
+import { PaymentDay } from '../../domain/entities';
 import { CreateContractDto, UpdateContractStatusDto, ExtendContractDto, UpdateContractDto, CancelContractDto } from '../dtos';
 import { SettingService } from './SettingService';
 import { v4 as uuidv4 } from 'uuid';
 
 export class ContractService {
   private static contractCounter = 0;
+  private static contractCounterInitialized = false;
   private static invoiceCounter = 0;
+  private static invoiceCounterInitialized = false;
 
   constructor(
     private contractRepo: IContractRepository,
     private customerRepo: ICustomerRepository,
     private invoiceRepo: IInvoiceRepository,
+    private paymentDayRepo: IPaymentDayRepository,
     private auditRepo: IAuditLogRepository,
     private settingService?: SettingService
   ) {}
@@ -86,7 +94,7 @@ export class ContractService {
 
     const startDate = new Date(dto.startDate);
 
-    const contractNumber = this.generateContractNumber();
+    const contractNumber = await this.generateContractNumber();
     const ownershipTargetDays = await this.getSetting('ownership_target_days', DEFAULT_OWNERSHIP_TARGET_DAYS);
     const gracePeriodDays = await this.getSetting('grace_period_days', DEFAULT_GRACE_PERIOD_DAYS);
 
@@ -119,10 +127,12 @@ export class ContractService {
       billingStartDate: null,
       bastPhoto: null,
       bastNotes: '',
-      holidayDaysPerMonth: DEFAULT_HOLIDAY_DAYS_PER_MONTH,
+      holidayScheme: dto.holidayScheme || DEFAULT_HOLIDAY_SCHEME,
       // RTO fields
       ownershipTargetDays,
       totalDaysPaid: 0,
+      workingDaysPaid: 0,
+      holidayDaysPaid: 0,
       ownershipProgress: 0,
       gracePeriodDays,
       repossessedAt: null,
@@ -142,7 +152,7 @@ export class ContractService {
 
     if (dto.dpScheme === DPScheme.FULL) {
       // Single DP invoice for full amount
-      const invoiceNumber = this.generateInvoiceNumber();
+      const invoiceNumber = await this.generateInvoiceNumber();
       const invoice: Invoice = {
         id: uuidv4(),
         invoiceNumber,
@@ -158,9 +168,13 @@ export class ContractService {
         extensionDays: null, // DP doesn't extend days
         dokuPaymentUrl: null,
         dokuReferenceId: null,
-        billingPeriodStart: null,
-        billingPeriodEnd: null,
-        billingId: null,
+        dailyRate: null,
+        daysCount: null,
+        periodStart: null,
+        periodEnd: null,
+        expiredAt: null,
+        previousPaymentId: null,
+        isHoliday: false,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
@@ -170,7 +184,7 @@ export class ContractService {
       const firstAmount = Math.ceil(dpAmount / 2);
       const secondAmount = Math.floor(dpAmount / 2);
 
-      const inv1Number = this.generateInvoiceNumber();
+      const inv1Number = await this.generateInvoiceNumber();
       const invoice1: Invoice = {
         id: uuidv4(),
         invoiceNumber: inv1Number,
@@ -186,15 +200,19 @@ export class ContractService {
         extensionDays: null,
         dokuPaymentUrl: null,
         dokuReferenceId: null,
-        billingPeriodStart: null,
-        billingPeriodEnd: null,
-        billingId: null,
+        dailyRate: null,
+        daysCount: null,
+        periodStart: null,
+        periodEnd: null,
+        expiredAt: null,
+        previousPaymentId: null,
+        isHoliday: false,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
       invoices.push(await this.invoiceRepo.create(invoice1));
 
-      const inv2Number = this.generateInvoiceNumber();
+      const inv2Number = await this.generateInvoiceNumber();
       const dueDate2 = new Date(dueDate);
       dueDate2.setDate(dueDate2.getDate() + 7); // 2nd installment due 1 week later
       const invoice2: Invoice = {
@@ -212,9 +230,13 @@ export class ContractService {
         extensionDays: null,
         dokuPaymentUrl: null,
         dokuReferenceId: null,
-        billingPeriodStart: null,
-        billingPeriodEnd: null,
-        billingId: null,
+        dailyRate: null,
+        daysCount: null,
+        periodStart: null,
+        periodEnd: null,
+        expiredAt: null,
+        previousPaymentId: null,
+        isHoliday: false,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
@@ -280,18 +302,47 @@ export class ContractService {
       }
     }
 
-    const now = new Date();
-    const tomorrow = new Date(now);
+    const today = getWibToday();
+    const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
     tomorrow.setHours(0, 0, 0, 0);
 
     const updated = await this.contractRepo.update(id, {
-      unitReceivedDate: now,
+      unitReceivedDate: today,
       billingStartDate: tomorrow,
       bastPhoto,
       bastNotes: bastNotes || '',
     });
     if (!updated) throw new Error('Failed to update contract');
+
+    // Generate PaymentDay records for 60 days from billingStartDate
+    const records: PaymentDay[] = [];
+    const cursor = new Date(tomorrow);
+    for (let i = 0; i < 60; i++) {
+      const d = new Date(cursor);
+      d.setHours(0, 0, 0, 0);
+      const isSunday = d.getDay() === 0;
+      const isDate29Plus = d.getDate() > 28;
+      const isHoliday = existing.holidayScheme === HolidayScheme.OLD_CONTRACT ? isSunday : isDate29Plus;
+
+      records.push({
+        id: uuidv4(),
+        contractId: existing.id,
+        date: d,
+        status: isHoliday ? PaymentDayStatus.HOLIDAY : PaymentDayStatus.UNPAID,
+        paymentId: null,
+        dailyRate: existing.dailyRate,
+        amount: isHoliday ? 0 : existing.dailyRate,
+        notes: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    if (records.length > 0) {
+      await this.paymentDayRepo.createMany(records);
+    }
 
     const customer = await this.customerRepo.findById(existing.customerId);
 
@@ -304,7 +355,7 @@ export class ContractService {
       description: `Unit received for contract ${existing.contractNumber} (${customer?.fullName || 'Unknown'}) - billing starts ${tomorrow.toISOString().split('T')[0]}`,
       metadata: {
         contractNumber: existing.contractNumber,
-        unitReceivedDate: now,
+        unitReceivedDate: today,
         billingStartDate: tomorrow,
         bastPhoto,
         bastNotes: bastNotes || '',
@@ -340,7 +391,7 @@ export class ContractService {
 
     // Calculate late fee only if contract status is OVERDUE and billing has started
     let lateFee = 0;
-    const now = new Date();
+    const now = getWibToday();
     if (existing.status === ContractStatus.OVERDUE && existing.billingStartDate) {
       const daysOverdue = Math.ceil((now.getTime() - existing.endDate.getTime()) / (1000 * 60 * 60 * 24));
       if (daysOverdue > 0) {
@@ -350,8 +401,8 @@ export class ContractService {
     }
 
     // Generate new invoice for the extension (contract is NOT updated until payment)
-    const invoiceNumber = this.generateInvoiceNumber();
-    const dueDate = new Date();
+    const invoiceNumber = await this.generateInvoiceNumber();
+    const dueDate = getWibToday();
     dueDate.setDate(dueDate.getDate() + 1);
 
     const invoice: Invoice = {
@@ -369,9 +420,13 @@ export class ContractService {
       extensionDays: dto.durationDays,
       dokuPaymentUrl: null,
       dokuReferenceId: null,
-      billingPeriodStart: null,
-      billingPeriodEnd: null,
-      billingId: null,
+      dailyRate: null,
+      daysCount: null,
+      periodStart: null,
+      periodEnd: null,
+      expiredAt: null,
+      previousPaymentId: null,
+      isHoliday: false,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -420,6 +475,16 @@ export class ContractService {
       if (inv.status === PaymentStatus.PENDING || inv.status === PaymentStatus.FAILED) {
         await this.invoiceRepo.update(inv.id, { status: PaymentStatus.VOID });
       }
+    }
+
+    // Void all UNPAID and PENDING PaymentDays
+    const unpaidDays = await this.paymentDayRepo.findByContractAndStatus(id, PaymentDayStatus.UNPAID);
+    const pendingDays = await this.paymentDayRepo.findByContractAndStatus(id, PaymentDayStatus.PENDING);
+    for (const day of [...unpaidDays, ...pendingDays]) {
+      await this.paymentDayRepo.update(day.id, {
+        status: PaymentDayStatus.VOIDED,
+        paymentId: null,
+      });
     }
 
     const updated = await this.contractRepo.update(id, {
@@ -507,6 +572,16 @@ export class ContractService {
       }
     }
 
+    // Void all UNPAID and PENDING PaymentDays
+    const unpaidDays = await this.paymentDayRepo.findByContractAndStatus(id, PaymentDayStatus.UNPAID);
+    const pendingDays = await this.paymentDayRepo.findByContractAndStatus(id, PaymentDayStatus.PENDING);
+    for (const day of [...unpaidDays, ...pendingDays]) {
+      await this.paymentDayRepo.update(day.id, {
+        status: PaymentDayStatus.VOIDED,
+        paymentId: null,
+      });
+    }
+
     const updated = await this.contractRepo.update(id, {
       status: ContractStatus.CANCELLED,
       notes: existing.notes ? `${existing.notes}\n[CANCELLED] ${dto.reason}` : `[CANCELLED] ${dto.reason}`,
@@ -569,7 +644,7 @@ export class ContractService {
 
   async checkAndUpdateOverdueContracts(): Promise<number> {
     const activeContracts = await this.contractRepo.findByStatus(ContractStatus.ACTIVE);
-    const now = new Date();
+    const now = getWibToday();
     let overdueCount = 0;
 
     for (const contract of activeContracts) {
@@ -609,7 +684,7 @@ export class ContractService {
   async getOverdueWarnings(): Promise<Array<{ contract: Contract; customer: Customer; daysOverdue: number; graceRemaining: number }>> {
     const overdueContracts = await this.contractRepo.findByStatus(ContractStatus.OVERDUE);
     const activeContracts = await this.contractRepo.findByStatus(ContractStatus.ACTIVE);
-    const now = new Date();
+    const now = getWibToday();
     const warnings: Array<{ contract: Contract; customer: Customer; daysOverdue: number; graceRemaining: number }> = [];
 
     // Check overdue contracts
@@ -673,22 +748,35 @@ export class ContractService {
     return this.contractRepo.countByStatus(status);
   }
 
-  private generateContractNumber(): string {
-    ContractService.contractCounter++;
-    const date = new Date();
-    const y = date.getFullYear().toString().slice(-2);
-    const m = (date.getMonth() + 1).toString().padStart(2, '0');
-    const d = date.getDate().toString().padStart(2, '0');
-    const seq = ContractService.contractCounter.toString().padStart(4, '0');
-    return `RTO-${y}${m}${d}-${seq}`;
+  private async initContractCounter(): Promise<void> {
+    if (!ContractService.contractCounterInitialized) {
+      const maxSeq = await this.contractRepo.findMaxContractSequence();
+      ContractService.contractCounter = maxSeq;
+      ContractService.contractCounterInitialized = true;
+    }
   }
 
-  private generateInvoiceNumber(): string {
+  private static readonly ROMAN_MONTHS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
+
+  private async generateContractNumber(): Promise<string> {
+    await this.initContractCounter();
+    ContractService.contractCounter++;
+    const { year, month } = getWibDateParts();
+    const romanMonth = ContractService.ROMAN_MONTHS[month - 1];
+    return `${ContractService.contractCounter}/WNUS-KTR/${romanMonth}/${year}`;
+  }
+
+  private async generateInvoiceNumber(): Promise<string> {
+    if (!ContractService.invoiceCounterInitialized) {
+      const maxSeq = await this.invoiceRepo.findMaxInvoiceSequence();
+      ContractService.invoiceCounter = maxSeq;
+      ContractService.invoiceCounterInitialized = true;
+    }
     ContractService.invoiceCounter++;
-    const date = new Date();
-    const y = date.getFullYear().toString().slice(-2);
-    const m = (date.getMonth() + 1).toString().padStart(2, '0');
-    const d = date.getDate().toString().padStart(2, '0');
+    const { year, month, day } = getWibDateParts();
+    const y = year.toString().slice(-2);
+    const m = month.toString().padStart(2, '0');
+    const d = day.toString().padStart(2, '0');
     const seq = ContractService.invoiceCounter.toString().padStart(4, '0');
     return `PMT-${y}${m}${d}-${seq}`;
   }

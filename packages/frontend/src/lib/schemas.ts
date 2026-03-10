@@ -29,6 +29,7 @@ export const contractSchema = z.object({
   motorModel: z.enum(["ATHENA", "VICTORY", "EDPOWER"], { message: "Model motor wajib dipilih" }),
   batteryType: z.enum(["REGULAR", "EXTENDED"], { message: "Tipe baterai wajib dipilih" }),
   dpScheme: z.enum(["FULL", "INSTALLMENT"], { message: "Skema DP wajib dipilih" }),
+  holidayScheme: z.enum(["OLD_CONTRACT", "NEW_CONTRACT"], { message: "Tipe kontrak wajib dipilih" }),
   startDate: z.string().min(1, "Tanggal mulai wajib diisi"),
   color: z.string(),
   year: z.string(),

@@ -68,7 +68,7 @@ export default function SettingsPage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
-          {settings.map((setting) => (
+          {[...(settings as Setting[])].sort((a, b) => a.key.localeCompare(b.key)).map((setting) => (
             <div key={setting.key} className="flex items-end gap-4">
               <div className="flex-1 space-y-2">
                 <Label className="capitalize">

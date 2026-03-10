@@ -14,8 +14,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { api } from "@/lib/api";
-import { useContractDetail, useBillingsByContract, useActiveBilling, useInvalidate } from "@/hooks/useApi";
-import { Contract, Customer, Invoice, Billing } from "@/types";
+import { useContractDetail, usePaymentsByContract, useActivePayment, useInvalidate } from "@/hooks/useApi";
+import { Contract, Customer, Invoice } from "@/types";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -88,6 +88,33 @@ const paymentBadgeVariant = (status: string) => {
   }
 };
 
+const getInvoiceTypeLabel = (type: string): string => {
+  switch (type) {
+    case "DP": return "DP";
+    case "DP_INSTALLMENT": return "DP Cicilan";
+    case "DAILY_BILLING": return "Harian";
+    case "MANUAL_PAYMENT": return "Manual";
+    default: return type;
+  }
+};
+
+const getInvoiceTypeBadgeVariant = (type: string) => {
+  switch (type) {
+    case "DP":
+    case "DP_INSTALLMENT": return "default" as const;
+    case "DAILY_BILLING": return "outline" as const;
+    case "MANUAL_PAYMENT": return "secondary" as const;
+    default: return "outline" as const;
+  }
+};
+
+const formatPeriod = (invoice: Invoice): string => {
+  if (!invoice.periodStart) return "-";
+  const start = formatDate(invoice.periodStart);
+  if (!invoice.periodEnd || invoice.periodStart === invoice.periodEnd) return start;
+  return `${start} - ${formatDate(invoice.periodEnd)}`;
+};
+
 const TIMELINE_PAGE_SIZE = 5;
 const TAGIHAN_PAGE_SIZE = 5;
 
@@ -98,18 +125,18 @@ export default function ContractDetailPage() {
 
   // SWR hooks
   const { data: detailData, isLoading: detailLoading } = useContractDetail(id);
-  const { data: billingsData } = useBillingsByContract(id);
-  const { data: activeBillingData } = useActiveBilling(id);
+  const { data: paymentsData } = usePaymentsByContract(id);
+  const { data: activePaymentData } = useActivePayment(id);
 
   const contract = (detailData as any)?.contract as Contract | undefined ?? null;
   const customer = (detailData as any)?.customer as Customer | undefined ?? null;
   const invoices = ((detailData as any)?.invoices as Invoice[] | undefined) || [];
-  const billings = (billingsData as Billing[] | undefined) || [];
-  const activeBilling = (activeBillingData as Billing | undefined) ?? null;
+  const payments = (paymentsData as Invoice[] | undefined) || [];
+  const activePayment = (activePaymentData as Invoice | undefined) ?? null;
   const loading = detailLoading;
 
   const refreshAll = () => {
-    invalidate("/contracts", "/billings", "/invoices", "/dashboard");
+    invalidate("/contracts", "/payments", "/dashboard");
   };
 
   const [processing, setProcessing] = useState(false);
@@ -148,7 +175,7 @@ export default function ContractDetailPage() {
 
   const showQR = async (invoice: Invoice) => {
     try {
-      const data = await api.getInvoiceQR(invoice.id);
+      const data = await api.getPaymentQR(invoice.id);
       setQrCode(data.qrCode);
       setQrInvoice(invoice);
       setQrDialogOpen(true);
@@ -173,7 +200,7 @@ export default function ContractDetailPage() {
   const handleExtend = async () => {
     setProcessing(true);
     try {
-      await api.createManualBilling(id, parseInt(extendDays));
+      await api.createManualPayment(id, parseInt(extendDays));
       toastSuccess("Bayar Tagihan", `Tagihan manual ${extendDays} hari berhasil dibuat.`);
       setExtendDialogOpen(false);
       refreshAll();
@@ -255,7 +282,7 @@ export default function ContractDetailPage() {
     if (!voidInvoiceTarget) return;
     setProcessing(true);
     try {
-      await api.voidInvoice(voidInvoiceTarget.id);
+      await api.voidPayment(voidInvoiceTarget.id);
       toastSuccess("Berhasil", `Tagihan ${voidInvoiceTarget.invoiceNumber} berhasil di-void.`);
       setVoidDialogOpen(false);
       setVoidInvoiceTarget(null);
@@ -271,7 +298,7 @@ export default function ContractDetailPage() {
     if (!markPaidTarget) return;
     setProcessing(true);
     try {
-      await api.markInvoicePaid(markPaidTarget.id);
+      await api.markPaymentPaid(markPaidTarget.id);
       toastSuccess("Berhasil", `Tagihan ${markPaidTarget.invoiceNumber} ditandai lunas.`);
       setMarkPaidDialogOpen(false);
       setMarkPaidTarget(null);
@@ -287,7 +314,7 @@ export default function ContractDetailPage() {
     if (!revertTarget) return;
     setProcessing(true);
     try {
-      await api.revertInvoiceStatus(revertTarget.id);
+      await api.revertPaymentStatus(revertTarget.id);
       toastSuccess("Berhasil", `Tagihan ${revertTarget.invoiceNumber} dikembalikan ke PENDING.`);
       setRevertDialogOpen(false);
       setRevertTarget(null);
@@ -307,7 +334,7 @@ export default function ContractDetailPage() {
     setProcessing(true);
     try {
       await api.receiveUnit(id, bastPhoto.trim(), bastNotes.trim());
-      toastSuccess("Berhasil", "Unit berhasil diterima. Billing harian dimulai H+1.");
+      toastSuccess("Berhasil", "Unit berhasil diterima. Tagihan harian dimulai H+1.");
       setReceiveUnitDialogOpen(false);
       setBastPhoto("");
       setBastNotes("");
@@ -319,11 +346,11 @@ export default function ContractDetailPage() {
     }
   };
 
-  const handlePayBilling = async (billingId: string) => {
+  const handlePayPayment = async (paymentId: string) => {
     setProcessing(true);
     try {
-      await api.payBilling(billingId);
-      toastSuccess("Berhasil", "Billing berhasil dibayar.");
+      await api.payPayment(paymentId);
+      toastSuccess("Berhasil", "Pembayaran berhasil.");
       refreshAll();
     } catch (error: any) {
       toastError("Gagal", error.message);
@@ -332,11 +359,11 @@ export default function ContractDetailPage() {
     }
   };
 
-  const handleCancelBilling = async (billingId: string) => {
+  const handleCancelPayment = async (paymentId: string) => {
     setProcessing(true);
     try {
-      await api.cancelBilling(billingId);
-      toastSuccess("Berhasil", "Billing berhasil dibatalkan.");
+      await api.cancelPayment(paymentId);
+      toastSuccess("Berhasil", "Pembayaran berhasil dibatalkan.");
       refreshAll();
     } catch (error: any) {
       toastError("Gagal", error.message);
@@ -426,7 +453,7 @@ export default function ContractDetailPage() {
         contract.status === "REPOSSESSED" ? "border-red-300 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20" :
         !contract.dpFullyPaid ? "border-yellow-300 dark:border-yellow-800 bg-yellow-50/50 dark:bg-yellow-950/20" :
         contract.status === "OVERDUE" ? "border-red-300 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20" :
-        activeBilling ? "border-blue-300 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20" :
+        activePayment ? "border-blue-300 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20" :
         "border-green-300 dark:border-green-800 bg-green-50/50 dark:bg-green-950/20"
       }>
         <CardContent className="p-4">
@@ -495,7 +522,7 @@ export default function ContractDetailPage() {
                     </p>
                   </div>
                 </>
-              ) : activeBilling ? (
+              ) : activePayment ? (
                 <>
                   <div className="h-12 w-12 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center">
                     <CreditCard className="h-6 w-6 text-blue-600" />
@@ -503,7 +530,7 @@ export default function ContractDetailPage() {
                   <div>
                     <p className="font-bold text-blue-700 dark:text-blue-400 text-lg">Ada Tagihan Aktif</p>
                     <p className="text-sm text-blue-600 dark:text-blue-500">
-                      {formatCurrency(activeBilling.amount)} — {activeBilling.daysCount} hari ({formatDate(activeBilling.periodStart)} s/d {formatDate(activeBilling.periodEnd)})
+                      {formatCurrency(activePayment.amount)} — {activePayment.daysCount} hari ({activePayment.periodStart ? formatDate(activePayment.periodStart) : "-"} s/d {activePayment.periodEnd ? formatDate(activePayment.periodEnd) : "-"})
                     </p>
                   </div>
                 </>
@@ -514,7 +541,7 @@ export default function ContractDetailPage() {
                   </div>
                   <div>
                     <p className="font-bold text-green-700 dark:text-green-400 text-lg">Pembayaran Lancar</p>
-                    <p className="text-sm text-green-600 dark:text-green-500">Tidak ada tunggakan. Billing harian berjalan otomatis.</p>
+                    <p className="text-sm text-green-600 dark:text-green-500">Tidak ada tunggakan. Tagihan harian berjalan otomatis.</p>
                   </div>
                 </>
               )}
@@ -526,8 +553,12 @@ export default function ContractDetailPage() {
                 <p className="font-bold text-lg">{contract.ownershipProgress}%</p>
               </div>
               <div className="px-4 py-2 rounded-lg bg-white/60 dark:bg-gray-900/40">
-                <p className="text-xs text-muted-foreground">Hari Dibayar</p>
-                <p className="font-bold text-lg">{contract.totalDaysPaid}</p>
+                <p className="text-xs text-muted-foreground">Hari Kerja</p>
+                <p className="font-bold text-lg">{contract.workingDaysPaid}</p>
+              </div>
+              <div className="px-4 py-2 rounded-lg bg-white/60 dark:bg-gray-900/40">
+                <p className="text-xs text-muted-foreground">Hari Libur</p>
+                <p className="font-bold text-lg">{contract.holidayDaysPaid}</p>
               </div>
               <div className="px-4 py-2 rounded-lg bg-white/60 dark:bg-gray-900/40">
                 <p className="text-xs text-muted-foreground">Total Bayar</p>
@@ -562,14 +593,18 @@ export default function ContractDetailPage() {
                 style={{ width: `${Math.min(contract.ownershipProgress, 100)}%` }}
               />
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
               <div>
-                <p className="text-muted-foreground">Total Hari Dibayar</p>
-                <p className="font-bold text-lg">{contract.totalDaysPaid}</p>
+                <p className="text-muted-foreground">Hari Kerja Dibayar</p>
+                <p className="font-bold text-lg">{contract.workingDaysPaid}</p>
               </div>
               <div>
-                <p className="text-muted-foreground">Target Kepemilikan</p>
-                <p className="font-bold text-lg">{contract.ownershipTargetDays} hari</p>
+                <p className="text-muted-foreground">Hari Libur (Gratis)</p>
+                <p className="font-bold text-lg text-blue-500">{contract.holidayDaysPaid}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Total Hari</p>
+                <p className="font-bold text-lg">{contract.totalDaysPaid} / {contract.ownershipTargetDays}</p>
               </div>
               <div>
                 <p className="text-muted-foreground">Sisa Hari</p>
@@ -606,28 +641,28 @@ export default function ContractDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Active Billing */}
-      {activeBilling && (
+      {/* Active Payment */}
+      {activePayment && (
         <Card className="border-blue-200 dark:border-blue-800">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs text-muted-foreground font-medium">Tagihan Aktif</p>
-                <span className="font-mono text-xs">{activeBilling.billingNumber}</span>
-                {activeBilling.previousBillingId && (
+                <span className="font-mono text-xs">{activePayment.invoiceNumber}</span>
+                {activePayment.previousPaymentId && (
                   <span className="ml-2 text-xs text-orange-600 font-medium">(Gabungan)</span>
                 )}
-                <p className="text-xl font-bold mt-1">{formatCurrency(activeBilling.amount)}</p>
+                <p className="text-xl font-bold mt-1">{formatCurrency(activePayment.amount)}</p>
                 <p className="text-xs text-muted-foreground">
-                  {activeBilling.daysCount} hari tertunggak — {formatDate(activeBilling.periodStart)} s/d {formatDate(activeBilling.periodEnd)}
+                  {activePayment.daysCount} hari tertunggak — {activePayment.periodStart ? formatDate(activePayment.periodStart) : "-"} s/d {activePayment.periodEnd ? formatDate(activePayment.periodEnd) : "-"}
                 </p>
               </div>
               <div className="flex gap-2">
-                <Button disabled={processing} onClick={() => handlePayBilling(activeBilling.id)}>
+                <Button disabled={processing} onClick={() => handlePayPayment(activePayment.id)}>
                   <Zap className="h-4 w-4 mr-2" /> Bayar Sekarang
                 </Button>
-                {activeBilling.previousBillingId && (
-                  <Button variant="outline" disabled={processing} onClick={() => handleCancelBilling(activeBilling.id)}>
+                {activePayment.previousPaymentId && (
+                  <Button variant="outline" disabled={processing} onClick={() => handleCancelPayment(activePayment.id)}>
                     Batalkan
                   </Button>
                 )}
@@ -717,7 +752,7 @@ export default function ContractDetailPage() {
               <div className="flex items-center gap-2 text-sm">
                 <CalendarOff className="h-4 w-4 text-muted-foreground" />
                 <span className="text-muted-foreground">Libur Bayar:</span>
-                <span className="font-medium">Setiap Minggu + {contract.holidayDaysPerMonth} hari/bulan</span>
+                <span className="font-medium">{contract.holidayScheme === 'OLD_CONTRACT' ? 'Libur setiap hari Minggu' : 'Libur tanggal 29-31'}</span>
               </div>
               <p className="text-xs text-muted-foreground mt-1 ml-6">
                 Hari libur tetap dihitung sebagai progress kepemilikan tanpa biaya.
@@ -846,13 +881,16 @@ export default function ContractDetailPage() {
                 {tagihanSlice.map((invoice) => (
                   <div key={invoice.id} className="border rounded-lg p-4">
                     <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-mono text-sm font-medium">{invoice.invoiceNumber}</span>
                         <Badge variant={paymentBadgeVariant(invoice.status)}>
                           {invoice.status}
                         </Badge>
-                        {(invoice.type === "DP" || invoice.type === "DP_INSTALLMENT") && (
-                          <Badge variant="outline" className="text-xs">DP</Badge>
+                        <Badge variant={getInvoiceTypeBadgeVariant(invoice.type)}>
+                          {getInvoiceTypeLabel(invoice.type)}
+                        </Badge>
+                        {invoice.isHoliday && (
+                          <Badge variant="outline" className="text-blue-600 border-blue-300 text-xs">Libur</Badge>
                         )}
                       </div>
                       <div className="text-right">
@@ -861,7 +899,7 @@ export default function ContractDetailPage() {
                         </p>
                         {(invoice.lateFee || 0) > 0 && (
                           <p className="text-xs text-muted-foreground">
-                            Pokok: {formatCurrency(invoice.amount)} + Denda: {formatCurrency(invoice.lateFee || 0)}
+                            {formatCurrency(invoice.amount)} + <span className="text-orange-600">{formatCurrency(invoice.lateFee || 0)}</span>
                           </p>
                         )}
                       </div>
@@ -871,8 +909,17 @@ export default function ContractDetailPage() {
                         <Clock className="h-3.5 w-3.5" /> Due: {formatDate(invoice.dueDate)}
                       </div>
                       <div>
-                        {invoice.paidAt ? `Dibayar: ${formatDate(invoice.paidAt)}` : "Belum dibayar"}
+                        {invoice.paidAt ? `Dibayar: ${formatDateTime(invoice.paidAt)}` : "Belum dibayar"}
                       </div>
+                      {invoice.periodStart && (
+                        <div className="flex items-center gap-1">
+                          <Calendar className="h-3.5 w-3.5" /> Periode: {formatPeriod(invoice)}
+                          {invoice.daysCount && invoice.daysCount > 1 && ` (${invoice.daysCount} hari)`}
+                        </div>
+                      )}
+                      {invoice.dailyRate && (
+                        <div>Tarif: {formatCurrency(invoice.dailyRate)}/hari</div>
+                      )}
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <Button variant="outline" size="sm" onClick={() => showQR(invoice)}>
@@ -887,7 +934,7 @@ export default function ContractDetailPage() {
                         size="sm"
                         onClick={async () => {
                           try {
-                            const blob = await api.downloadInvoicePdf(invoice.id);
+                            const blob = await api.downloadPaymentPdf(invoice.id);
                             const url = URL.createObjectURL(blob);
                             const a = document.createElement("a");
                             a.href = url;
@@ -1052,7 +1099,7 @@ export default function ContractDetailPage() {
                   </p>
                   {contract.billingStartDate && (
                     <p className="text-xs text-muted-foreground mt-1">
-                      Billing dimulai: {formatDate(contract.billingStartDate)}
+                      Tagihan dimulai: {formatDate(contract.billingStartDate)}
                     </p>
                   )}
                   {contract.bastPhoto && (
@@ -1089,19 +1136,19 @@ export default function ContractDetailPage() {
             </div>
           </div>
 
-          {/* Billing History */}
-          {billings.length > 0 && (
+          {/* Payment History */}
+          {payments.length > 0 && (
             <div className="mt-4 pt-4 border-t">
-              <p className="text-xs text-muted-foreground font-medium mb-2">Riwayat Billing ({billings.length})</p>
+              <p className="text-xs text-muted-foreground font-medium mb-2">Riwayat Pembayaran ({payments.length})</p>
               <div className="space-y-1 max-h-48 overflow-y-auto">
-                {billings.slice(0, 20).map((b) => (
+                {payments.slice(0, 20).map((b) => (
                   <div key={b.id} className="flex items-center justify-between text-xs bg-muted/20 rounded px-3 py-2">
                     <div className="flex items-center gap-2">
-                      <span className="font-mono">{b.billingNumber}</span>
+                      <span className="font-mono">{b.invoiceNumber}</span>
                       <Badge
                         variant={
                           b.status === "PAID" ? "success" :
-                          b.status === "ACTIVE" ? "default" :
+                          b.status === "PENDING" ? "default" :
                           b.status === "EXPIRED" ? "warning" :
                           "secondary"
                         }
@@ -1417,7 +1464,7 @@ export default function ContractDetailPage() {
             </DialogTitle>
             <DialogDescription>
               Konfirmasi penerimaan unit motor untuk kontrak {contract.contractNumber}.
-              Billing harian akan dimulai H+1.
+              Tagihan harian akan dimulai H+1.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">

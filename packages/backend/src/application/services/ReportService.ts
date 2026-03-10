@@ -4,7 +4,8 @@ import {
   IInvoiceRepository,
 } from '../../domain/interfaces';
 import { Contract, Customer, Invoice } from '../../domain/entities';
-import { ContractStatus, PaymentStatus, MotorModel } from '../../domain/enums';
+import { ContractStatus, PaymentStatus, MotorModel, BatteryType } from '../../domain/enums';
+import { getWibToday } from '../../domain/utils/dateUtils';
 
 export interface ReportData {
   generatedAt: Date;
@@ -30,6 +31,7 @@ export interface ReportFilters {
   endDate?: string;
   status?: ContractStatus;
   motorModel?: MotorModel;
+  batteryType?: BatteryType;
 }
 
 export class ReportService {
@@ -70,10 +72,13 @@ export class ReportService {
     if (filters?.motorModel) {
       contracts = contracts.filter(c => c.motorModel === filters.motorModel);
     }
+    if (filters?.batteryType) {
+      contracts = contracts.filter(c => c.batteryType === filters.batteryType);
+    }
 
     // Filter invoices to match filtered contracts
     const contractIds = new Set(contracts.map(c => c.id));
-    if (filters?.status || filters?.motorModel) {
+    if (filters?.status || filters?.motorModel || filters?.batteryType) {
       invoices = invoices.filter(i => contractIds.has(i.contractId));
     }
 
@@ -113,7 +118,7 @@ export class ReportService {
     // Revenue by month (last 6 months)
     const revenueByMonth: Array<{ month: string; revenue: number }> = [];
     for (let m = 5; m >= 0; m--) {
-      const d = new Date();
+      const d = getWibToday();
       d.setMonth(d.getMonth() - m);
       const month = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`;
       const monthRevenue = paidInvoices
@@ -196,6 +201,8 @@ export class ReportService {
       'Status',
       'Ownership Progress',
       'Total Days Paid',
+      'Working Days Paid',
+      'Holiday Days Paid',
       'Start Date',
       'End Date',
     ];
@@ -210,6 +217,8 @@ export class ReportService {
       c.status,
       `${c.ownershipProgress}%`,
       c.totalDaysPaid,
+      c.workingDaysPaid,
+      c.holidayDaysPaid,
       c.startDate instanceof Date ? c.startDate.toISOString().split('T')[0] : String(c.startDate).split('T')[0],
       c.endDate instanceof Date ? c.endDate.toISOString().split('T')[0] : String(c.endDate).split('T')[0],
     ]);
@@ -261,7 +270,7 @@ export class ReportService {
     sections.push('');
 
     sections.push('=== CONTRACT DETAILS ===');
-    const contractHeaders = ['Contract Number', 'Customer', 'Motor', 'Status', 'Days Paid', 'Ownership %', 'Total Amount', 'Start Date', 'End Date'];
+    const contractHeaders = ['Contract Number', 'Customer', 'Motor', 'Status', 'Days Paid', 'Working Days', 'Holiday Days', 'Ownership %', 'Total Amount', 'Start Date', 'End Date'];
     sections.push(contractHeaders.join('\t'));
     for (const c of report.contracts) {
       sections.push([
@@ -270,6 +279,8 @@ export class ReportService {
         c.motorModel,
         c.status,
         c.totalDaysPaid,
+        c.workingDaysPaid,
+        c.holidayDaysPaid,
         `${c.ownershipProgress}%`,
         c.totalAmount,
         c.startDate instanceof Date ? c.startDate.toISOString().split('T')[0] : String(c.startDate).split('T')[0],

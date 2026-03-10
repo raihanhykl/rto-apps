@@ -32,16 +32,22 @@ export enum InvoiceType {
   MANUAL_PAYMENT = 'MANUAL_PAYMENT',
 }
 
-export enum BillingStatus {
-  ACTIVE = 'ACTIVE',
-  PAID = 'PAID',
-  EXPIRED = 'EXPIRED',
-  CANCELLED = 'CANCELLED',
-}
-
 export enum DPScheme {
   FULL = 'FULL',
   INSTALLMENT = 'INSTALLMENT',
+}
+
+export enum HolidayScheme {
+  OLD_CONTRACT = 'OLD_CONTRACT',
+  NEW_CONTRACT = 'NEW_CONTRACT',
+}
+
+export enum PaymentDayStatus {
+  UNPAID = 'UNPAID',
+  PENDING = 'PENDING',
+  PAID = 'PAID',
+  HOLIDAY = 'HOLIDAY',
+  VOIDED = 'VOIDED',
 }
 
 export const MOTOR_DAILY_RATES: Record<string, number> = {
@@ -131,10 +137,12 @@ export interface Contract {
   billingStartDate: string | null;
   bastPhoto: string | null;
   bastNotes: string;
-  holidayDaysPerMonth: number;
+  holidayScheme: string;
   // RTO fields
   ownershipTargetDays: number;
   totalDaysPaid: number;
+  workingDaysPaid: number;
+  holidayDaysPaid: number;
   ownershipProgress: number;
   gracePeriodDays: number;
   repossessedAt: string | null;
@@ -161,33 +169,14 @@ export interface Invoice {
   // DOKU payment gateway
   dokuPaymentUrl: string | null;
   dokuReferenceId: string | null;
-  // Billing period
-  billingPeriodStart: string | null;
-  billingPeriodEnd: string | null;
-  billingId: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface Billing {
-  id: string;
-  billingNumber: string;
-  contractId: string;
-  customerId: string;
-  amount: number;
-  dailyRate: number;
-  daysCount: number;
-  status: BillingStatus;
-  dokuPaymentUrl: string | null;
-  dokuReferenceId: string | null;
-  periodStart: string;
-  periodEnd: string;
+  // Payment period
+  dailyRate: number | null;
+  daysCount: number | null;
+  periodStart: string | null;
+  periodEnd: string | null;
   expiredAt: string | null;
-  paidAt: string | null;
-  invoiceId: string | null;
-  previousBillingId: string | null;
-  isDeleted: boolean;
-  deletedAt: string | null;
+  previousPaymentId: string | null;
+  isHoliday: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -238,6 +227,7 @@ export interface DashboardStats {
   completedContracts: number;
   overdueContracts: number;
   repossessedContracts: number;
+  cancelledContracts: number;
   pendingPayments: number;
   totalRevenue: number;
   pendingRevenue: number;

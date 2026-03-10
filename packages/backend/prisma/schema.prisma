@@ -43,13 +43,6 @@ enum InvoiceType {
   MANUAL_PAYMENT
 }
 
-enum BillingStatus {
-  ACTIVE
-  PAID
-  EXPIRED
-  CANCELLED
-}
-
 enum DPScheme {
   FULL
   INSTALLMENT
@@ -70,10 +63,23 @@ enum AuditAction {
   EXPORT
 }
 
+enum HolidayScheme {
+  OLD_CONTRACT
+  NEW_CONTRACT
+}
+
 enum UserRole {
   SUPER_ADMIN
   ADMIN
   VIEWER
+}
+
+enum PaymentDayStatus {
+  UNPAID
+  PENDING
+  PAID
+  HOLIDAY
+  VOIDED
 }
 
 // ============ MODELS ============
@@ -117,7 +123,6 @@ model Customer {
 
   contracts Contract[]
   invoices  Invoice[]
-  billings  Billing[]
 
   @@index([isDeleted])
   @@map("customers")
@@ -155,11 +160,13 @@ model Contract {
   billingStartDate    DateTime? @map("billing_start_date")
   bastPhoto           String?   @map("bast_photo")
   bastNotes           String    @default("") @map("bast_notes")
-  holidayDaysPerMonth Int       @default(2) @map("holiday_days_per_month")
+  holidayScheme       HolidayScheme @default(NEW_CONTRACT) @map("holiday_scheme")
 
   // RTO fields
   ownershipTargetDays Int       @default(1278) @map("ownership_target_days")
   totalDaysPaid       Int       @default(0) @map("total_days_paid")
+  workingDaysPaid     Int       @default(0) @map("working_days_paid")
+  holidayDaysPaid     Int       @default(0) @map("holiday_days_paid")
   ownershipProgress   Float     @default(0) @map("ownership_progress")
   gracePeriodDays     Int       @default(7) @map("grace_period_days")
   repossessedAt       DateTime? @map("repossessed_at")
@@ -169,9 +176,9 @@ model Contract {
   createdAt           DateTime  @default(now()) @map("created_at")
   updatedAt           DateTime  @updatedAt @map("updated_at")
 
-  customer Customer  @relation(fields: [customerId], references: [id])
-  invoices Invoice[]
-  billings Billing[]
+  customer    Customer     @relation(fields: [customerId], references: [id])
+  invoices    Invoice[]
+  paymentDays PaymentDay[]
 
   @@index([customerId])
   @@index([status])
@@ -197,55 +204,29 @@ model Invoice {
   dokuPaymentUrl  String? @map("doku_payment_url")
   dokuReferenceId String? @map("doku_reference_id")
 
-  // Billing period
-  billingPeriodStart DateTime? @map("billing_period_start")
-  billingPeriodEnd   DateTime? @map("billing_period_end")
-  billingId          String?   @map("billing_id")
+  // Payment period (for daily billing and manual payments)
+  dailyRate         Float?    @map("daily_rate")
+  daysCount         Int?      @map("days_count")
+  periodStart       DateTime? @map("period_start")
+  periodEnd         DateTime? @map("period_end")
+  expiredAt         DateTime? @map("expired_at")
+  previousPaymentId String?   @map("previous_payment_id")
+  isHoliday         Boolean   @default(false) @map("is_holiday")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  contract Contract @relation(fields: [contractId], references: [id])
-  customer Customer @relation(fields: [customerId], references: [id])
+  contract        Contract     @relation(fields: [contractId], references: [id])
+  customer        Customer     @relation(fields: [customerId], references: [id])
+  previousPayment Invoice?     @relation("PaymentChain", fields: [previousPaymentId], references: [id])
+  nextPayments    Invoice[]    @relation("PaymentChain")
+  paymentDays     PaymentDay[]
 
   @@index([contractId])
   @@index([customerId])
   @@index([status])
+  @@index([previousPaymentId])
   @@map("invoices")
-}
-
-model Billing {
-  id                String        @id @default(uuid())
-  billingNumber     String        @unique @map("billing_number")
-  contractId        String        @map("contract_id")
-  customerId        String        @map("customer_id")
-  amount            Float
-  dailyRate         Float         @map("daily_rate")
-  daysCount         Int           @map("days_count")
-  status            BillingStatus @default(ACTIVE)
-  dokuPaymentUrl    String?       @map("doku_payment_url")
-  dokuReferenceId   String?       @map("doku_reference_id")
-  periodStart       DateTime      @map("period_start")
-  periodEnd         DateTime      @map("period_end")
-  expiredAt         DateTime?     @map("expired_at")
-  paidAt            DateTime?     @map("paid_at")
-  invoiceId         String?       @map("invoice_id")
-  previousBillingId String?       @map("previous_billing_id")
-  isDeleted         Boolean       @default(false) @map("is_deleted")
-  deletedAt         DateTime?     @map("deleted_at")
-  createdAt         DateTime      @default(now()) @map("created_at")
-  updatedAt         DateTime      @updatedAt @map("updated_at")
-
-  contract        Contract @relation(fields: [contractId], references: [id])
-  customer        Customer @relation(fields: [customerId], references: [id])
-  previousBilling Billing? @relation("BillingChain", fields: [previousBillingId], references: [id])
-  nextBillings    Billing[] @relation("BillingChain")
-
-  @@index([contractId])
-  @@index([customerId])
-  @@index([status])
-  @@index([isDeleted])
-  @@map("billings")
 }
 
 model AuditLog {
@@ -273,4 +254,26 @@ model Setting {
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   @@map("settings")
+}
+
+model PaymentDay {
+  id         String           @id @default(uuid())
+  contractId String           @map("contract_id")
+  date       DateTime
+  status     PaymentDayStatus @default(UNPAID)
+  paymentId  String?          @map("payment_id")
+  dailyRate  Float            @map("daily_rate")
+  amount     Float            @default(0)
+  notes      String?
+  createdAt  DateTime         @default(now()) @map("created_at")
+  updatedAt  DateTime         @updatedAt @map("updated_at")
+
+  contract Contract @relation(fields: [contractId], references: [id])
+  payment  Invoice? @relation(fields: [paymentId], references: [id])
+
+  @@unique([contractId, date])
+  @@index([contractId, status])
+  @@index([paymentId])
+  @@index([contractId, date])
+  @@map("payment_days")
 }

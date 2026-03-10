@@ -1,19 +1,36 @@
 import { PrismaClient } from "@prisma/client";
 import { v4 as uuidv4 } from "uuid";
+import { customers } from "./data/customers";
+import { contracts, DateTuple } from "./data/contracts";
 
 const prisma = new PrismaClient();
 
+// ====== CLI Flags ======
+const args = process.argv.slice(2);
+const RESET = args.includes("--reset");
+const FORCE = args.includes("--force");
+
+// ====== Environment Guard ======
+function checkEnvironment() {
+  const env = process.env.NODE_ENV || "development";
+  if (env === "production" && RESET && !FORCE) {
+    console.error(
+      "ERROR: --reset in production requires --force flag.\n" +
+        "  Usage: npx ts-node prisma/seed.ts --reset --force\n" +
+        "  This will DELETE ALL existing data before re-seeding.",
+    );
+    process.exit(1);
+  }
+  if (RESET) {
+    console.warn(
+      `WARNING: Running with --reset in [${env}] — all data will be wiped.\n`,
+    );
+  }
+}
+
 // ====== Date Helpers ======
-function dateOf(y: number, m: number, d: number): Date {
+function toDate([y, m, d]: DateTuple): Date {
   return new Date(y, m - 1, d, 9, 0, 0, 0);
-}
-
-function startOfDay(y: number, m: number, d: number): Date {
-  return new Date(y, m - 1, d, 0, 0, 0, 0);
-}
-
-function endOfDay(y: number, m: number, d: number): Date {
-  return new Date(y, m - 1, d, 23, 59, 59, 999);
 }
 
 function addDays(date: Date, n: number): Date {
@@ -22,37 +39,64 @@ function addDays(date: Date, n: number): Date {
   return r;
 }
 
+function startOfDay(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+}
+
+function getWibToday(): Date {
+  const now = new Date();
+  const wibStr = now.toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" });
+  const [y, m, d] = wibStr.split("-").map(Number);
+  return new Date(y, m - 1, d, 0, 0, 0, 0);
+}
+
+function endOfDay(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+}
+
+function toDateKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 function fmtDateCompact(d: Date): string {
   return `${d.getFullYear().toString().slice(-2)}${(d.getMonth() + 1).toString().padStart(2, "0")}${d.getDate().toString().padStart(2, "0")}`;
 }
 
-function daysBetweenInclusive(from: Date, to: Date): number {
-  const a = new Date(from.getFullYear(), from.getMonth(), from.getDate());
-  const b = new Date(to.getFullYear(), to.getMonth(), to.getDate());
-  return Math.round((b.getTime() - a.getTime()) / 86400000) + 1;
-}
-
 // ====== Libur Bayar ======
-const HOLIDAY_PER_MONTH = 2;
-
-function getSundayHolidays(year: number, month: number): Set<number> {
-  const sundays: number[] = [];
-  const daysInMonth = new Date(year, month, 0).getDate();
-  for (let d = 1; d <= daysInMonth; d++) {
-    if (new Date(year, month - 1, d).getDay() === 0) sundays.push(d);
+function isLiburBayar(
+  d: Date,
+  scheme: "OLD_CONTRACT" | "NEW_CONTRACT",
+): boolean {
+  if (scheme === "OLD_CONTRACT") {
+    return d.getDay() === 0; // Semua Minggu = libur
+  } else {
+    return d.getDate() > 28; // Tanggal 29-31 = libur
   }
-  const N = sundays.length;
-  const K = Math.min(HOLIDAY_PER_MONTH, N);
-  const result = new Set<number>();
-  for (let i = 0; i < K; i++) {
-    result.add(sundays[Math.floor((i * N) / K + N / (2 * K))]);
-  }
-  return result;
 }
 
-function isLiburBayar(d: Date): boolean {
-  if (d.getDay() !== 0) return false;
-  return getSundayHolidays(d.getFullYear(), d.getMonth() + 1).has(d.getDate());
+// Walk calendar from billingStart, count N working days + all holidays in between
+function countCalendarDays(
+  billingStart: Date,
+  workingDays: number,
+  scheme: "OLD_CONTRACT" | "NEW_CONTRACT",
+) {
+  let cursor = new Date(billingStart);
+  let workingCount = 0;
+  let holidayCount = 0;
+  while (workingCount < workingDays) {
+    if (isLiburBayar(cursor, scheme)) {
+      holidayCount++;
+    } else {
+      workingCount++;
+    }
+    if (workingCount < workingDays) cursor = addDays(cursor, 1);
+  }
+  return {
+    totalDaysPaid: workingCount + holidayCount,
+    workingCount,
+    holidayCount,
+    lastDate: cursor,
+  };
 }
 
 // ====== Constants ======
@@ -77,190 +121,6 @@ const DPS: Record<string, number> = {
   EDPOWER_EXTENDED: 780000,
 };
 
-// Reference dates: all paid through March 3, active billing on March 4
-const PAID_THROUGH = dateOf(2026, 3, 3);
-const TODAY = dateOf(2026, 3, 4);
-
-// ====== Contract Data ======
-const DATA = [
-  {
-    contractNumber: "22/WNUS-KTR/I/2026",
-    startDate: dateOf(2026, 1, 22),
-    unitReceivedDate: dateOf(2026, 1, 22),
-    fullName: "ZYOVANNI SATYA NEGARA",
-    guarantorName: "ZYOVANNI SATYA NEGARA",
-    address: "Cluster Bumi Cibinong Kav A6 RT 003 RW 001 Tengah Cibinong Bogor",
-    phone: "081414090087",
-    guarantorPhone: "081414090087",
-    ktpNumber: "180321409870002",
-    motor: "VICTORY" as const,
-    battery: "EXTENDED" as const,
-    color: "Black Doff",
-    year: 2026,
-    vin: "MGNAALB2CSJ000042",
-    engineNumber: "QS3000722506000058",
-  },
-  {
-    contractNumber: "19/WNUS-KTR/I/2026",
-    startDate: dateOf(2026, 1, 22),
-    unitReceivedDate: dateOf(2026, 1, 22),
-    fullName: "SUDARYO",
-    guarantorName: "SUDARYO",
-    address:
-      "Jl Terogong III RT 009 RW 010 Cilandak Barat Cilandak Jakarta Selatan",
-    phone: "085697172145",
-    guarantorPhone: "085697172145",
-    ktpNumber: "317402106770003",
-    motor: "EDPOWER" as const,
-    battery: "EXTENDED" as const,
-    color: "Grey",
-    year: 2026,
-    vin: "MGNAALB2ESJ000008",
-    engineNumber: "QS3000722510000064",
-  },
-  {
-    contractNumber: "29/WNUS-KTR/II/2026",
-    startDate: dateOf(2026, 1, 31),
-    unitReceivedDate: dateOf(2026, 1, 31),
-    fullName: "WAHYU",
-    guarantorName: "WAHYU",
-    address: "Jl Bambu No 17 RT 001 RW 008 Kreo Larangan Kota Tangerang",
-    phone: "083894533343",
-    guarantorPhone: "083894533343",
-    ktpNumber: "3173082011890009",
-    motor: "ATHENA" as const,
-    battery: "EXTENDED" as const,
-    color: "Pink",
-    year: 2025,
-    vin: "MGNAALB2ASJ000010",
-    engineNumber: "JYX72V2500W2505000112",
-  },
-  {
-    contractNumber: "28/WNUS-KTR/II/2026",
-    startDate: dateOf(2026, 1, 31),
-    unitReceivedDate: dateOf(2026, 1, 31),
-    fullName: "DANNY ADYTIA HERLAMBANG",
-    guarantorName: "DANNY ADYTIA HERLAMBANG",
-    address:
-      "Jl Kamper III/36 RT 002 RW 009 Bekasi Jaya Bekasi Timur Kota Bekasi",
-    phone: "085956576856",
-    guarantorPhone: "085956576856",
-    ktpNumber: "3275010608880022",
-    motor: "ATHENA" as const,
-    battery: "EXTENDED" as const,
-    color: "Pink",
-    year: 2025,
-    vin: "MGNAALB2ASJ000009",
-    engineNumber: "JYX72V2500W2505000051",
-  },
-  {
-    contractNumber: "37/WNUS-KTR/II/2030",
-    startDate: dateOf(2026, 2, 5),
-    unitReceivedDate: dateOf(2026, 2, 5),
-    fullName: "M H KAMALUDIN",
-    guarantorName: "M H KAMALUDIN",
-    address:
-      "Komp Inkopad Blok J6/5 RT 017 RW 006 Sasakpanjang Tajurhalang Kabupaten Bogor",
-    phone: "082125444575",
-    guarantorPhone: "082125444575",
-    ktpNumber: "3201371310800001",
-    motor: "EDPOWER" as const,
-    battery: "EXTENDED" as const,
-    color: "Grey",
-    year: 2026,
-    vin: "MGNAALB2ESJ000005",
-    engineNumber: "QS3000722510000042",
-  },
-  {
-    contractNumber: "39/WNUS-KTR/II/2026",
-    startDate: dateOf(2026, 2, 9),
-    unitReceivedDate: dateOf(2026, 2, 9),
-    fullName: "FIRLY YASHFA ARTAMA",
-    guarantorName: "FIRLY YASHFA ARTAMA",
-    address:
-      "Kampung Setu RT 001 RW 002 Rempoa Ciputat Timur Tangerang Selatan",
-    phone: "0895429335757",
-    guarantorPhone: "0895429335757",
-    ktpNumber: "3174051403990001",
-    motor: "EDPOWER" as const,
-    battery: "EXTENDED" as const,
-    color: "Hitam",
-    year: 2026,
-    vin: "MGNAALB2ESJ000007",
-    engineNumber: "QS3000722510000092",
-  },
-  {
-    contractNumber: "42/WNUS-KTR/II/2026",
-    startDate: dateOf(2026, 2, 11),
-    unitReceivedDate: dateOf(2026, 2, 11),
-    fullName: "MUSYAWWIR",
-    guarantorName: "MUSYAWWIR",
-    address: "Jl Cempaka Portal No. 5 RT 004 RW 016, Pengasinan, Bekasi",
-    phone: "085217888979",
-    guarantorPhone: "085217888979",
-    ktpNumber: "3174031603790005",
-    motor: "EDPOWER" as const,
-    battery: "EXTENDED" as const,
-    color: "Navy",
-    year: 2026,
-    vin: "MGNAALB2ESJ000003",
-    engineNumber: "QS3000722510000083",
-  },
-  {
-    contractNumber: "52/WNUS-KTR/II/2026",
-    startDate: dateOf(2026, 2, 18),
-    unitReceivedDate: dateOf(2026, 2, 18),
-    fullName: "UGAN SUGANDI",
-    guarantorName: "UGAN SUGANDI",
-    address: "Gg Alif Perum. Alif Residence blok B7 RT 007 RW 007",
-    phone: "0895329797424",
-    guarantorPhone: "0895329797424",
-    ktpNumber: "3217091512950009",
-    motor: "ATHENA" as const,
-    battery: "EXTENDED" as const,
-    color: "Yellow",
-    year: 2026,
-    vin: "MGNAALB2ASJ000050",
-    engineNumber: "JYX72V2500W2505000085",
-  },
-  {
-    contractNumber: "56/WNUS-KTR/II/2026",
-    startDate: dateOf(2026, 2, 19),
-    unitReceivedDate: dateOf(2026, 2, 19),
-    fullName: "DIDAN WAHIDAN UNTUNG",
-    guarantorName: "DIDAN WAHIDAN UNTUNG",
-    address:
-      "Pedurenan RT 006 RW 004, Cilandak Timur, Pasar Minggu, Jakarta Selatan",
-    phone: "081255552188",
-    guarantorPhone: "081255552188",
-    ktpNumber: "3171062408000001",
-    motor: "ATHENA" as const,
-    battery: "EXTENDED" as const,
-    color: "White",
-    year: 2026,
-    vin: "MGNAALB2ASJ000022",
-    engineNumber: "JYX72V2500W2505000087",
-  },
-  {
-    contractNumber: "55/WNUS-KTR/II/2026",
-    startDate: dateOf(2026, 2, 19),
-    unitReceivedDate: dateOf(2026, 2, 19),
-    fullName: "CISWOYO",
-    guarantorName: "CISWOYO",
-    address:
-      "Jl Karet Pasar Baru Barat RT 004 RW 006, Karet Tengsin, Tanah Abang, Jakarta Pusat",
-    phone: "081297951756",
-    guarantorPhone: "081297951756",
-    ktpNumber: "3171073009770004",
-    motor: "VICTORY" as const,
-    battery: "EXTENDED" as const,
-    color: "Grey",
-    year: 2026,
-    vin: "MGNAALB2CSJ000030",
-    engineNumber: "QS3000722412000103",
-  },
-];
-
 const DEFAULT_SETTINGS = [
   {
     key: "max_rental_days",
@@ -274,7 +134,7 @@ const DEFAULT_SETTINGS = [
   },
   {
     key: "grace_period_days",
-    value: "7",
+    value: String(GRACE_DAYS),
     description: "Masa tenggang sebelum repossession",
   },
   {
@@ -283,98 +143,151 @@ const DEFAULT_SETTINGS = [
     description: "Denda keterlambatan per hari",
   },
   {
-    key: "holiday_days_per_month",
-    value: "2",
-    description: "Jumlah hari libur bayar per bulan (Minggu)",
+    key: "default_holiday_scheme",
+    value: "NEW_CONTRACT",
+    description: "Skema libur bayar default (OLD_CONTRACT / NEW_CONTRACT)",
   },
 ];
 
-async function main() {
-  console.log("Seeding database...");
+// ====== Seed Functions ======
 
-  // ====== Admin user ======
-  const existingAdmin = await prisma.user.findUnique({
+async function seedAdminUser(): Promise<string> {
+  const admin = await prisma.user.upsert({
     where: { username: "admin" },
+    update: {},
+    create: {
+      id: uuidv4(),
+      username: "admin",
+      password: "admin123",
+      fullName: "Administrator",
+      role: "ADMIN",
+      isActive: true,
+    },
   });
-  let adminId: string;
-  if (!existingAdmin) {
-    const admin = await prisma.user.create({
-      data: {
-        id: uuidv4(),
-        username: "admin",
-        password: "admin123",
-        fullName: "Administrator",
-        role: "ADMIN",
-        isActive: true,
-      },
-    });
-    adminId = admin.id;
-    console.log("Created admin user");
-  } else {
-    adminId = existingAdmin.id;
-    console.log("Admin user already exists");
-  }
+  console.log(`  Admin user: ${admin.id} (upserted)`);
+  return admin.id;
+}
 
-  // ====== Settings ======
+async function seedSettings() {
   for (const s of DEFAULT_SETTINGS) {
     await prisma.setting.upsert({
       where: { key: s.key },
-      create: { id: uuidv4(), ...s },
       update: {},
+      create: { id: uuidv4(), ...s },
     });
   }
-  console.log("Settings seeded");
+  console.log(`  Settings: ${DEFAULT_SETTINGS.length} keys (upserted)`);
+}
 
-  // ====== Check existing data ======
-  const customerCount = await prisma.customer.count();
-  if (customerCount > 0) {
-    console.log("Data already seeded, skipping");
-    return;
-  }
+async function resetData() {
+  console.log("\n[RESET] Deleting existing data...");
+  const counts = {
+    paymentDays: await prisma.paymentDay.deleteMany({}),
+    auditLogs: await prisma.auditLog.deleteMany({}),
+    invoices: await prisma.invoice.deleteMany({}),
+    contracts: await prisma.contract.deleteMany({}),
+    customers: await prisma.customer.deleteMany({}),
+  };
+  console.log(
+    `  Deleted: ${counts.paymentDays.count} payment days, ${counts.auditLogs.count} audit logs, ${counts.invoices.count} payments, ${counts.contracts.count} contracts, ${counts.customers.count} customers`,
+  );
+}
 
-  // ====== Collect all records for bulk insert ======
-  const allInvoices: any[] = [];
-  const allBillings: any[] = [];
-  const allAuditLogs: any[] = [];
+async function seedCustomers(): Promise<number> {
+  const existingKtps = new Set(
+    (await prisma.customer.findMany({ select: { ktpNumber: true } })).map(
+      (c) => c.ktpNumber,
+    ),
+  );
 
-  let globalInvSeq = 1;
-  let globalBilSeq = 1;
+  let created = 0;
+  let skipped = 0;
 
-  for (const data of DATA) {
-    const rateKey = `${data.motor}_${data.battery}`;
-    const dailyRate = RATES[rateKey];
-    const dpAmount = DPS[rateKey];
-    const billingStartDate = addDays(data.unitReceivedDate, 1);
+  for (const c of customers) {
+    if (existingKtps.has(c.ktpNumber)) {
+      skipped++;
+      continue;
+    }
 
-    // ====== Create customer ======
-    const customerId = uuidv4();
     await prisma.customer.create({
       data: {
-        id: customerId,
-        fullName: data.fullName,
-        phone: data.phone,
-        email: "",
-        address: data.address,
-        ktpNumber: data.ktpNumber,
-        guarantorName: data.guarantorName,
-        guarantorPhone: data.guarantorPhone,
-        spouseName: "",
-        notes: "",
-        rideHailingApps: [],
-        createdAt: data.startDate,
+        id: c.id,
+        fullName: c.fullName,
+        phone: c.phone,
+        email: c.email,
+        address: c.address,
+        ktpNumber: c.ktpNumber,
+        birthDate: c.birthDate,
+        gender: c.gender as any,
+        rideHailingApps: c.rideHailingApps,
+        guarantorName: c.guarantorName,
+        guarantorPhone: c.guarantorPhone,
+        spouseName: c.spouseName,
+        notes: c.notes,
       },
     });
+    existingKtps.add(c.ktpNumber);
+    created++;
+  }
 
-    // ====== Calculate contract fields ======
-    const totalDaysPaid = daysBetweenInclusive(billingStartDate, PAID_THROUGH);
-    const endDate = addDays(data.startDate, totalDaysPaid);
+  console.log(
+    `  Customers: ${created} created, ${skipped} skipped (already exist)`,
+  );
+  return created;
+}
 
-    // Count working days (non-LB) for totalAmount
+async function seedContracts(
+  adminId: string,
+): Promise<{ contractCount: number; paymentCount: number; paymentDayCount: number }> {
+  const TODAY = startOfDay(getWibToday());
+  const existingContracts = new Set(
+    (await prisma.contract.findMany({ select: { contractNumber: true } })).map(
+      (c) => c.contractNumber,
+    ),
+  );
+
+  const allPayments: any[] = [];
+  const allPaymentDays: any[] = [];
+  const allAuditLogs: any[] = [];
+  let globalSeq = 1;
+  let contractsCreated = 0;
+
+  for (const row of contracts) {
+    if (existingContracts.has(row.contractNumber)) continue;
+
+    const rateKey = `${row.motorModel}_${row.batteryType}`;
+    const dailyRate = RATES[rateKey] || 63000;
+    const dpAmount = DPS[rateKey] || 580000;
+    const dpPaidAmount = row.dpPaid;
+    const dpFullyPaid = dpPaidAmount >= dpAmount;
+
+    const startDate = toDate(row.startDate);
+    const unitReceivedDate = row.unitReceivedDate
+      ? toDate(row.unitReceivedDate)
+      : null;
+    const repossessedAt = row.repossessedAt ? toDate(row.repossessedAt) : null;
+    const cancelledAt = row.cancelledAt ? toDate(row.cancelledAt) : null;
+    const workingDaysPaid = row.workingDaysPaid ?? 0;
+
+    const billingStartDate = unitReceivedDate
+      ? addDays(unitReceivedDate, 1)
+      : null;
+
+    // Calculate totalDaysPaid (working + holidays), endDate, and workingDays
+    let totalDaysPaid = 0;
     let workingDays = 0;
-    let cursor = new Date(billingStartDate);
-    for (let i = 0; i < totalDaysPaid; i++) {
-      if (!isLiburBayar(cursor)) workingDays++;
-      cursor = addDays(cursor, 1);
+    let endDate: Date;
+    if (billingStartDate && workingDaysPaid > 0) {
+      const calc = countCalendarDays(
+        billingStartDate,
+        workingDaysPaid,
+        row.holidayScheme,
+      );
+      totalDaysPaid = calc.totalDaysPaid;
+      workingDays = calc.workingCount;
+      endDate = calc.lastDate;
+    } else {
+      endDate = startDate;
     }
 
     const totalAmount = workingDays * dailyRate;
@@ -382,148 +295,279 @@ async function main() {
       ((totalDaysPaid / OWN_TARGET) * 100).toFixed(2),
     );
 
-    // ====== Create contract ======
-    const contractId = uuidv4();
+    // Auto-detect OVERDUE: jika ACTIVE tapi endDate + grace period sudah lewat
+    let finalStatus: string = row.status;
+    if (row.status === "ACTIVE" && billingStartDate && workingDaysPaid > 0) {
+      const graceEnd = new Date(endDate);
+      graceEnd.setDate(graceEnd.getDate() + GRACE_DAYS);
+      if (graceEnd < TODAY) {
+        finalStatus = "OVERDUE" as any;
+      }
+    }
+
+    const notes = cancelledAt
+      ? `[CANCELLED] Dibatalkan pada ${cancelledAt.toISOString().slice(0, 10)}. ${row.notes}`
+      : row.notes;
+
     await prisma.contract.create({
       data: {
-        id: contractId,
-        contractNumber: data.contractNumber,
-        customerId,
-        motorModel: data.motor,
-        batteryType: data.battery,
+        id: row.id,
+        contractNumber: row.contractNumber,
+        customerId: row.customerId,
+        motorModel: row.motorModel as any,
+        batteryType: row.batteryType as any,
         dailyRate,
         durationDays: totalDaysPaid,
         totalAmount,
-        startDate: data.startDate,
+        startDate,
         endDate,
-        status: "ACTIVE",
-        notes: "",
+        status: finalStatus as any,
+        notes,
         createdBy: adminId,
-        color: data.color,
-        year: data.year,
-        vinNumber: data.vin,
-        engineNumber: data.engineNumber,
+        color: row.color,
+        year: row.year,
+        vinNumber: row.vinNumber,
+        engineNumber: row.engineNumber,
         dpAmount,
-        dpScheme: "FULL",
-        dpPaidAmount: dpAmount,
-        dpFullyPaid: true,
-        unitReceivedDate: data.unitReceivedDate,
+        dpScheme: row.dpScheme as any,
+        dpPaidAmount,
+        dpFullyPaid,
+        unitReceivedDate,
         billingStartDate,
-        bastPhoto: "https://storage.example.com/bast/sample.jpg",
-        bastNotes: "Unit diterima dalam kondisi baik",
-        holidayDaysPerMonth: HOLIDAY_PER_MONTH,
+        bastPhoto: unitReceivedDate
+          ? "https://storage.example.com/bast/sample.jpg"
+          : null,
+        bastNotes: row.bastNotes,
+        holidayScheme: row.holidayScheme as any,
         ownershipTargetDays: OWN_TARGET,
         totalDaysPaid,
+        workingDaysPaid: workingDays,
+        holidayDaysPaid: totalDaysPaid - workingDays,
         ownershipProgress,
         gracePeriodDays: GRACE_DAYS,
-        createdAt: data.startDate,
+        repossessedAt,
+        createdAt: startDate,
       },
     });
+    contractsCreated++;
 
-    // ====== DP Invoice (PAID) ======
-    const dpInvNum = `PMT-${fmtDateCompact(data.startDate)}-${String(globalInvSeq++).padStart(4, "0")}`;
-    allInvoices.push({
-      id: uuidv4(),
-      invoiceNumber: dpInvNum,
-      contractId,
-      customerId,
-      amount: dpAmount,
-      lateFee: 0,
-      type: "DP",
-      status: "PAID",
-      qrCodeData: `WEDISON-PAY-${dpInvNum}-${dpAmount}`,
-      dueDate: data.startDate,
-      paidAt: data.startDate,
-      createdAt: data.startDate,
-    });
-
-    // ====== Daily billings & invoices (billingStart → PAID_THROUGH) ======
-    let currentDate = new Date(billingStartDate);
-    while (currentDate <= PAID_THROUGH) {
-      const y = currentDate.getFullYear();
-      const m = currentDate.getMonth() + 1;
-      const d = currentDate.getDate();
-      const isHoliday = isLiburBayar(currentDate);
-
-      if (isHoliday) {
-        // LB Sunday: zero-amount auto-paid billing, no invoice
-        allBillings.push({
-          id: uuidv4(),
-          billingNumber: `BIL-${fmtDateCompact(currentDate)}-${String(globalBilSeq++).padStart(4, "0")}`,
-          contractId,
-          customerId,
-          amount: 0,
-          dailyRate,
-          daysCount: 0,
-          status: "PAID",
-          periodStart: startOfDay(y, m, d),
-          periodEnd: endOfDay(y, m, d),
-          paidAt: startOfDay(y, m, d),
-          createdAt: startOfDay(y, m, d),
-        });
-      } else {
-        // Working day: paid billing + paid invoice
-        const bilId = uuidv4();
-        const invId = uuidv4();
-        const bilNum = `BIL-${fmtDateCompact(currentDate)}-${String(globalBilSeq++).padStart(4, "0")}`;
-        const invNum = `PMT-${fmtDateCompact(currentDate)}-${String(globalInvSeq++).padStart(4, "0")}`;
-
-        allBillings.push({
-          id: bilId,
-          billingNumber: bilNum,
-          contractId,
-          customerId,
-          amount: dailyRate,
-          dailyRate,
-          daysCount: 1,
-          status: "PAID",
-          periodStart: startOfDay(y, m, d),
-          periodEnd: endOfDay(y, m, d),
-          paidAt: startOfDay(y, m, d),
-          invoiceId: invId,
-          createdAt: startOfDay(y, m, d),
-        });
-
-        allInvoices.push({
-          id: invId,
-          invoiceNumber: invNum,
-          contractId,
-          customerId,
-          amount: dailyRate,
-          lateFee: 0,
-          type: "DAILY_BILLING",
-          status: "PAID",
-          qrCodeData: `WEDISON-PAY-${invNum}-${dailyRate}`,
-          dueDate: endOfDay(y, m, d),
-          paidAt: startOfDay(y, m, d),
-          extensionDays: 1,
-          billingId: bilId,
-          billingPeriodStart: startOfDay(y, m, d),
-          billingPeriodEnd: endOfDay(y, m, d),
-          createdAt: startOfDay(y, m, d),
-        });
-      }
-
-      currentDate = addDays(currentDate, 1);
+    // ====== DP Payments ======
+    if (row.dpScheme === "FULL") {
+      const pmtNum = `PMT-${fmtDateCompact(startDate)}-${String(globalSeq++).padStart(4, "0")}`;
+      allPayments.push({
+        id: uuidv4(),
+        invoiceNumber: pmtNum,
+        contractId: row.id,
+        customerId: row.customerId,
+        amount: dpAmount,
+        lateFee: 0,
+        type: "DP",
+        status: dpFullyPaid ? "PAID" : "PENDING",
+        qrCodeData: `WEDISON-PAY-${pmtNum}-${dpAmount}`,
+        dueDate: startDate,
+        paidAt: dpFullyPaid ? startDate : null,
+        createdAt: startDate,
+      });
+    } else {
+      const half1 = Math.ceil(dpAmount / 2);
+      const half2 = dpAmount - half1;
+      const pmtNum1 = `PMT-${fmtDateCompact(startDate)}-${String(globalSeq++).padStart(4, "0")}`;
+      const pmtNum2 = `PMT-${fmtDateCompact(startDate)}-${String(globalSeq++).padStart(4, "0")}`;
+      allPayments.push({
+        id: uuidv4(),
+        invoiceNumber: pmtNum1,
+        contractId: row.id,
+        customerId: row.customerId,
+        amount: half1,
+        lateFee: 0,
+        type: "DP_INSTALLMENT",
+        status: dpPaidAmount >= half1 ? "PAID" : "PENDING",
+        qrCodeData: `WEDISON-PAY-${pmtNum1}-${half1}`,
+        dueDate: startDate,
+        paidAt: dpPaidAmount >= half1 ? startDate : null,
+        createdAt: startDate,
+      });
+      allPayments.push({
+        id: uuidv4(),
+        invoiceNumber: pmtNum2,
+        contractId: row.id,
+        customerId: row.customerId,
+        amount: half2,
+        lateFee: 0,
+        type: "DP_INSTALLMENT",
+        status: dpPaidAmount >= dpAmount ? "PAID" : "PENDING",
+        qrCodeData: `WEDISON-PAY-${pmtNum2}-${half2}`,
+        dueDate: unitReceivedDate || addDays(startDate, 7),
+        paidAt: dpPaidAmount >= dpAmount ? unitReceivedDate || startDate : null,
+        createdAt: startDate,
+      });
     }
 
-    // ====== Active billing for today (March 4) — not paid yet ======
-    const ty = TODAY.getFullYear();
-    const tm = TODAY.getMonth() + 1;
-    const td = TODAY.getDate();
-    allBillings.push({
-      id: uuidv4(),
-      billingNumber: `BIL-${fmtDateCompact(TODAY)}-${String(globalBilSeq++).padStart(4, "0")}`,
-      contractId,
-      customerId,
-      amount: dailyRate,
-      dailyRate,
-      daysCount: 1,
-      status: "ACTIVE",
-      periodStart: startOfDay(ty, tm, td),
-      periodEnd: endOfDay(ty, tm, td),
-      createdAt: startOfDay(ty, tm, td),
-    });
+    // ====== Daily payments for paid days (walk calendar, not linear count) ======
+    if (billingStartDate && workingDaysPaid > 0) {
+      let currentDate = new Date(billingStartDate);
+      let generatedWorkingDays = 0;
+      while (generatedWorkingDays < workingDaysPaid) {
+        const isHoliday = isLiburBayar(currentDate, row.holidayScheme);
+        const sd = startOfDay(currentDate);
+        const ed = endOfDay(currentDate);
+
+        if (isHoliday) {
+          // Holiday payment: amount 0, auto-PAID, credits 1 day
+          const pmtNum = `PMT-${fmtDateCompact(currentDate)}-${String(globalSeq++).padStart(4, "0")}`;
+          allPayments.push({
+            id: uuidv4(),
+            invoiceNumber: pmtNum,
+            contractId: row.id,
+            customerId: row.customerId,
+            amount: 0,
+            lateFee: 0,
+            type: "DAILY_BILLING",
+            status: "PAID",
+            qrCodeData: `WEDISON-PAY-${pmtNum}-0`,
+            dueDate: ed,
+            paidAt: sd,
+            extensionDays: 0,
+            dailyRate,
+            daysCount: 0,
+            periodStart: sd,
+            periodEnd: ed,
+            isHoliday: true,
+            createdAt: sd,
+          });
+        } else {
+          // Normal daily payment: PAID
+          const pmtNum = `PMT-${fmtDateCompact(currentDate)}-${String(globalSeq++).padStart(4, "0")}`;
+          allPayments.push({
+            id: uuidv4(),
+            invoiceNumber: pmtNum,
+            contractId: row.id,
+            customerId: row.customerId,
+            amount: dailyRate,
+            lateFee: 0,
+            type: "DAILY_BILLING",
+            status: "PAID",
+            qrCodeData: `WEDISON-PAY-${pmtNum}-${dailyRate}`,
+            dueDate: ed,
+            paidAt: sd,
+            extensionDays: 1,
+            dailyRate,
+            daysCount: 1,
+            periodStart: sd,
+            periodEnd: ed,
+            isHoliday: false,
+            createdAt: sd,
+          });
+          generatedWorkingDays++;
+        }
+        currentDate = addDays(currentDate, 1);
+      }
+    }
+
+    // ====== Active payment for today (unpaid days for ACTIVE/OVERDUE contracts) ======
+    if (
+      (finalStatus === "ACTIVE" || finalStatus === "OVERDUE") &&
+      unitReceivedDate &&
+      billingStartDate &&
+      workingDaysPaid > 0
+    ) {
+      let unpaidDays = 0;
+      let accCursor = startOfDay(addDays(endDate, 1));
+      while (accCursor <= TODAY) {
+        if (!isLiburBayar(accCursor, row.holidayScheme)) unpaidDays++;
+        accCursor = startOfDay(addDays(accCursor, 1));
+      }
+      if (unpaidDays > 0) {
+        const pmtNum = `PMT-${fmtDateCompact(TODAY)}-${String(globalSeq++).padStart(4, "0")}`;
+        allPayments.push({
+          id: uuidv4(),
+          invoiceNumber: pmtNum,
+          contractId: row.id,
+          customerId: row.customerId,
+          amount: unpaidDays * dailyRate,
+          lateFee: 0,
+          type: "DAILY_BILLING",
+          status: "PENDING",
+          qrCodeData: `WEDISON-PAY-${pmtNum}-${unpaidDays * dailyRate}`,
+          dueDate: endOfDay(TODAY),
+          dailyRate,
+          daysCount: unpaidDays,
+          extensionDays: unpaidDays,
+          periodStart: startOfDay(addDays(endDate, 1)),
+          periodEnd: endOfDay(TODAY),
+          isHoliday: false,
+          createdAt: startOfDay(TODAY),
+        });
+      }
+    }
+
+    // ====== PaymentDay records ======
+    if (billingStartDate) {
+      // Build a map: dateKey -> paymentId+status for payments of this contract
+      const paymentDateMap = new Map<string, { id: string; status: string }>();
+      for (const pmt of allPayments) {
+        if (pmt.contractId !== row.id) continue;
+        if (pmt.type !== "DAILY_BILLING") continue;
+        if (!pmt.periodStart || !pmt.periodEnd) continue;
+        let d = startOfDay(new Date(pmt.periodStart));
+        const end = startOfDay(new Date(pmt.periodEnd));
+        while (d <= end) {
+          paymentDateMap.set(toDateKey(d), { id: pmt.id, status: pmt.status });
+          d = addDays(d, 1);
+        }
+      }
+
+      // Walk from billingStartDate to today+30 (or terminate date for cancelled/repossessed)
+      const terminateDate =
+        finalStatus === "CANCELLED" || finalStatus === "REPOSSESSED"
+          ? (repossessedAt || cancelledAt || TODAY)
+          : null;
+      const pdEnd = addDays(TODAY, 30);
+
+      let pdCursor = new Date(billingStartDate);
+      while (pdCursor <= pdEnd) {
+        const d = startOfDay(new Date(pdCursor));
+        const key = toDateKey(d);
+        const isHoliday = isLiburBayar(d, row.holidayScheme);
+        const pmt = paymentDateMap.get(key);
+
+        let status: string;
+        let paymentId: string | null = null;
+        const amount = isHoliday ? 0 : dailyRate;
+
+        if (isHoliday) {
+          status = "HOLIDAY";
+          if (pmt) paymentId = pmt.id;
+        } else if (pmt && pmt.status === "PAID") {
+          status = "PAID";
+          paymentId = pmt.id;
+        } else if (pmt && pmt.status === "PENDING") {
+          status = "PENDING";
+          paymentId = pmt.id;
+        } else {
+          status = "UNPAID";
+        }
+
+        // Cancelled/repossessed: VOID all UNPAID days after terminate date
+        if (terminateDate && d > terminateDate && status === "UNPAID") {
+          status = "VOIDED";
+        }
+
+        allPaymentDays.push({
+          id: uuidv4(),
+          contractId: row.id,
+          date: d,
+          status,
+          paymentId,
+          dailyRate,
+          amount,
+          notes: null,
+          createdAt: d,
+        });
+
+        pdCursor = addDays(pdCursor, 1);
+      }
+    }
 
     // ====== Audit log ======
     allAuditLogs.push({
@@ -531,48 +575,104 @@ async function main() {
       userId: adminId,
       action: "CREATE",
       module: "contract",
-      entityId: contractId,
-      description: `Created contract ${data.contractNumber} for ${data.fullName} - ${data.motor} ${data.battery} (DP: FULL)`,
+      entityId: row.id,
+      description: `Created contract ${row.contractNumber} for ${row.customerName} - ${row.motorModel} ${row.batteryType} (DP: ${row.dpScheme})`,
       metadata: {
-        contractNumber: data.contractNumber,
-        motorModel: data.motor,
-        batteryType: data.battery,
-        dpScheme: "FULL",
+        contractNumber: row.contractNumber,
+        motorModel: row.motorModel,
+        batteryType: row.batteryType,
+        dpScheme: row.dpScheme,
         dpAmount,
       },
       ipAddress: "127.0.0.1",
-      createdAt: data.startDate,
+      createdAt: startDate,
     });
-
-    console.log(
-      `  ${data.contractNumber} | ${data.fullName} | ${totalDaysPaid} days paid (${workingDays} working) | endDate: ${endDate.toISOString().slice(0, 10)} | progress: ${ownershipProgress}%`,
-    );
   }
 
-  // ====== Bulk insert ======
-  console.log(`\nInserting ${allInvoices.length} invoices...`);
-  await prisma.invoice.createMany({ data: allInvoices });
+  // ====== Bulk insert in batches ======
+  const BATCH = 500;
 
-  console.log(`Inserting ${allBillings.length} billings...`);
-  await prisma.billing.createMany({ data: allBillings });
+  for (let i = 0; i < allPayments.length; i += BATCH) {
+    await prisma.invoice.createMany({ data: allPayments.slice(i, i + BATCH) });
+  }
 
-  console.log(`Inserting ${allAuditLogs.length} audit logs...`);
-  await prisma.auditLog.createMany({ data: allAuditLogs });
+  for (let i = 0; i < allAuditLogs.length; i += BATCH) {
+    await prisma.auditLog.createMany({
+      data: allAuditLogs.slice(i, i + BATCH),
+    });
+  }
 
-  console.log(`\nSeed complete!`);
-  console.log(`  ${DATA.length} customers`);
+  for (let i = 0; i < allPaymentDays.length; i += BATCH) {
+    await prisma.paymentDay.createMany({
+      data: allPaymentDays.slice(i, i + BATCH),
+      skipDuplicates: true,
+    });
+  }
+
+  console.log(`  Contracts: ${contractsCreated} created`);
+  console.log(`  Payments: ${allPayments.length} (DP + daily)`);
+  console.log(`  Payment days: ${allPaymentDays.length}`);
+  console.log(`  Audit logs: ${allAuditLogs.length}`);
+
+  return { contractCount: contractsCreated, paymentCount: allPayments.length, paymentDayCount: allPaymentDays.length };
+}
+
+// ====== Main ======
+async function main() {
+  checkEnvironment();
+
+  console.log("=== WEDISON RTO Seed ===\n");
+
+  // Step 1: Always upsert reference data (idempotent)
+  console.log("[1/4] Reference data (idempotent):");
+  const adminId = await seedAdminUser();
+  await seedSettings();
+
+  // Step 2: Check if data already exists
+  const existingContracts = await prisma.contract.count();
+  if (existingContracts > 0 && !RESET) {
+    console.log(
+      `\n[SKIP] Database already has ${existingContracts} contracts.`,
+    );
+    console.log("  To re-seed, run with --reset flag:");
+    console.log("  npx ts-node prisma/seed.ts --reset");
+    console.log("\n  Reference data (admin + settings) was updated.");
+    return;
+  }
+
+  // Step 3: Reset if requested
+  if (RESET) {
+    await resetData();
+  }
+
+  // Step 4: Seed master data + derived data
+  console.log("\n[2/4] Seeding customers:");
+  await seedCustomers();
+
+  console.log("\n[3/4] Seeding contracts + payment history:");
+  const { paymentCount } = await seedContracts(adminId);
+
+  // Summary
+  const activeCount = contracts.filter((c) => c.status === "ACTIVE").length;
+  const repossessedCount = contracts.filter(
+    (c) => c.status === "REPOSSESSED",
+  ).length;
+  const cancelledCount = contracts.filter(
+    (c) => c.status === "CANCELLED",
+  ).length;
+
+  console.log("\n[4/4] Summary:");
+  console.log(`  ${customers.length} customers in data file`);
   console.log(
-    `  ${DATA.length} contracts (all ACTIVE, paid through ${PAID_THROUGH.toISOString().slice(0, 10)})`,
+    `  ${contracts.length} contracts (${activeCount} active, ${repossessedCount} repossessed, ${cancelledCount} cancelled)`,
   );
-  console.log(`  ${allInvoices.length} invoices (DP + daily billing)`);
-  console.log(
-    `  ${allBillings.length} billings (paid + ${DATA.length} active for today)`,
-  );
+  console.log(`  ${paymentCount} payments`);
+  console.log("\nSeed complete!");
 }
 
 main()
   .catch((e) => {
-    console.error(e);
+    console.error("\nSeed failed:", e.message || e);
     process.exit(1);
   })
   .finally(async () => {

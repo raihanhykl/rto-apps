@@ -17,6 +17,7 @@ import {
   CheckCircle2,
   Activity,
   Ban,
+  XCircle,
 } from "lucide-react";
 
 const RevenueChart = dynamic(
@@ -81,6 +82,13 @@ export default function DashboardPage() {
       icon: AlertTriangle,
       color: "text-red-600",
       bg: "bg-red-50",
+    },
+    {
+      title: "Cancelled",
+      value: stats.cancelledContracts,
+      icon: XCircle,
+      color: "text-orange-600",
+      bg: "bg-orange-50",
     },
     {
       title: "Repossessed",

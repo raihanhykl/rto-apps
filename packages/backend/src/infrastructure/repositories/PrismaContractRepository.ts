@@ -31,6 +31,18 @@ export class PrismaContractRepository implements IContractRepository {
     if (params.status && params.status !== 'ALL') {
       where.status = params.status as any;
     }
+    if (params.motorModel && params.motorModel !== 'ALL') {
+      where.motorModel = params.motorModel as any;
+    }
+    if (params.batteryType && params.batteryType !== 'ALL') {
+      where.batteryType = params.batteryType as any;
+    }
+    if (params.dpScheme && params.dpScheme !== 'ALL') {
+      where.dpScheme = params.dpScheme as any;
+    }
+    if (params.dpFullyPaid && params.dpFullyPaid !== 'ALL') {
+      where.dpFullyPaid = params.dpFullyPaid === 'true';
+    }
     if (params.startDate || params.endDate) {
       where.createdAt = {};
       if (params.startDate) {
@@ -114,9 +126,11 @@ export class PrismaContractRepository implements IContractRepository {
         billingStartDate: contract.billingStartDate,
         bastPhoto: contract.bastPhoto,
         bastNotes: contract.bastNotes,
-        holidayDaysPerMonth: contract.holidayDaysPerMonth,
+        holidayScheme: contract.holidayScheme as any,
         ownershipTargetDays: contract.ownershipTargetDays,
         totalDaysPaid: contract.totalDaysPaid,
+        workingDaysPaid: contract.workingDaysPaid,
+        holidayDaysPaid: contract.holidayDaysPaid,
         ownershipProgress: contract.ownershipProgress,
         gracePeriodDays: contract.gracePeriodDays,
         repossessedAt: contract.repossessedAt,
@@ -160,5 +174,34 @@ export class PrismaContractRepository implements IContractRepository {
     return this.prisma.contract.count({
       where: { status: status as any, isDeleted: false },
     });
+  }
+
+  async findMaxContractSequence(): Promise<number> {
+    const contracts = await this.prisma.contract.findMany({
+      select: { contractNumber: true },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+    let max = 0;
+    for (const c of contracts) {
+      // Parse NN/WNUS-KTR/I/YYYY format
+      const match = c.contractNumber.match(/^(\d+)\//);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num > max) max = num;
+      }
+    }
+    return max;
+  }
+
+  async updateGracePeriodByStatuses(gracePeriodDays: number, statuses: ContractStatus[]): Promise<number> {
+    const result = await this.prisma.contract.updateMany({
+      where: {
+        status: { in: statuses as any },
+        isDeleted: false,
+      },
+      data: { gracePeriodDays },
+    });
+    return result.count;
   }
 }

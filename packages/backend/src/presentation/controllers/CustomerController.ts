@@ -7,7 +7,7 @@ export class CustomerController {
 
   getAll = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { page, limit, sortBy, sortOrder, search } = req.query;
+      const { page, limit, sortBy, sortOrder, search, gender } = req.query;
       if (page) {
         const result = await this.customerService.getAllPaginated({
           page: parseInt(page as string) || 1,
@@ -15,6 +15,7 @@ export class CustomerController {
           sortBy: sortBy as string,
           sortOrder: sortOrder as 'asc' | 'desc',
           search: search as string,
+          gender: gender as string,
         });
         return res.json(result);
       }

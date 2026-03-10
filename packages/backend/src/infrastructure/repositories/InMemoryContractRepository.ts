@@ -19,6 +19,10 @@ export class InMemoryContractRepository implements IContractRepository {
       items = items.filter(c => c.contractNumber.toLowerCase().includes(q) || c.motorModel.toLowerCase().includes(q));
     }
     if (params.status && params.status !== 'ALL') { items = items.filter(c => c.status === params.status); }
+    if (params.motorModel && params.motorModel !== 'ALL') { items = items.filter(c => c.motorModel === params.motorModel); }
+    if (params.batteryType && params.batteryType !== 'ALL') { items = items.filter(c => c.batteryType === params.batteryType); }
+    if (params.dpScheme && params.dpScheme !== 'ALL') { items = items.filter(c => c.dpScheme === params.dpScheme); }
+    if (params.dpFullyPaid && params.dpFullyPaid !== 'ALL') { items = items.filter(c => c.dpFullyPaid === (params.dpFullyPaid === 'true')); }
     if (params.startDate) { const s = new Date(params.startDate); items = items.filter(c => c.createdAt >= s); }
     if (params.endDate) { const e = new Date(params.endDate); e.setDate(e.getDate() + 1); items = items.filter(c => c.createdAt < e); }
     const sortBy = params.sortBy || 'createdAt';
@@ -70,5 +74,29 @@ export class InMemoryContractRepository implements IContractRepository {
   async countByStatus(status: ContractStatus): Promise<number> {
     return Array.from(this.contracts.values())
       .filter(c => c.status === status && !c.isDeleted).length;
+  }
+
+  async findMaxContractSequence(): Promise<number> {
+    let max = 0;
+    for (const c of this.contracts.values()) {
+      const match = c.contractNumber.match(/^(\d+)\//);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num > max) max = num;
+      }
+    }
+    return max;
+  }
+
+  async updateGracePeriodByStatuses(gracePeriodDays: number, statuses: ContractStatus[]): Promise<number> {
+    let count = 0;
+    for (const contract of this.contracts.values()) {
+      if (!contract.isDeleted && statuses.includes(contract.status)) {
+        contract.gracePeriodDays = gracePeriodDays;
+        contract.updatedAt = new Date();
+        count++;
+      }
+    }
+    return count;
   }
 }
