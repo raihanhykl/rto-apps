@@ -273,21 +273,22 @@ describe('PaymentService', () => {
 
   describe('rollover', () => {
     it('should rollover expired payment with accumulated amount', async () => {
-      const twoDaysAgo = new Date();
-      twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
-      twoDaysAgo.setHours(0, 0, 0, 0);
-
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
       yesterday.setHours(0, 0, 0, 0);
       if (yesterday.getDay() === 0) return;
 
-      await contractRepo.update(activeContract.id, { endDate: new Date(twoDaysAgo) });
+      // Create a contract with billingStartDate = yesterday so initial payment = 1 day
+      const rolloverContract = await createActiveContract({
+        billingStartDate: new Date(yesterday),
+        endDate: new Date(yesterday),
+      });
 
       await paymentService.generateDailyPayments(yesterday);
 
-      let payments = await invoiceRepo.findByContractId(activeContract.id);
-      expect(payments.length).toBe(1);
+      let payments = await invoiceRepo.findByContractId(rolloverContract.id);
+      const rolloverPayments = payments.filter((p: Invoice) => p.type === InvoiceType.DAILY_BILLING);
+      expect(rolloverPayments.length).toBe(1);
 
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -295,11 +296,12 @@ describe('PaymentService', () => {
 
       await paymentService.rolloverExpiredPayments(today);
 
-      payments = await invoiceRepo.findByContractId(activeContract.id);
-      expect(payments.length).toBe(2);
+      payments = await invoiceRepo.findByContractId(rolloverContract.id);
+      const dailyPayments = payments.filter((p: Invoice) => p.type === InvoiceType.DAILY_BILLING);
+      expect(dailyPayments.length).toBe(2);
 
-      const expiredPayment = payments.find((p: Invoice) => p.status === PaymentStatus.EXPIRED);
-      const pendingPayment = payments.find((p: Invoice) => p.status === PaymentStatus.PENDING);
+      const expiredPayment = dailyPayments.find((p: Invoice) => p.status === PaymentStatus.EXPIRED);
+      const pendingPayment = dailyPayments.find((p: Invoice) => p.status === PaymentStatus.PENDING);
 
       expect(expiredPayment).toBeDefined();
       expect(pendingPayment).toBeDefined();
@@ -386,10 +388,11 @@ describe('PaymentService', () => {
       day1.setHours(0, 0, 0, 0);
       if (day1.getDay() === 0) return;
 
-      const twoDaysAgo = new Date();
-      twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
-      twoDaysAgo.setHours(0, 0, 0, 0);
-      await contractRepo.update(activeContract.id, { endDate: new Date(twoDaysAgo) });
+      // Create contract with billingStartDate = yesterday so initial payment = 1 day
+      const accContract = await createActiveContract({
+        billingStartDate: new Date(day1),
+        endDate: new Date(day1),
+      });
 
       await paymentService.generateDailyPayments(day1);
 
@@ -399,7 +402,7 @@ describe('PaymentService', () => {
 
       await paymentService.rolloverExpiredPayments(day2);
 
-      const payments = await invoiceRepo.findByContractId(activeContract.id);
+      const payments = await invoiceRepo.findByContractId(accContract.id);
       const pendingPayment = payments.find((p: Invoice) => p.status === PaymentStatus.PENDING)!;
 
       expect(pendingPayment.daysCount).toBe(2);
@@ -407,7 +410,7 @@ describe('PaymentService', () => {
 
       await paymentService.payPayment(pendingPayment.id, adminId);
 
-      const contract = await contractRepo.findById(activeContract.id);
+      const contract = await contractRepo.findById(accContract.id);
       expect(contract!.totalDaysPaid).toBe(2);
       expect(contract!.durationDays).toBe(2);
       expect(contract!.totalAmount).toBe(58000 * 2);
