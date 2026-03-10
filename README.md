@@ -200,6 +200,8 @@ cd packages/frontend && npm run build
 | GET | /api/payments/contract/:contractId/active | Active (PENDING) payment |
 | GET | /api/payments/contract/:contractId/calendar | Calendar data |
 | POST | /api/payments/contract/:contractId/manual | Create manual payment (1-7 days) |
+| PATCH | /api/payments/contract/:contractId/day/:date | Admin correction — ubah status PaymentDay |
+| POST | /api/payments/:id/reduce | Partial payment — kurangi hari dalam invoice |
 
 ### Reports & Export
 | Method | Path | Description |

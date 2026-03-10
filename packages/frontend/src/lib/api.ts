@@ -308,6 +308,20 @@ class ApiClient {
     });
   }
 
+  async updatePaymentDayStatus(contractId: string, date: string, status: string, notes?: string) {
+    return this.request<any>(`/payments/contract/${contractId}/day/${date}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status, notes }),
+    });
+  }
+
+  async reducePayment(paymentId: string, newDaysCount: number, notes?: string) {
+    return this.request<any>(`/payments/${paymentId}/reduce`, {
+      method: 'POST',
+      body: JSON.stringify({ newDaysCount, notes }),
+    });
+  }
+
   async downloadPaymentPdf(id: string) {
     return this.request<Blob>(`/payments/${id}/pdf`);
   }

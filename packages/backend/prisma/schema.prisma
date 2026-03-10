@@ -74,6 +74,14 @@ enum UserRole {
   VIEWER
 }
 
+enum PaymentDayStatus {
+  UNPAID
+  PENDING
+  PAID
+  HOLIDAY
+  VOIDED
+}
+
 // ============ MODELS ============
 
 model User {
@@ -168,8 +176,9 @@ model Contract {
   createdAt           DateTime  @default(now()) @map("created_at")
   updatedAt           DateTime  @updatedAt @map("updated_at")
 
-  customer Customer  @relation(fields: [customerId], references: [id])
-  invoices Invoice[]
+  customer    Customer     @relation(fields: [customerId], references: [id])
+  invoices    Invoice[]
+  paymentDays PaymentDay[]
 
   @@index([customerId])
   @@index([status])
@@ -207,10 +216,11 @@ model Invoice {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  contract        Contract @relation(fields: [contractId], references: [id])
-  customer        Customer @relation(fields: [customerId], references: [id])
-  previousPayment Invoice?  @relation("PaymentChain", fields: [previousPaymentId], references: [id])
-  nextPayments    Invoice[] @relation("PaymentChain")
+  contract        Contract     @relation(fields: [contractId], references: [id])
+  customer        Customer     @relation(fields: [customerId], references: [id])
+  previousPayment Invoice?     @relation("PaymentChain", fields: [previousPaymentId], references: [id])
+  nextPayments    Invoice[]    @relation("PaymentChain")
+  paymentDays     PaymentDay[]
 
   @@index([contractId])
   @@index([customerId])
@@ -244,4 +254,26 @@ model Setting {
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   @@map("settings")
+}
+
+model PaymentDay {
+  id         String           @id @default(uuid())
+  contractId String           @map("contract_id")
+  date       DateTime
+  status     PaymentDayStatus @default(UNPAID)
+  paymentId  String?          @map("payment_id")
+  dailyRate  Float            @map("daily_rate")
+  amount     Float            @default(0)
+  notes      String?
+  createdAt  DateTime         @default(now()) @map("created_at")
+  updatedAt  DateTime         @updatedAt @map("updated_at")
+
+  contract Contract @relation(fields: [contractId], references: [id])
+  payment  Invoice? @relation(fields: [paymentId], references: [id])
+
+  @@unique([contractId, date])
+  @@index([contractId, status])
+  @@index([paymentId])
+  @@index([contractId, date])
+  @@map("payment_days")
 }

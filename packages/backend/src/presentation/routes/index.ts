@@ -61,6 +61,7 @@ export function createRoutes(controllers: RouteControllers): Router {
   router.get('/payments/contract/:contractId/active', authMiddleware, controllers.paymentController.getActiveByContractId);
   router.get('/payments/contract/:contractId/calendar', authMiddleware, controllers.paymentController.getCalendarData);
   router.post('/payments/contract/:contractId/manual', authMiddleware, controllers.paymentController.createManualPayment);
+  router.patch('/payments/contract/:contractId/day/:date', authMiddleware, controllers.paymentController.updatePaymentDayStatus);
   router.post('/payments/bulk-pay', authMiddleware, controllers.paymentController.bulkMarkPaid);
   router.get('/payments/:id', authMiddleware, controllers.paymentController.getById);
   router.get('/payments/:id/qr', authMiddleware, controllers.paymentController.getQRCode);
@@ -71,6 +72,7 @@ export function createRoutes(controllers: RouteControllers): Router {
   router.patch('/payments/:id/void', authMiddleware, controllers.paymentController.voidPayment);
   router.patch('/payments/:id/revert', authMiddleware, controllers.paymentController.revertStatus);
   router.patch('/payments/:id/cancel', authMiddleware, controllers.paymentController.cancelPayment);
+  router.post('/payments/:id/reduce', authMiddleware, controllers.paymentController.reducePayment);
 
   // Reports
   router.get('/reports', authMiddleware, controllers.reportController.getReport);

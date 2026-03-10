@@ -86,6 +86,14 @@ export enum HolidayScheme {
 
 export const DEFAULT_HOLIDAY_SCHEME = HolidayScheme.NEW_CONTRACT;
 
+export enum PaymentDayStatus {
+  UNPAID = 'UNPAID',
+  PENDING = 'PENDING',
+  PAID = 'PAID',
+  HOLIDAY = 'HOLIDAY',
+  VOIDED = 'VOIDED',
+}
+
 export const VALID_STATUS_TRANSITIONS: Record<ContractStatus, ContractStatus[]> = {
   [ContractStatus.ACTIVE]: [ContractStatus.OVERDUE, ContractStatus.COMPLETED, ContractStatus.CANCELLED, ContractStatus.REPOSSESSED],
   [ContractStatus.OVERDUE]: [ContractStatus.ACTIVE, ContractStatus.COMPLETED, ContractStatus.CANCELLED, ContractStatus.REPOSSESSED],

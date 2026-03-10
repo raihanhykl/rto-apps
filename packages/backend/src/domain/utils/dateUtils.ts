@@ -19,3 +19,15 @@ export function getWibDateParts(): { year: number; month: number; day: number } 
   const [y, m, d] = wibStr.split('-').map(Number);
   return { year: y, month: m, day: d };
 }
+
+/**
+ * Convert a Date to a YYYY-MM-DD string key for calendar/map lookups.
+ */
+export function toDateKey(date: Date): string {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}

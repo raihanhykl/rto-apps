@@ -31,6 +31,7 @@
 - [Holiday Scheme Overhaul (2026-03-06)](#2026-03-06---holiday-scheme-overhaul-holidayscheme-enum)
 - [Fix: totalDaysPaid Seed Calculation (2026-03-06)](#2026-03-06---fix-totaldayspaid-seed-calculation-include-holidays)
 - [Separate workingDaysPaid & holidayDaysPaid (2026-03-06)](#2026-03-06---separate-workingdayspaid--holidaydayspaid-fields)
+- [PaymentDay: Static Per-Date Records (2026-03-09)](#2026-03-09---paymentday-static-per-date-records)
 - [Development Roadmap](#development-roadmap)
 
 ---
@@ -1110,6 +1111,62 @@ Setelah migrasi HolidayScheme, ditemukan bahwa `totalDaysPaid` di seed data hany
 - `packages/backend/src/__tests__/PaymentService.test.ts`
 - `packages/frontend/src/types/index.ts`
 - `packages/frontend/src/app/(dashboard)/contracts/[id]/page.tsx`
+
+---
+
+## 2026-03-09 - PaymentDay: Static Per-Date Records
+
+### Context
+Sistem kalender pembayaran sebelumnya menghitung status per-tanggal secara **dinamis** di `getCalendarData()`. Ini punya kelemahan: gap hari tidak terekam, holiday dihitung ulang tiap request (retroaktif), admin tidak bisa koreksi tanggal tertentu, dan tidak ada jejak audit per-tanggal.
+
+### What was built
+- **PaymentDay model**: Record eksplisit per-tanggal per-kontrak dengan status UNPAID, PENDING, PAID, HOLIDAY, VOIDED
+- **Gap Billing (Opsi B)**: Akumulasi semua hari UNPAID dari `billingStartDate` sampai hari ini ke satu invoice
+- **Partial Payment**: Admin bisa reduce jumlah hari dalam invoice aktif; sisa hari kembali ke UNPAID
+- **Admin Correction**: Override status PaymentDay individual (UNPAID ↔ HOLIDAY ↔ PAID) dengan audit log
+- **Calendar rewrite**: `getCalendarData()` sekarang query PaymentDay records (bukan kalkulasi dinamis)
+- **Contract sync**: `syncContractFromPaymentDays()` — recalculate contract summary dari PaymentDay data
+- **Auto-extend**: Scheduler extend 30 hari PaymentDay records ke depan untuk kontrak aktif
+- **Data Migration**: `migrateExistingContracts()` untuk backfill kontrak yang sudah berjalan
+
+### Architecture
+- Domain layer: `PaymentDayStatus` enum, `PaymentDay` entity, `IPaymentDayRepository` interface (13 methods)
+- Infrastructure: `InMemoryPaymentDayRepository` (Map-based) + `PrismaPaymentDayRepository` (Prisma)
+- Application: 14 sub-changes di PaymentService, 4 sub-changes di ContractService
+- Presentation: 2 endpoint baru (PATCH day status, POST reduce payment)
+- Frontend: voided status di kalender, 2 API methods baru
+- Shared utility: `toDateKey()` dipindah ke `domain/utils/dateUtils.ts`
+
+### API Endpoints (New)
+| Method | Route | Description |
+|--------|-------|-------------|
+| PATCH | `/payments/contract/:contractId/day/:date` | Admin correction — ubah status PaymentDay |
+| POST | `/payments/:id/reduce` | Partial payment — kurangi hari dalam invoice |
+
+### Files modified
+- `packages/backend/prisma/schema.prisma` — PaymentDayStatus enum + PaymentDay model + relasi
+- `packages/backend/src/domain/enums/index.ts` — PaymentDayStatus enum
+- `packages/backend/src/domain/entities/PaymentDay.ts` — **Baru** (interface)
+- `packages/backend/src/domain/entities/index.ts` — export
+- `packages/backend/src/domain/interfaces/IPaymentDayRepository.ts` — **Baru** (13 methods)
+- `packages/backend/src/domain/interfaces/index.ts` — export
+- `packages/backend/src/domain/utils/dateUtils.ts` — toDateKey() function
+- `packages/backend/src/infrastructure/repositories/InMemoryPaymentDayRepository.ts` — **Baru**
+- `packages/backend/src/infrastructure/repositories/PrismaPaymentDayRepository.ts` — **Baru**
+- `packages/backend/src/infrastructure/repositories/index.ts` — exports
+- `packages/backend/src/index.ts` — wiring paymentDayRepo
+- `packages/backend/src/application/services/PaymentService.ts` — 14 sub-changes (gap billing, PaymentDay CRUD, calendar rewrite, reduce, migration)
+- `packages/backend/src/application/services/ContractService.ts` — 4 sub-changes (receiveUnit, cancel, repossess)
+- `packages/backend/src/presentation/controllers/PaymentController.ts` — 2 new methods
+- `packages/backend/src/presentation/routes/index.ts` — 2 new routes
+- `packages/backend/src/infrastructure/scheduler.ts` — extendPaymentDayRecords step
+- `packages/backend/src/__tests__/PaymentService.test.ts` — 17+ new test cases
+- `packages/backend/src/__tests__/ContractService.test.ts` — updated setup
+- `packages/frontend/src/types/index.ts` — PaymentDayStatus enum
+- `packages/frontend/src/components/PaymentCalendar.tsx` — voided status + legend
+- `packages/frontend/src/lib/api.ts` — 2 new API methods
+
+### Test count: 146 tests (4 suites)
 
 ---
 
