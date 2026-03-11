@@ -112,8 +112,9 @@ export class SettingService {
       { key: 'contract_prefix', value: 'RTO', description: 'Contract number prefix' },
       { key: 'max_rental_days', value: '7', description: 'Maximum rental days per contract/extension' },
       { key: 'ownership_target_days', value: '1278', description: 'Total days to own motor (default ~3.5 years)' },
-      { key: 'grace_period_days', value: '7', description: 'Grace period days before repossession' },
-      { key: 'late_fee_per_day', value: '10000', description: 'Late fee per day (Rp) for overdue invoices' },
+      { key: 'grace_period_days', value: '7', description: 'Masa tenggang (hari) setelah endDate sebelum status OVERDUE' },
+      { key: 'penalty_grace_days', value: '2', description: 'Toleransi (hari) sebelum denda keterlambatan berlaku' },
+      { key: 'late_fee_per_day', value: '20000', description: 'Denda keterlambatan per hari (Rp)' },
     ];
 
     for (const d of defaults) {
@@ -124,6 +125,32 @@ export class SettingService {
           key: d.key,
           value: d.value,
           description: d.description,
+          updatedAt: new Date(),
+        });
+      }
+    }
+
+    // Migrasi: update setting lama yang belum pernah dikustomisasi admin
+    await this.migrateSettings();
+  }
+
+  /**
+   * Migrasi setting yang default-nya berubah antar versi.
+   * Hanya update jika nilai di DB masih sama dengan nilai lama (belum dikustomisasi admin).
+   */
+  private async migrateSettings(): Promise<void> {
+    const migrations: Array<{ key: string; fromValue: string; toValue: string; description: string }> = [
+      { key: 'late_fee_per_day', fromValue: '10000', toValue: '20000', description: 'Denda keterlambatan per hari (Rp)' },
+      { key: 'grace_period_days', fromValue: '2', toValue: '7', description: 'Masa tenggang (hari) setelah endDate sebelum status OVERDUE' },
+    ];
+
+    for (const m of migrations) {
+      const existing = await this.settingRepo.findByKey(m.key);
+      if (existing && existing.value === m.fromValue) {
+        await this.settingRepo.upsert({
+          ...existing,
+          value: m.toValue,
+          description: m.description,
           updatedAt: new Date(),
         });
       }

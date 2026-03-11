@@ -295,6 +295,12 @@ class ApiClient {
     );
   }
 
+  async previewManualPayment(contractId: string, days: number) {
+    return this.request<{ amount: number; lateFee: number; total: number; daysCount: number; dailyRate: number }>(
+      `/payments/contract/${contractId}/manual-preview?days=${days}`
+    );
+  }
+
   async createManualPayment(contractId: string, days: number) {
     return this.request<any>(`/payments/contract/${contractId}/manual`, {
       method: 'POST',

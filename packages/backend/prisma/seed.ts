@@ -182,6 +182,7 @@ async function seedSettings() {
 async function resetData() {
   console.log("\n[RESET] Deleting existing data...");
   const counts = {
+    savingTransactions: await prisma.savingTransaction.deleteMany({}),
     paymentDays: await prisma.paymentDay.deleteMany({}),
     auditLogs: await prisma.auditLog.deleteMany({}),
     invoices: await prisma.invoice.deleteMany({}),
@@ -189,7 +190,7 @@ async function resetData() {
     customers: await prisma.customer.deleteMany({}),
   };
   console.log(
-    `  Deleted: ${counts.paymentDays.count} payment days, ${counts.auditLogs.count} audit logs, ${counts.invoices.count} payments, ${counts.contracts.count} contracts, ${counts.customers.count} customers`,
+    `  Deleted: ${counts.savingTransactions.count} saving txns, ${counts.paymentDays.count} payment days, ${counts.auditLogs.count} audit logs, ${counts.invoices.count} payments, ${counts.contracts.count} contracts, ${counts.customers.count} customers`,
   );
 }
 
@@ -236,9 +237,11 @@ async function seedCustomers(): Promise<number> {
   return created;
 }
 
-async function seedContracts(
-  adminId: string,
-): Promise<{ contractCount: number; paymentCount: number; paymentDayCount: number }> {
+async function seedContracts(adminId: string): Promise<{
+  contractCount: number;
+  paymentCount: number;
+  paymentDayCount: number;
+}> {
   const TODAY = startOfDay(getWibToday());
   const existingContracts = new Set(
     (await prisma.contract.findMany({ select: { contractNumber: true } })).map(
@@ -464,42 +467,10 @@ async function seedContracts(
       }
     }
 
-    // ====== Active payment for today (unpaid days for ACTIVE/OVERDUE contracts) ======
-    if (
-      (finalStatus === "ACTIVE" || finalStatus === "OVERDUE") &&
-      unitReceivedDate &&
-      billingStartDate &&
-      workingDaysPaid > 0
-    ) {
-      let unpaidDays = 0;
-      let accCursor = startOfDay(addDays(endDate, 1));
-      while (accCursor <= TODAY) {
-        if (!isLiburBayar(accCursor, row.holidayScheme)) unpaidDays++;
-        accCursor = startOfDay(addDays(accCursor, 1));
-      }
-      if (unpaidDays > 0) {
-        const pmtNum = `PMT-${fmtDateCompact(TODAY)}-${String(globalSeq++).padStart(4, "0")}`;
-        allPayments.push({
-          id: uuidv4(),
-          invoiceNumber: pmtNum,
-          contractId: row.id,
-          customerId: row.customerId,
-          amount: unpaidDays * dailyRate,
-          lateFee: 0,
-          type: "DAILY_BILLING",
-          status: "PENDING",
-          qrCodeData: `WEDISON-PAY-${pmtNum}-${unpaidDays * dailyRate}`,
-          dueDate: endOfDay(TODAY),
-          dailyRate,
-          daysCount: unpaidDays,
-          extensionDays: unpaidDays,
-          periodStart: startOfDay(addDays(endDate, 1)),
-          periodEnd: endOfDay(TODAY),
-          isHoliday: false,
-          createdAt: startOfDay(TODAY),
-        });
-      }
-    }
+    // NOTE: PENDING DAILY_BILLING invoices TIDAK dibuat oleh seed.
+    // Biarkan scheduler yang generate saat startup — scheduler akan menghitung
+    // lateFee dengan benar via calculateLateFee(). Hari-hari yang belum dibayar
+    // tetap menjadi PaymentDay UNPAID di bawah ini.
 
     // ====== PaymentDay records ======
     if (billingStartDate) {
@@ -520,7 +491,7 @@ async function seedContracts(
       // Walk from billingStartDate to today+30 (or terminate date for cancelled/repossessed)
       const terminateDate =
         finalStatus === "CANCELLED" || finalStatus === "REPOSSESSED"
-          ? (repossessedAt || cancelledAt || TODAY)
+          ? repossessedAt || cancelledAt || TODAY
           : null;
       const pdEnd = addDays(TODAY, 30);
 
@@ -614,7 +585,11 @@ async function seedContracts(
   console.log(`  Payment days: ${allPaymentDays.length}`);
   console.log(`  Audit logs: ${allAuditLogs.length}`);
 
-  return { contractCount: contractsCreated, paymentCount: allPayments.length, paymentDayCount: allPaymentDays.length };
+  return {
+    contractCount: contractsCreated,
+    paymentCount: allPayments.length,
+    paymentDayCount: allPaymentDays.length,
+  };
 }
 
 // ====== Main ======

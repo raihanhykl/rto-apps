@@ -33,6 +33,7 @@
 - [Separate workingDaysPaid & holidayDaysPaid (2026-03-06)](#2026-03-06---separate-workingdayspaid--holidaydayspaid-fields)
 - [PaymentDay: Static Per-Date Records (2026-03-09)](#2026-03-09---paymentday-static-per-date-records)
 - [Saving Feature: Dana Sisihan Per Kontrak (2026-03-10)](#2026-03-10---saving-feature-dana-sisihan-per-kontrak)
+- [Late Payment Penalty & Penalty Grace Days (2026-03-10)](#2026-03-10---late-payment-penalty--grace-period-2-hari)
 - [Development Roadmap](#development-roadmap)
 
 ---
@@ -1257,6 +1258,103 @@ Fitur saving otomatis menyisihkan Rp 5.000 per hari kerja dari setiap pembayaran
 - `packages/frontend/src/app/(dashboard)/contracts/[id]/page.tsx`
 
 ### Test count: 177 tests (5 suites)
+
+---
+
+## 2026-03-10 - Late Payment Penalty & Grace Period 2 Hari
+
+### Context
+
+Kebijakan perusahaan baru: denda keterlambatan Rp 20.000/hari (naik dari Rp 10.000). Denda berlaku setelah 2 hari toleransi (`penalty_grace_days`). Setting ini **terpisah** dari `grace_period_days` (7 hari, untuk status OVERDUE).
+
+### What was changed
+
+**Business Logic:**
+- Setting baru: `penalty_grace_days` (default 2) — toleransi sebelum denda berlaku
+- `grace_period_days` tetap 7 — hanya untuk status OVERDUE (konsep berbeda dari penalty)
+- Denda per hari: Rp 10.000 → Rp 20.000 (`DEFAULT_LATE_FEE_PER_DAY`, setting `late_fee_per_day`)
+- Denda otomatis dihitung saat pembuatan invoice (scheduler, manual, rollover, reduce, extension)
+- Field `Invoice.lateFee` diisi dengan total denda (sebelumnya selalu 0 untuk billing harian)
+- `amount` tetap hanya berisi tarif harian, `lateFee` terpisah. Total bayar = `amount + lateFee`
+
+**Architecture Improvement:**
+- Pure function `computeLateFee()` di `domain/utils/lateFeeCalculator.ts` — shared antara PaymentService & ContractService (DRY, no duplication)
+- `PaymentService.calculateLateFee()` adalah async wrapper yang baca setting lalu delegasi ke `computeLateFee()`
+- Dead code `createDailyPayment()` dihapus dari PaymentService
+- `SettingService.migrateSettings()` — otomatis update setting lama yang belum dikustomisasi admin ke nilai baru saat deploy
+
+**Methods diubah di PaymentService:**
+- Baru: `getSetting()`, `calculateLateFee()` — wrapper ke `computeLateFee()`
+- `generateDailyPayments()` — hitung late fee saat buat gap billing
+- `rolloverPayment()` — hitung late fee saat rollover
+- `createManualPayment()` — hitung late fee saat admin buat billing manual
+- `reducePayment()` — hitung late fee saat reduce payment
+
+**ContractService.extend():**
+- Duplikasi logika dihapus, diganti `computeLateFee()` shared utility
+
+### Files modified
+
+| File | Perubahan |
+|------|-----------|
+| `src/domain/enums/index.ts` | `DEFAULT_GRACE_PERIOD_DAYS=7` (tetap), tambah `DEFAULT_PENALTY_GRACE_DAYS=2`, `DEFAULT_LATE_FEE_PER_DAY=20000` |
+| `src/domain/utils/lateFeeCalculator.ts` | **Baru** — pure function `computeLateFee()` |
+| `src/application/services/PaymentService.ts` | Refactor `calculateLateFee()` → delegasi ke `computeLateFee()`, hapus dead code `createDailyPayment()` |
+| `src/application/services/ContractService.ts` | Hapus duplikasi, import `computeLateFee()` |
+| `src/application/services/SettingService.ts` | Tambah `penalty_grace_days` setting, tambah `migrateSettings()` |
+| `src/__tests__/PaymentService.test.ts` | Tambah 15 tests untuk late fee/penalty |
+
+### Test count
+
+192 tests (5 suites) — naik dari 177 (tambah 15 tests late fee/penalty)
+
+---
+
+## 2026-03-11 — Fix: endDate Loncat & Banner Status Tidak Akurat
+
+### Context
+
+Dua bug kritis ditemukan setelah implementasi late payment penalty:
+1. `endDate` kontrak loncat ke akhir bulan (misal 31 Maret) setelah pembayaran — progress dan sisa hari menjadi tidak akurat
+2. Banner status di detail kontrak salah: (a) hijau "Pembayaran Lancar" padahal masih ada tunggakan, (b) OVERDUE tidak pernah revert ke ACTIVE setelah pembayaran
+
+### Root Cause
+
+1. **endDate loncat**: `syncContractFromPaymentDays()` menggunakan `findLastPaidOrHolidayDate()` yang me-return tanggal MAX dari SEMUA record PAID/HOLIDAY — termasuk HOLIDAY yang sudah di-pre-generate 30-60 hari ke depan oleh scheduler. Untuk NEW_CONTRACT, tanggal 29-31 = HOLIDAY, sehingga endDate loncat ke 31 Maret meskipun customer baru bayar sampai 5 Maret.
+
+2. **Banner hijau padahal tunggakan**: Frontend hanya cek `activePayment` (ada invoice PENDING?) dan `contract.status`. Setelah bayar sebagian, activePayment = null tapi masih ada hari UNPAID → fallthrough ke hijau.
+
+3. **OVERDUE tidak revert**: `payPayment()` → `syncContractFromPaymentDays()` update endDate tapi TIDAK cek status. `checkAndUpdateOverdueContracts()` di ContractService hanya unidirectional: ACTIVE → OVERDUE.
+
+### What was changed
+
+**Backend — `syncContractFromPaymentDays()` rewrite (PaymentService.ts):**
+- **Contiguous walk algorithm**: Fetch semua PaymentDay records sorted ASC, walk dari billingStartDate. Hitung PAID + HOLIDAY yang berturut-turut. Berhenti di gap pertama (UNPAID/PENDING/VOIDED). Trailing contiguous holidays setelah PAID terakhir tetap dihitung (konsisten dengan seed `countCalendarDays()`).
+- **Bidirectional status transition**: Setelah hitung endDate baru, cek apakah status perlu berubah:
+  - OVERDUE → ACTIVE jika `(endDate + gracePeriodDays) >= today`
+  - ACTIVE → OVERDUE jika `(endDate + gracePeriodDays) < today`
+  - Terminal statuses (COMPLETED, CANCELLED, REPOSSESSED) tidak diubah
+
+**Backend — `createHolidayPayment()` consistency:**
+- Ganti `creditDayToContract(contract, 1, true)` (aritmatika incremental) dengan `syncContractFromPaymentDays(contract.id)` (contiguous walk) untuk konsistensi
+- Hapus dead code `creditDayToContract()` (tidak dipanggil dari manapun lagi)
+
+**Frontend — Banner "Ada Tunggakan" (orange):**
+- Tambah state intermediate di banner logic: jika contract ACTIVE, tidak ada activePayment, tapi `endDate < today` → orange "Ada Tunggakan" dengan info "Terakhir bayar: {date}"
+- Tambah helper `getWibToday()` di `lib/utils.ts` (mirror backend `getWibToday()` untuk konsistensi timezone WIB)
+
+### Files modified
+
+| File | Perubahan |
+|------|-----------|
+| `src/application/services/PaymentService.ts` | Rewrite `syncContractFromPaymentDays()` (contiguous walk + bidirectional status), ganti `creditDayToContract()` di `createHolidayPayment()`, hapus dead code |
+| `src/__tests__/PaymentService.test.ts` | Fix holiday test setup, tambah 6 tests baru (contiguous walk, status transitions) |
+| `frontend/src/app/(dashboard)/contracts/[id]/page.tsx` | Tambah banner "Ada Tunggakan" (orange) |
+| `frontend/src/lib/utils.ts` | Tambah `getWibToday()` helper |
+
+### Test count
+
+198 tests (5 suites) — naik dari 192 (tambah 6 tests contiguous walk + status transitions)
 
 ---
 
