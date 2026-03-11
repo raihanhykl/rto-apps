@@ -46,8 +46,18 @@ export class PrismaPaymentDayRepository implements IPaymentDayRepository {
   }
 
   async findByContractAndDate(contractId: string, date: Date): Promise<PaymentDay | null> {
-    const row = await this.prisma.paymentDay.findUnique({
-      where: { contractId_date: { contractId, date } },
+    // Use ±12h range to handle timezone offset between WIB and UTC.
+    // A WIB-midnight date is stored as 17:00 UTC previous day, while
+    // UTC-midnight is 00:00 UTC same day. ±12h covers both without
+    // matching adjacent calendar days.
+    const rangeStart = new Date(date.getTime() - 12 * 60 * 60 * 1000);
+    const rangeEnd = new Date(date.getTime() + 12 * 60 * 60 * 1000);
+
+    const row = await this.prisma.paymentDay.findFirst({
+      where: {
+        contractId,
+        date: { gte: rangeStart, lt: rangeEnd },
+      },
     });
     return row ? this.toEntity(row) : null;
   }
@@ -110,9 +120,13 @@ export class PrismaPaymentDayRepository implements IPaymentDayRepository {
 
   async updateByContractAndDate(contractId: string, date: Date, data: Partial<PaymentDay>): Promise<PaymentDay | null> {
     try {
+      // Use timezone-safe findByContractAndDate, then update by id
+      const existing = await this.findByContractAndDate(contractId, date);
+      if (!existing) return null;
+
       const { id: _id, ...updateData } = data as any;
       const row = await this.prisma.paymentDay.update({
-        where: { contractId_date: { contractId, date } },
+        where: { id: existing.id },
         data: updateData,
       });
       return this.toEntity(row);

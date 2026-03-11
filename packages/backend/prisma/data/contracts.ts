@@ -1426,7 +1426,7 @@ export const contracts: ContractSeed[] = [
     repossessedAt: null,
     cancelledAt: null,
     dpPaid: 580000,
-    unitReceivedDate: [2028, 3, 2],
+    unitReceivedDate: [2026, 3, 2],
     bastNotes: "",
     holidayScheme: "NEW_CONTRACT",
     workingDaysPaid: 8,
