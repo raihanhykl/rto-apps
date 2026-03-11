@@ -40,7 +40,8 @@ function addDays(date: Date, n: number): Date {
 }
 
 function startOfDay(d: Date): Date {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+  const wib = getWibParts(d);
+  return new Date(wib.year, wib.month - 1, wib.day, 0, 0, 0, 0);
 }
 
 function getWibToday(): Date {
@@ -51,26 +52,36 @@ function getWibToday(): Date {
 }
 
 function endOfDay(d: Date): Date {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+  const wib = getWibParts(d);
+  return new Date(wib.year, wib.month - 1, wib.day, 23, 59, 59, 999);
 }
 
 function toDateKey(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return d.toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" });
 }
 
 function fmtDateCompact(d: Date): string {
-  return `${d.getFullYear().toString().slice(-2)}${(d.getMonth() + 1).toString().padStart(2, "0")}${d.getDate().toString().padStart(2, "0")}`;
+  const wib = getWibParts(d);
+  return `${wib.year.toString().slice(-2)}${wib.month.toString().padStart(2, "0")}${wib.day.toString().padStart(2, "0")}`;
 }
 
 // ====== Libur Bayar ======
+function getWibParts(date: Date): { year: number; month: number; day: number; dayOfWeek: number } {
+  const wibStr = date.toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" });
+  const [y, m, d] = wibStr.split("-").map(Number);
+  const reconstructed = new Date(y, m - 1, d);
+  return { year: y, month: m, day: d, dayOfWeek: reconstructed.getDay() };
+}
+
 function isLiburBayar(
   d: Date,
   scheme: "OLD_CONTRACT" | "NEW_CONTRACT",
 ): boolean {
+  const wib = getWibParts(d);
   if (scheme === "OLD_CONTRACT") {
-    return d.getDay() === 0; // Semua Minggu = libur
+    return wib.dayOfWeek === 0; // Semua Minggu = libur
   } else {
-    return d.getDate() > 28; // Tanggal 29-31 = libur
+    return wib.day > 28; // Tanggal 29-31 = libur
   }
 }
 

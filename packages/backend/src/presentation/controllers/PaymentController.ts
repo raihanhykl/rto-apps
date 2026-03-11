@@ -4,7 +4,7 @@ import { PdfService } from '../../application/services/PdfService';
 import { ContractService } from '../../application/services';
 import { CustomerService } from '../../application/services';
 import { PaymentStatus } from '../../domain/enums';
-import { getWibToday } from '../../domain/utils/dateUtils';
+import { getWibToday, getWibDateParts } from '../../domain/utils/dateUtils';
 
 export class PaymentController {
   private pdfService: PdfService;
@@ -177,9 +177,9 @@ export class PaymentController {
   getCalendarData = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { year, month } = req.query;
-      const today = getWibToday();
-      const y = parseInt(year as string) || today.getFullYear();
-      const m = parseInt(month as string) || (today.getMonth() + 1);
+      const todayParts = getWibDateParts();
+      const y = parseInt(year as string) || todayParts.year;
+      const m = parseInt(month as string) || todayParts.month;
       const data = await this.paymentService.getCalendarData(req.params.contractId, y, m);
       res.json(data);
     } catch (error) {
