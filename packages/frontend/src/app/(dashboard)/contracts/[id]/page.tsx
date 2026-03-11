@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,7 @@ import {
 import { api } from "@/lib/api";
 import { useContractDetail, usePaymentsByContract, useActivePayment, useSavingByContract, useInvalidate } from "@/hooks/useApi";
 import { Contract, Customer, Invoice, SavingTransactionType } from "@/types";
-import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils";
+import { formatCurrency, formatDate, formatDateTime, getWibToday } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -226,6 +226,8 @@ export default function ContractDetailPage() {
   const [qrInvoice, setQrInvoice] = useState<Invoice | null>(null);
   const [extendDialogOpen, setExtendDialogOpen] = useState(false);
   const [extendDays, setExtendDays] = useState("7");
+  const [paymentPreview, setPaymentPreview] = useState<{ amount: number; lateFee: number; total: number; daysCount: number; dailyRate: number } | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [repossessDialogOpen, setRepossessDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editNotes, setEditNotes] = useState("");
@@ -268,6 +270,37 @@ export default function ContractDetailPage() {
   // Pagination
   const [timelinePage, setTimelinePage] = useState(1);
   const [tagihanPage, setTagihanPage] = useState(1);
+
+  // Determine if contract has outstanding unpaid days (for banner)
+  const hasOutstandingDays = (() => {
+    if (!contract?.billingStartDate) return false;
+    const wibToday = getWibToday();
+    const endDateMidnight = new Date(contract.endDate);
+    endDateMidnight.setHours(0, 0, 0, 0);
+    return endDateMidnight < wibToday;
+  })();
+
+  // Fetch payment preview when extend dialog opens or days change
+  const fetchPaymentPreview = useCallback(async (days: string) => {
+    if (!contract?.id || !contract?.billingStartDate) return;
+    setPreviewLoading(true);
+    try {
+      const preview = await api.previewManualPayment(id, parseInt(days));
+      setPaymentPreview(preview);
+    } catch {
+      setPaymentPreview(null);
+    } finally {
+      setPreviewLoading(false);
+    }
+  }, [id, contract?.id, contract?.billingStartDate]);
+
+  useEffect(() => {
+    if (extendDialogOpen) {
+      fetchPaymentPreview(extendDays);
+    } else {
+      setPaymentPreview(null);
+    }
+  }, [extendDialogOpen, extendDays, fetchPaymentPreview]);
 
   const showQR = async (invoice: Invoice) => {
     try {
@@ -550,6 +583,7 @@ export default function ContractDetailPage() {
         !contract.dpFullyPaid ? "border-yellow-300 dark:border-yellow-800 bg-yellow-50/50 dark:bg-yellow-950/20" :
         contract.status === "OVERDUE" ? "border-red-300 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20" :
         activePayment ? "border-blue-300 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20" :
+        hasOutstandingDays ? "border-orange-300 dark:border-orange-800 bg-orange-50/50 dark:bg-orange-950/20" :
         "border-green-300 dark:border-green-800 bg-green-50/50 dark:bg-green-950/20"
       }>
         <CardContent className="p-4">
@@ -626,7 +660,24 @@ export default function ContractDetailPage() {
                   <div>
                     <p className="font-bold text-blue-700 dark:text-blue-400 text-lg">Ada Tagihan Aktif</p>
                     <p className="text-sm text-blue-600 dark:text-blue-500">
-                      {formatCurrency(activePayment.amount)} — {activePayment.daysCount} hari ({activePayment.periodStart ? formatDate(activePayment.periodStart) : "-"} s/d {activePayment.periodEnd ? formatDate(activePayment.periodEnd) : "-"})
+                      {formatCurrency(activePayment.amount + (activePayment.lateFee || 0))} — {activePayment.daysCount} hari ({activePayment.periodStart ? formatDate(activePayment.periodStart) : "-"} s/d {activePayment.periodEnd ? formatDate(activePayment.periodEnd) : "-"})
+                    </p>
+                    {(activePayment.lateFee || 0) > 0 && (
+                      <p className="text-xs text-blue-500">
+                        Pokok {formatCurrency(activePayment.amount)} + <span className="text-orange-600">Denda {formatCurrency(activePayment.lateFee)}</span>
+                      </p>
+                    )}
+                  </div>
+                </>
+              ) : hasOutstandingDays ? (
+                <>
+                  <div className="h-12 w-12 rounded-full bg-orange-100 dark:bg-orange-900/50 flex items-center justify-center">
+                    <AlertTriangle className="h-6 w-6 text-orange-600" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-orange-700 dark:text-orange-400 text-lg">Ada Tunggakan</p>
+                    <p className="text-sm text-orange-600 dark:text-orange-500">
+                      Terakhir bayar: {formatDate(contract.endDate)}. Masih ada hari yang belum terbayar.
                     </p>
                   </div>
                 </>
@@ -835,7 +886,12 @@ export default function ContractDetailPage() {
                 {activePayment.previousPaymentId && (
                   <span className="ml-2 text-xs text-orange-600 font-medium">(Gabungan)</span>
                 )}
-                <p className="text-xl font-bold mt-1">{formatCurrency(activePayment.amount)}</p>
+                <p className="text-xl font-bold mt-1">{formatCurrency(activePayment.amount + (activePayment.lateFee || 0))}</p>
+                {(activePayment.lateFee || 0) > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Pokok {formatCurrency(activePayment.amount)} + <span className="text-orange-600 font-medium">Denda {formatCurrency(activePayment.lateFee)}</span>
+                  </p>
+                )}
                 <p className="text-xs text-muted-foreground">
                   {activePayment.daysCount} hari tertunggak — {activePayment.periodStart ? formatDate(activePayment.periodStart) : "-"} s/d {activePayment.periodEnd ? formatDate(activePayment.periodEnd) : "-"}
                 </p>
@@ -1461,26 +1517,59 @@ export default function ContractDetailPage() {
               </Select>
             </div>
             <div className="bg-muted/50 rounded-lg p-4 space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span>Rate / hari</span>
-                <span>{formatCurrency(contract.dailyRate)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Durasi</span>
-                <span>{extendDays} hari</span>
-              </div>
-              <div className="border-t pt-2 flex justify-between font-bold">
-                <span>Total</span>
-                <span className="text-primary">
-                  {formatCurrency(contract.dailyRate * parseInt(extendDays))}
-                </span>
-              </div>
-              <div className="border-t pt-2 flex justify-between text-muted-foreground">
-                <span>Progress setelah pembayaran</span>
-                <span>
-                  {contract.totalDaysPaid + parseInt(extendDays)} / {contract.ownershipTargetDays} hari
-                </span>
-              </div>
+              {previewLoading ? (
+                <div className="text-center text-muted-foreground py-2">Menghitung...</div>
+              ) : paymentPreview ? (
+                <>
+                  <div className="flex justify-between">
+                    <span>Rate / hari</span>
+                    <span>{formatCurrency(paymentPreview.dailyRate)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Jumlah hari</span>
+                    <span>{paymentPreview.daysCount} hari</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Tagihan pokok</span>
+                    <span>{formatCurrency(paymentPreview.amount)}</span>
+                  </div>
+                  {paymentPreview.lateFee > 0 && (
+                    <div className="flex justify-between text-orange-600">
+                      <span>Denda keterlambatan</span>
+                      <span>{formatCurrency(paymentPreview.lateFee)}</span>
+                    </div>
+                  )}
+                  <div className="border-t pt-2 flex justify-between font-bold">
+                    <span>Total</span>
+                    <span className="text-primary">
+                      {formatCurrency(paymentPreview.total)}
+                    </span>
+                  </div>
+                  <div className="border-t pt-2 flex justify-between text-muted-foreground">
+                    <span>Progress setelah pembayaran</span>
+                    <span>
+                      {contract.totalDaysPaid + paymentPreview.daysCount} / {contract.ownershipTargetDays} hari
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex justify-between">
+                    <span>Rate / hari</span>
+                    <span>{formatCurrency(contract.dailyRate)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Durasi</span>
+                    <span>{extendDays} hari</span>
+                  </div>
+                  <div className="border-t pt-2 flex justify-between font-bold">
+                    <span>Total</span>
+                    <span className="text-primary">
+                      {formatCurrency(contract.dailyRate * parseInt(extendDays))}
+                    </span>
+                  </div>
+                </>
+              )}
             </div>
           </div>
           <DialogFooter>

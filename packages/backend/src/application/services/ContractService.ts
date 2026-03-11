@@ -21,11 +21,14 @@ import {
   MAX_RENTAL_DAYS,
   DEFAULT_OWNERSHIP_TARGET_DAYS,
   DEFAULT_GRACE_PERIOD_DAYS,
+  DEFAULT_PENALTY_GRACE_DAYS,
+  DEFAULT_LATE_FEE_PER_DAY,
   DEFAULT_HOLIDAY_SCHEME,
   VALID_STATUS_TRANSITIONS,
 } from '../../domain/enums';
 import { IPaymentDayRepository } from '../../domain/interfaces';
 import { PaymentDay } from '../../domain/entities';
+import { computeLateFee } from '../../domain/utils/lateFeeCalculator';
 import { CreateContractDto, UpdateContractStatusDto, ExtendContractDto, UpdateContractDto, CancelContractDto } from '../dtos';
 import { SettingService } from './SettingService';
 import { v4 as uuidv4 } from 'uuid';
@@ -390,15 +393,14 @@ export class ContractService {
 
     const extensionAmount = existing.dailyRate * dto.durationDays;
 
-    // Calculate late fee only if contract status is OVERDUE and billing has started
+    // Calculate late fee via shared domain utility
     let lateFee = 0;
     const now = getWibToday();
-    if (existing.status === ContractStatus.OVERDUE && existing.billingStartDate) {
-      const daysOverdue = Math.ceil((now.getTime() - existing.endDate.getTime()) / (1000 * 60 * 60 * 24));
-      if (daysOverdue > 0) {
-        const lateFeePerDay = await this.getSetting('late_fee_per_day', 10000);
-        lateFee = daysOverdue * lateFeePerDay;
-      }
+    if (existing.billingStartDate) {
+      const penaltyGraceDays = await this.getSetting('penalty_grace_days', DEFAULT_PENALTY_GRACE_DAYS);
+      const feePerDay = await this.getSetting('late_fee_per_day', DEFAULT_LATE_FEE_PER_DAY);
+      const allUnpaid = await this.paymentDayRepo.findByContractAndStatus(existing.id, PaymentDayStatus.UNPAID);
+      lateFee = computeLateFee(allUnpaid, now, penaltyGraceDays, feePerDay);
     }
 
     // Generate new invoice for the extension (contract is NOT updated until payment)

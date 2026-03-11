@@ -187,6 +187,19 @@ export class PaymentController {
     }
   };
 
+  previewManualPayment = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const days = parseInt(req.query.days as string);
+      if (!days || days < 1 || days > 7) {
+        return res.status(400).json({ error: 'days must be between 1 and 7' });
+      }
+      const preview = await this.paymentService.previewManualPayment(req.params.contractId, days);
+      res.json(preview);
+    } catch (error) {
+      next(error);
+    }
+  };
+
   createManualPayment = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { days } = req.body;

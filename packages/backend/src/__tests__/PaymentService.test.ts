@@ -17,7 +17,7 @@ import {
   PaymentDayStatus,
 } from '../domain/enums';
 import { v4 as uuidv4 } from 'uuid';
-import { Contract, Invoice } from '../domain/entities';
+import { Contract, Invoice, PaymentDay } from '../domain/entities';
 
 describe('PaymentService', () => {
   let paymentService: PaymentService;
@@ -210,7 +210,26 @@ describe('PaymentService', () => {
         holidayScheme: HolidayScheme.NEW_CONTRACT,
         billingStartDate: new Date(2026, 2, 1),
         endDate: new Date(2026, 2, 28), // March 28
+        totalDaysPaid: 28,
+        workingDaysPaid: 28,
+        holidayDaysPaid: 0,
       });
+
+      // Pre-create PAID PaymentDay records for March 1-28 (realistic setup)
+      for (let day = 1; day <= 28; day++) {
+        await paymentDayRepo.create({
+          id: uuidv4(),
+          contractId: newContract.id,
+          date: new Date(2026, 2, day),
+          status: PaymentDayStatus.PAID,
+          paymentId: null,
+          dailyRate: 58000,
+          amount: 58000,
+          notes: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+      }
 
       const march29 = new Date(2026, 2, 29);
       march29.setHours(0, 0, 0, 0);
@@ -225,7 +244,8 @@ describe('PaymentService', () => {
       expect(holidayPayment!.isHoliday).toBe(true);
 
       const contract = await contractRepo.findById(newContract.id);
-      expect(contract!.totalDaysPaid).toBe(1);
+      expect(contract!.totalDaysPaid).toBe(29); // 28 PAID + 1 HOLIDAY
+      expect(contract!.holidayDaysPaid).toBe(1);
     });
   });
 
@@ -1386,6 +1406,547 @@ describe('PaymentService', () => {
           expect(updated.holidayDaysPaid).toBeGreaterThanOrEqual(1);
           expect(updated.workingDaysPaid).toBeGreaterThanOrEqual(1);
         }
+      });
+    });
+  });
+
+  // ============ Contiguous Walk & Status Transitions ============
+
+  describe('syncContractFromPaymentDays — contiguous walk', () => {
+    it('should NOT count future holidays separated by UNPAID gap', async () => {
+      // NEW_CONTRACT: March 1-5 PAID, March 6 UNPAID, March 29-31 HOLIDAY (future)
+      const contract = await createActiveContract({
+        holidayScheme: HolidayScheme.NEW_CONTRACT,
+        billingStartDate: new Date(2026, 2, 1),
+        endDate: new Date(2026, 2, 1),
+      });
+
+      // Create PAID records for March 1-5
+      for (let day = 1; day <= 5; day++) {
+        await paymentDayRepo.create({
+          id: uuidv4(), contractId: contract.id,
+          date: new Date(2026, 2, day), status: PaymentDayStatus.PAID,
+          paymentId: null, dailyRate: 58000, amount: 58000,
+          notes: null, createdAt: new Date(), updatedAt: new Date(),
+        });
+      }
+      // March 6 UNPAID (gap)
+      await paymentDayRepo.create({
+        id: uuidv4(), contractId: contract.id,
+        date: new Date(2026, 2, 6), status: PaymentDayStatus.UNPAID,
+        paymentId: null, dailyRate: 58000, amount: 58000,
+        notes: null, createdAt: new Date(), updatedAt: new Date(),
+      });
+      // March 29-31 HOLIDAY (future, pre-generated)
+      for (let day = 29; day <= 31; day++) {
+        await paymentDayRepo.create({
+          id: uuidv4(), contractId: contract.id,
+          date: new Date(2026, 2, day), status: PaymentDayStatus.HOLIDAY,
+          paymentId: null, dailyRate: 58000, amount: 0,
+          notes: null, createdAt: new Date(), updatedAt: new Date(),
+        });
+      }
+
+      // Trigger sync via updatePaymentDayStatus (marks day 5 as PAID again, triggering sync)
+      await paymentService.updatePaymentDayStatus(
+        contract.id, new Date(2026, 2, 5), PaymentDayStatus.PAID, adminId
+      );
+
+      const updated = await contractRepo.findById(contract.id);
+      expect(updated!.totalDaysPaid).toBe(5); // Only March 1-5, NOT including future holidays
+      expect(updated!.holidayDaysPaid).toBe(0);
+      expect(updated!.workingDaysPaid).toBe(5);
+      const endDate = new Date(updated!.endDate);
+      endDate.setHours(0, 0, 0, 0);
+      expect(endDate.getDate()).toBe(5); // March 5
+    });
+
+    it('should count trailing contiguous holidays after last PAID day', async () => {
+      // NEW_CONTRACT: March 1-28 PAID, March 29-31 HOLIDAY (contiguous)
+      const contract = await createActiveContract({
+        holidayScheme: HolidayScheme.NEW_CONTRACT,
+        billingStartDate: new Date(2026, 2, 1),
+        endDate: new Date(2026, 2, 1),
+      });
+
+      // Create PAID records for March 1-28
+      for (let day = 1; day <= 28; day++) {
+        await paymentDayRepo.create({
+          id: uuidv4(), contractId: contract.id,
+          date: new Date(2026, 2, day), status: PaymentDayStatus.PAID,
+          paymentId: null, dailyRate: 58000, amount: 58000,
+          notes: null, createdAt: new Date(), updatedAt: new Date(),
+        });
+      }
+      // March 29-31 HOLIDAY (contiguous right after PAID)
+      for (let day = 29; day <= 31; day++) {
+        await paymentDayRepo.create({
+          id: uuidv4(), contractId: contract.id,
+          date: new Date(2026, 2, day), status: PaymentDayStatus.HOLIDAY,
+          paymentId: null, dailyRate: 58000, amount: 0,
+          notes: null, createdAt: new Date(), updatedAt: new Date(),
+        });
+      }
+
+      // Trigger sync
+      await paymentService.updatePaymentDayStatus(
+        contract.id, new Date(2026, 2, 28), PaymentDayStatus.PAID, adminId
+      );
+
+      const updated = await contractRepo.findById(contract.id);
+      expect(updated!.totalDaysPaid).toBe(31); // 28 PAID + 3 HOLIDAY
+      expect(updated!.workingDaysPaid).toBe(28);
+      expect(updated!.holidayDaysPaid).toBe(3);
+      const endDate = new Date(updated!.endDate);
+      endDate.setHours(0, 0, 0, 0);
+      expect(endDate.getDate()).toBe(31); // March 31
+    });
+  });
+
+  describe('bidirectional status transitions via syncContractFromPaymentDays', () => {
+    it('should revert OVERDUE to ACTIVE when payment brings endDate within grace', async () => {
+      // Contract OVERDUE, gracePeriodDays=7
+      // billingStartDate = March 1, current endDate = March 3 (yesterday = March 10, grace expired)
+      // After paying March 4-10 → endDate = March 10 → grace end = March 17 >= today → ACTIVE
+      const today = new Date(2026, 2, 11);
+      today.setHours(0, 0, 0, 0);
+
+      const contract = await createActiveContract({
+        holidayScheme: HolidayScheme.NEW_CONTRACT,
+        billingStartDate: new Date(2026, 2, 1),
+        endDate: new Date(2026, 2, 3),
+        status: ContractStatus.OVERDUE,
+        gracePeriodDays: 7,
+      });
+
+      // Create PaymentDay records: March 1-10 all PAID
+      for (let day = 1; day <= 10; day++) {
+        await paymentDayRepo.create({
+          id: uuidv4(), contractId: contract.id,
+          date: new Date(2026, 2, day), status: PaymentDayStatus.PAID,
+          paymentId: null, dailyRate: 58000, amount: 58000,
+          notes: null, createdAt: new Date(), updatedAt: new Date(),
+        });
+      }
+      // March 11 UNPAID
+      await paymentDayRepo.create({
+        id: uuidv4(), contractId: contract.id,
+        date: new Date(2026, 2, 11), status: PaymentDayStatus.UNPAID,
+        paymentId: null, dailyRate: 58000, amount: 58000,
+        notes: null, createdAt: new Date(), updatedAt: new Date(),
+      });
+
+      // Trigger sync
+      await paymentService.updatePaymentDayStatus(
+        contract.id, new Date(2026, 2, 10), PaymentDayStatus.PAID, adminId
+      );
+
+      const updated = await contractRepo.findById(contract.id);
+      expect(updated!.status).toBe(ContractStatus.ACTIVE); // Reverted from OVERDUE
+      expect(updated!.totalDaysPaid).toBe(10);
+    });
+
+    it('should keep OVERDUE when partial payment still outside grace', async () => {
+      // Contract OVERDUE, gracePeriodDays=7
+      // billingStartDate = March 1, pay only March 1-2 → endDate = March 2
+      // Grace end = March 9 < today (March 11) → still OVERDUE
+      const contract = await createActiveContract({
+        holidayScheme: HolidayScheme.NEW_CONTRACT,
+        billingStartDate: new Date(2026, 2, 1),
+        endDate: new Date(2026, 2, 1),
+        status: ContractStatus.OVERDUE,
+        gracePeriodDays: 7,
+      });
+
+      // March 1-2 PAID
+      for (let day = 1; day <= 2; day++) {
+        await paymentDayRepo.create({
+          id: uuidv4(), contractId: contract.id,
+          date: new Date(2026, 2, day), status: PaymentDayStatus.PAID,
+          paymentId: null, dailyRate: 58000, amount: 58000,
+          notes: null, createdAt: new Date(), updatedAt: new Date(),
+        });
+      }
+      // March 3 UNPAID
+      await paymentDayRepo.create({
+        id: uuidv4(), contractId: contract.id,
+        date: new Date(2026, 2, 3), status: PaymentDayStatus.UNPAID,
+        paymentId: null, dailyRate: 58000, amount: 58000,
+        notes: null, createdAt: new Date(), updatedAt: new Date(),
+      });
+
+      // Trigger sync
+      await paymentService.updatePaymentDayStatus(
+        contract.id, new Date(2026, 2, 2), PaymentDayStatus.PAID, adminId
+      );
+
+      const updated = await contractRepo.findById(contract.id);
+      expect(updated!.status).toBe(ContractStatus.OVERDUE); // Still OVERDUE
+      expect(updated!.totalDaysPaid).toBe(2);
+    });
+
+    it('should not change terminal statuses (COMPLETED, CANCELLED, REPOSSESSED)', async () => {
+      for (const terminalStatus of [ContractStatus.COMPLETED, ContractStatus.CANCELLED, ContractStatus.REPOSSESSED]) {
+        const contract = await createActiveContract({
+          holidayScheme: HolidayScheme.NEW_CONTRACT,
+          billingStartDate: new Date(2026, 2, 1),
+          endDate: new Date(2026, 2, 1),
+          status: terminalStatus,
+        });
+
+        // Create 1 PAID day
+        await paymentDayRepo.create({
+          id: uuidv4(), contractId: contract.id,
+          date: new Date(2026, 2, 1), status: PaymentDayStatus.PAID,
+          paymentId: null, dailyRate: 58000, amount: 58000,
+          notes: null, createdAt: new Date(), updatedAt: new Date(),
+        });
+        // Create UNPAID gap
+        await paymentDayRepo.create({
+          id: uuidv4(), contractId: contract.id,
+          date: new Date(2026, 2, 2), status: PaymentDayStatus.UNPAID,
+          paymentId: null, dailyRate: 58000, amount: 58000,
+          notes: null, createdAt: new Date(), updatedAt: new Date(),
+        });
+
+        // Trigger sync via updatePaymentDayStatus
+        await paymentService.updatePaymentDayStatus(
+          contract.id, new Date(2026, 2, 1), PaymentDayStatus.PAID, adminId
+        );
+
+        const updated = await contractRepo.findById(contract.id);
+        expect(updated!.status).toBe(terminalStatus); // Should NOT change
+      }
+    });
+
+    it('should mark ACTIVE as OVERDUE when endDate correction reveals overdue state', async () => {
+      // Contract ACTIVE but endDate was inflated. After sync, correct endDate = March 2
+      // Grace end = March 9 < today (March 11) → should become OVERDUE
+      const contract = await createActiveContract({
+        holidayScheme: HolidayScheme.NEW_CONTRACT,
+        billingStartDate: new Date(2026, 2, 1),
+        endDate: new Date(2026, 2, 28), // Inflated endDate (bug)
+        status: ContractStatus.ACTIVE,
+        gracePeriodDays: 7,
+      });
+
+      // Only March 1-2 are actually PAID
+      for (let day = 1; day <= 2; day++) {
+        await paymentDayRepo.create({
+          id: uuidv4(), contractId: contract.id,
+          date: new Date(2026, 2, day), status: PaymentDayStatus.PAID,
+          paymentId: null, dailyRate: 58000, amount: 58000,
+          notes: null, createdAt: new Date(), updatedAt: new Date(),
+        });
+      }
+      // March 3 UNPAID
+      await paymentDayRepo.create({
+        id: uuidv4(), contractId: contract.id,
+        date: new Date(2026, 2, 3), status: PaymentDayStatus.UNPAID,
+        paymentId: null, dailyRate: 58000, amount: 58000,
+        notes: null, createdAt: new Date(), updatedAt: new Date(),
+      });
+
+      // Trigger sync
+      await paymentService.updatePaymentDayStatus(
+        contract.id, new Date(2026, 2, 2), PaymentDayStatus.PAID, adminId
+      );
+
+      const updated = await contractRepo.findById(contract.id);
+      expect(updated!.status).toBe(ContractStatus.OVERDUE); // Corrected from ACTIVE
+      expect(updated!.totalDaysPaid).toBe(2);
+      const endDate = new Date(updated!.endDate);
+      endDate.setHours(0, 0, 0, 0);
+      expect(endDate.getDate()).toBe(2); // March 2, not 28
+    });
+  });
+
+  // ============ Late Fee / Penalty ============
+
+  describe('late fee / penalty', () => {
+    // Helper: create PaymentDay objects for testing calculateLateFee directly
+    function makePD(date: Date, dailyRate = 83000): PaymentDay {
+      return {
+        id: uuidv4(),
+        contractId: 'c1',
+        date,
+        status: PaymentDayStatus.UNPAID,
+        paymentId: null,
+        dailyRate,
+        amount: dailyRate,
+        notes: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+    }
+
+    describe('calculateLateFee (unit)', () => {
+      it('should add Rp 20.000 penalty per day overdue >= 2 days', async () => {
+        // today = Mar 10, days 5-10
+        const today = new Date(2026, 2, 10); // Mar 10
+        today.setHours(0, 0, 0, 0);
+
+        const days = [
+          makePD(new Date(2026, 2, 5)),  // diff=5 >= 2 → penalty
+          makePD(new Date(2026, 2, 6)),  // diff=4 >= 2 → penalty
+          makePD(new Date(2026, 2, 7)),  // diff=3 >= 2 → penalty
+          makePD(new Date(2026, 2, 8)),  // diff=2 >= 2 → penalty
+          makePD(new Date(2026, 2, 9)),  // diff=1 < 2  → no penalty
+          makePD(new Date(2026, 2, 10)), // diff=0 < 2  → no penalty
+        ];
+
+        const fee = await paymentService.calculateLateFee(days, today);
+        expect(fee).toBe(4 * 20000); // 80.000
+      });
+
+      it('should return 0 when all days are within grace period', async () => {
+        const today = new Date(2026, 2, 10);
+        today.setHours(0, 0, 0, 0);
+
+        const days = [
+          makePD(new Date(2026, 2, 9)),  // diff=1 < 2
+          makePD(new Date(2026, 2, 10)), // diff=0 < 2
+        ];
+
+        const fee = await paymentService.calculateLateFee(days, today);
+        expect(fee).toBe(0);
+      });
+
+      it('should skip holiday days (amount=0) for penalty', async () => {
+        const today = new Date(2026, 2, 10);
+        today.setHours(0, 0, 0, 0);
+
+        const days = [
+          makePD(new Date(2026, 2, 5)),                      // working day, penalty
+          { ...makePD(new Date(2026, 2, 6)), amount: 0 },    // holiday, skip
+          makePD(new Date(2026, 2, 7)),                      // working day, penalty
+        ];
+
+        const fee = await paymentService.calculateLateFee(days, today);
+        expect(fee).toBe(2 * 20000); // only 2 working days penalized
+      });
+
+      it('should penalize ALL days when all are past grace period', async () => {
+        const today = new Date(2026, 2, 15);
+        today.setHours(0, 0, 0, 0);
+
+        const days = [
+          makePD(new Date(2026, 2, 5)),  // diff=10
+          makePD(new Date(2026, 2, 6)),  // diff=9
+          makePD(new Date(2026, 2, 7)),  // diff=8
+        ];
+
+        const fee = await paymentService.calculateLateFee(days, today);
+        expect(fee).toBe(3 * 20000);
+      });
+    });
+
+    describe('Kasus 1: pembayaran incremental hari yang sama (EdPower 83k)', () => {
+      // Setup: today=Mar 10, last paid=Mar 4, days 5-10 unpaid
+      // Grace period=2, late fee=20.000/hari
+      // Penalty days: 5,6,7,8 (diff >= 2). No penalty: 9,10.
+
+      it('bayar 1 hari (day 5): 83k + 20k denda = 103k total', async () => {
+        const today = new Date(2026, 2, 10);
+        today.setHours(0, 0, 0, 0);
+
+        const days = [makePD(new Date(2026, 2, 5))]; // diff=5 >= 2
+
+        const fee = await paymentService.calculateLateFee(days, today);
+        const amount = 83000;
+        expect(fee).toBe(20000);
+        expect(amount + fee).toBe(103000);
+      });
+
+      it('bayar 2 hari (days 6-7): (83k+20k)x2 = 206k total', async () => {
+        const today = new Date(2026, 2, 10);
+        today.setHours(0, 0, 0, 0);
+
+        const days = [
+          makePD(new Date(2026, 2, 6)), // diff=4 >= 2
+          makePD(new Date(2026, 2, 7)), // diff=3 >= 2
+        ];
+
+        const fee = await paymentService.calculateLateFee(days, today);
+        const amount = 83000 * 2;
+        expect(fee).toBe(20000 * 2);
+        expect(amount + fee).toBe(206000);
+      });
+
+      it('bayar 3 hari (days 8-10): (83k+20k) + 83k*2 = 269k total', async () => {
+        const today = new Date(2026, 2, 10);
+        today.setHours(0, 0, 0, 0);
+
+        const days = [
+          makePD(new Date(2026, 2, 8)),  // diff=2 >= 2 → penalty
+          makePD(new Date(2026, 2, 9)),  // diff=1 < 2  → no penalty
+          makePD(new Date(2026, 2, 10)), // diff=0 < 2  → no penalty
+        ];
+
+        const fee = await paymentService.calculateLateFee(days, today);
+        const amount = 83000 * 3;
+        expect(fee).toBe(20000); // only day 8
+        expect(amount + fee).toBe(269000);
+      });
+    });
+
+    describe('Kasus 2: pembayaran across multiple days (EdPower 83k)', () => {
+      // Day 10: bayar day 5 → 103k. Bayar days 6-8 → 309k.
+      // Day 11: bayar days 9-10 → 186k (day 9 now penalized: 11-9=2>=2).
+      // Day 12: bayar days 11-12 → 166k (no penalty, both < 2 days).
+
+      it('hari ke-10: bayar day 5 → 103k', async () => {
+        const today10 = new Date(2026, 2, 10);
+        today10.setHours(0, 0, 0, 0);
+
+        const fee = await paymentService.calculateLateFee(
+          [makePD(new Date(2026, 2, 5))], today10
+        );
+        expect(83000 + fee).toBe(103000);
+      });
+
+      it('hari ke-10: bayar days 6-8 → 309k', async () => {
+        const today10 = new Date(2026, 2, 10);
+        today10.setHours(0, 0, 0, 0);
+
+        const days = [
+          makePD(new Date(2026, 2, 6)), // diff=4 → penalty
+          makePD(new Date(2026, 2, 7)), // diff=3 → penalty
+          makePD(new Date(2026, 2, 8)), // diff=2 → penalty
+        ];
+
+        const fee = await paymentService.calculateLateFee(days, today10);
+        expect(83000 * 3 + fee).toBe(309000);
+      });
+
+      it('hari ke-11: bayar days 9-10 → 186k (day 9 kena denda)', async () => {
+        const today11 = new Date(2026, 2, 11);
+        today11.setHours(0, 0, 0, 0);
+
+        const days = [
+          makePD(new Date(2026, 2, 9)),  // diff=2 >= 2 → penalty
+          makePD(new Date(2026, 2, 10)), // diff=1 < 2  → no penalty
+        ];
+
+        const fee = await paymentService.calculateLateFee(days, today11);
+        expect(83000 * 2 + fee).toBe(186000);
+      });
+
+      it('hari ke-12: bayar days 11-12 → 166k (tidak ada denda)', async () => {
+        const today12 = new Date(2026, 2, 12);
+        today12.setHours(0, 0, 0, 0);
+
+        const days = [
+          makePD(new Date(2026, 2, 11)), // diff=1 < 2 → no penalty
+          makePD(new Date(2026, 2, 12)), // diff=0 < 2 → no penalty
+        ];
+
+        const fee = await paymentService.calculateLateFee(days, today12);
+        expect(fee).toBe(0);
+        expect(83000 * 2 + fee).toBe(166000);
+      });
+    });
+
+    describe('integration: generateDailyPayments with late fee', () => {
+      it('should include late fee in generated daily payment', async () => {
+        // Contract with billingStartDate 5 days ago
+        // Use fixed date to avoid holiday issues: Mar 5 (Thu) for NEW_CONTRACT
+        const billingStart = new Date(2026, 2, 5);
+        billingStart.setHours(0, 0, 0, 0);
+        const today = new Date(2026, 2, 10);
+        today.setHours(0, 0, 0, 0);
+
+        const contract = await createActiveContract({
+          billingStartDate: billingStart,
+          endDate: billingStart,
+          holidayScheme: HolidayScheme.NEW_CONTRACT,
+        });
+
+        await paymentService.generateDailyPayments(today);
+
+        const payments = await invoiceRepo.findByContractId(contract.id);
+        const pending = payments.find((p: Invoice) => p.status === PaymentStatus.PENDING);
+        if (!pending) return; // skip if no working days
+
+        // Days Mar 5-8 (diff 5,4,3,2 >= 2) get penalty, Mar 9-10 (diff 1,0) don't
+        // Check that lateFee > 0 for accumulated billing covering past days
+        // Exact count depends on whether any are Sundays
+        expect(pending.lateFee).toBeGreaterThan(0);
+        // amount should still be daysCount * dailyRate (lateFee is separate)
+        expect(pending.amount).toBe(pending.daysCount! * 58000);
+      });
+
+      it('should NOT include late fee for same-day billing', async () => {
+        const today = new Date(2026, 2, 10);
+        today.setHours(0, 0, 0, 0);
+
+        const contract = await createActiveContract({
+          billingStartDate: today,
+          endDate: today,
+          holidayScheme: HolidayScheme.NEW_CONTRACT,
+        });
+
+        await paymentService.generateDailyPayments(today);
+
+        const payments = await invoiceRepo.findByContractId(contract.id);
+        const pending = payments.find((p: Invoice) => p.status === PaymentStatus.PENDING);
+        if (!pending) return;
+
+        // Same day: diff = 0 < 2, no penalty
+        expect(pending.lateFee).toBe(0);
+      });
+    });
+
+    describe('integration: manual payment with late fee', () => {
+      it('should include late fee for overdue days in manual payment', async () => {
+        // Contract with billing started 5 days ago
+        const contract = await createActiveContract({
+          billingStartDate: createDate(-5),
+          endDate: createDate(-5),
+        });
+
+        const payment = await paymentService.createManualPayment(contract.id, 3, adminId);
+
+        // FIFO selects oldest 3 UNPAID working days
+        // At least 1-2 should have diff >= 2 → late fee > 0
+        // (exact count depends on holidays, but 5 days ago means several penalized)
+        expect(payment.lateFee).toBeGreaterThanOrEqual(20000);
+        // amount is separate from lateFee
+        expect(payment.amount).toBe(payment.daysCount! * contract.dailyRate);
+      });
+    });
+
+    describe('integration: rollover with late fee', () => {
+      it('should include late fee in rollover payment', async () => {
+        // Use fixed dates to control scenario
+        const threeDaysAgo = new Date(2026, 2, 7);
+        threeDaysAgo.setHours(0, 0, 0, 0);
+
+        const contract = await createActiveContract({
+          billingStartDate: threeDaysAgo,
+          endDate: threeDaysAgo,
+          holidayScheme: HolidayScheme.NEW_CONTRACT,
+        });
+
+        // Generate payment 3 days ago (1 day)
+        await paymentService.generateDailyPayments(threeDaysAgo);
+
+        // Rollover to today (Mar 10)
+        const today = new Date(2026, 2, 10);
+        today.setHours(0, 0, 0, 0);
+
+        await paymentService.rolloverExpiredPayments(today);
+
+        const payments = await invoiceRepo.findByContractId(contract.id);
+        const pending = payments.find((p: Invoice) => p.status === PaymentStatus.PENDING);
+        if (!pending) return;
+
+        // Mar 7: diff=3 >= 2 → penalty
+        // Mar 8 (Sun): working day for NEW_CONTRACT → diff=2 >= 2 → penalty
+        // Mar 9: diff=1 < 2 → no penalty
+        // Mar 10: diff=0 < 2 → no penalty
+        expect(pending.lateFee).toBeGreaterThan(0);
+        expect(pending.amount).toBe(pending.daysCount! * 58000);
       });
     });
   });

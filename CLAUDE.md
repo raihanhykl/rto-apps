@@ -272,6 +272,39 @@ OVERDUE → CANCELLED   (manual oleh admin)
   - Daily payment: kurangi `totalDaysPaid`, recalculate `ownershipProgress`, mundurkan `endDate`
 - Ini fitur koreksi admin — gunakan dengan hati-hati.
 
+### Late Payment Penalty (Denda Keterlambatan)
+
+**Setting (2 setting terpisah dari grace period OVERDUE):**
+
+| Setting | Default | Deskripsi |
+|---------|---------|-----------|
+| `penalty_grace_days` | 2 | Toleransi (hari) sebelum denda berlaku |
+| `late_fee_per_day` | 20.000 | Nominal denda per hari (Rp) |
+| `grace_period_days` | 7 | Masa tenggang status OVERDUE (BUKAN untuk denda!) |
+
+**PENTING**: `grace_period_days` hanya menentukan kapan kontrak berubah status ke OVERDUE (setelah endDate + N hari). `penalty_grace_days` menentukan kapan denda keterlambatan mulai berlaku. Kedua setting ini **independen** dan tidak boleh dicampur.
+
+**Kebijakan denda:**
+- Denda dikenakan per hari yang telat bayar **>= penalty_grace_days** (default 2 hari)
+- **Rumus**: hari kena denda jika `(today - tanggalHari) >= penalty_grace_days`
+
+**Contoh** (EdPower 83k, today=10, terakhir bayar=4):
+- Hari 5-8 kena denda (diff 5,4,3,2 ≥ 2). Hari 9-10 tidak (diff 1,0 < 2).
+- Bayar hari 5: 83k + 20k = 103k
+- Bayar hari 6-7: (83k+20k)×2 = 206k
+- Bayar hari 8-10: (83k+20k) + 83k×2 = 269k
+
+**Implementasi:**
+- Pure function `computeLateFee()` di `domain/utils/lateFeeCalculator.ts` — shared oleh PaymentService & ContractService
+- `PaymentService.calculateLateFee()` adalah async wrapper yang baca setting lalu panggil `computeLateFee()`
+- `Invoice.lateFee` field menyimpan total denda (terpisah dari `amount`)
+- Total bayar = `amount + lateFee`
+- Berlaku untuk: daily billing (scheduler), manual payment, rollover, reduce payment, extension
+- Holiday (amount=0) **tidak kena denda**
+
+**Migrasi setting:**
+- `SettingService.seedDefaults()` punya `migrateSettings()` yang otomatis update setting lama ke nilai baru jika belum pernah dikustomisasi admin. Ini memastikan deploy ke environment lama tidak butuh manual SQL update.
+
 ### Payment Calendar (Warna)
 
 | Warna | Status | Keterangan |
@@ -340,7 +373,7 @@ cd packages/backend && npx prisma db seed -- --reset --force
 - Framework: Jest + ts-jest
 - Lokasi: `packages/backend/src/__tests__/`
 - 5 test suites: AuthService, CustomerService, ContractService, PaymentService, SavingService
-- **177 tests** saat ini
+- **198 tests** saat ini
 - Semua tests menggunakan InMemory repositories — TIDAK butuh PostgreSQL.
 - Jalankan: `cd packages/backend && npm test`
 - Saat menambah fitur baru, WAJIB tambah/update tests yang relevan.

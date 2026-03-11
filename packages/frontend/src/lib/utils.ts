@@ -30,3 +30,13 @@ export function formatDateTime(date: string | Date): string {
     minute: '2-digit',
   }).format(new Date(date));
 }
+
+/**
+ * Get today's date in WIB (Asia/Jakarta, UTC+7).
+ * Mirrors backend getWibToday() for consistent timezone handling.
+ */
+export function getWibToday(): Date {
+  const wibStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+  const [y, m, d] = wibStr.split('-').map(Number);
+  return new Date(y, m - 1, d, 0, 0, 0, 0);
+}

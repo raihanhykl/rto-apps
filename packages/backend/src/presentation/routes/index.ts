@@ -62,6 +62,7 @@ export function createRoutes(controllers: RouteControllers): Router {
   router.get('/payments/contract/:contractId', authMiddleware, controllers.paymentController.getByContractId);
   router.get('/payments/contract/:contractId/active', authMiddleware, controllers.paymentController.getActiveByContractId);
   router.get('/payments/contract/:contractId/calendar', authMiddleware, controllers.paymentController.getCalendarData);
+  router.get('/payments/contract/:contractId/manual-preview', authMiddleware, controllers.paymentController.previewManualPayment);
   router.post('/payments/contract/:contractId/manual', authMiddleware, controllers.paymentController.createManualPayment);
   router.patch('/payments/contract/:contractId/day/:date', authMiddleware, controllers.paymentController.updatePaymentDayStatus);
   router.post('/payments/bulk-pay', authMiddleware, controllers.paymentController.bulkMarkPaid);

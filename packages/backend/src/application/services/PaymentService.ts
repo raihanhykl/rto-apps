@@ -13,9 +13,12 @@ import {
   AuditAction,
   HolidayScheme,
   PaymentDayStatus,
+  DEFAULT_PENALTY_GRACE_DAYS,
+  DEFAULT_LATE_FEE_PER_DAY,
 } from '../../domain/enums';
 import { IPaymentDayRepository } from '../../domain/interfaces';
 import { getWibToday, getWibDateParts, toDateKey } from '../../domain/utils/dateUtils';
+import { computeLateFee } from '../../domain/utils/lateFeeCalculator';
 import { SettingService } from './SettingService';
 import { SavingService } from './SavingService';
 import { v4 as uuidv4 } from 'uuid';
@@ -42,6 +45,21 @@ export class PaymentService {
 
   setSavingService(savingService: SavingService): void {
     this.savingService = savingService;
+  }
+
+  private async getSetting(key: string, fallback: number): Promise<number> {
+    if (!this.settingService) return fallback;
+    return this.settingService.getNumberSetting(key, fallback);
+  }
+
+  /**
+   * Hitung total late fee berdasarkan umur setiap hari yang belum dibayar.
+   * Delegasi ke pure function computeLateFee() di domain layer.
+   */
+  async calculateLateFee(unpaidDays: PaymentDay[], today: Date): Promise<number> {
+    const penaltyGraceDays = await this.getSetting('penalty_grace_days', DEFAULT_PENALTY_GRACE_DAYS);
+    const feePerDay = await this.getSetting('late_fee_per_day', DEFAULT_LATE_FEE_PER_DAY);
+    return computeLateFee(unpaidDays, today, penaltyGraceDays, feePerDay);
   }
 
   private async initCounters(): Promise<void> {
@@ -141,24 +159,46 @@ export class PaymentService {
   /**
    * Recalculate contract summary fields (totalDaysPaid, workingDaysPaid,
    * holidayDaysPaid, ownershipProgress, endDate) dari PaymentDay records.
+   *
+   * Menggunakan "contiguous walk" dari billingStartDate:
+   * - Hitung PAID dan HOLIDAY yang berturut-turut (tanpa gap UNPAID/PENDING/VOIDED)
+   * - Trailing contiguous holidays setelah PAID terakhir dihitung
+   * - endDate = tanggal terakhir dalam streak contiguous
+   *
+   * Juga melakukan bidirectional status transition:
+   * - OVERDUE → ACTIVE jika endDate + grace >= today
+   * - ACTIVE → OVERDUE jika endDate + grace < today
    */
   private async syncContractFromPaymentDays(contractId: string): Promise<void> {
     const contract = await this.contractRepo.findById(contractId);
     if (!contract) return;
 
-    const paidCount = await this.paymentDayRepo.countByContractAndStatus(contractId, PaymentDayStatus.PAID);
-    const holidayCount = await this.paymentDayRepo.countByContractAndStatus(contractId, PaymentDayStatus.HOLIDAY);
+    // Fetch ALL PaymentDay records sorted by date ASC
+    const allDays = await this.paymentDayRepo.findByContractId(contractId);
+
+    // Contiguous walk: hitung PAID + HOLIDAY berturut-turut dari awal
+    let paidCount = 0;
+    let holidayCount = 0;
+    let totalAmount = 0;
+    let lastContiguousDate: Date | null = null;
+
+    for (const pd of allDays) {
+      if (pd.status === PaymentDayStatus.PAID) {
+        paidCount++;
+        totalAmount += pd.amount;
+        lastContiguousDate = pd.date;
+      } else if (pd.status === PaymentDayStatus.HOLIDAY) {
+        holidayCount++;
+        lastContiguousDate = pd.date;
+      } else {
+        break; // Gap ditemukan — stop counting
+      }
+    }
+
     const totalPaid = paidCount + holidayCount;
-
-    const lastDate = await this.paymentDayRepo.findLastPaidOrHolidayDate(contractId);
-
     const progress = contract.ownershipTargetDays > 0
       ? parseFloat(((totalPaid / contract.ownershipTargetDays) * 100).toFixed(2))
       : 0;
-
-    // Calculate totalAmount from PAID PaymentDay records (non-holiday)
-    const paidDays = await this.paymentDayRepo.findByContractAndStatus(contractId, PaymentDayStatus.PAID);
-    const totalAmount = paidDays.reduce((sum, pd) => sum + pd.amount, 0);
 
     const updates: Partial<Contract> = {
       totalDaysPaid: totalPaid,
@@ -169,13 +209,23 @@ export class PaymentService {
       totalAmount,
     };
 
-    if (lastDate) {
-      updates.endDate = lastDate;
+    if (lastContiguousDate) {
+      updates.endDate = lastContiguousDate;
     }
+
+    // Bidirectional status transition
+    const today = getWibToday();
+    const effectiveEndDate = lastContiguousDate || contract.endDate;
+    const graceEnd = new Date(effectiveEndDate);
+    graceEnd.setDate(graceEnd.getDate() + contract.gracePeriodDays);
 
     if (totalPaid >= contract.ownershipTargetDays && contract.status !== ContractStatus.COMPLETED) {
       updates.status = ContractStatus.COMPLETED;
       updates.completedAt = new Date();
+    } else if (contract.status === ContractStatus.OVERDUE && graceEnd >= today) {
+      updates.status = ContractStatus.ACTIVE;
+    } else if (contract.status === ContractStatus.ACTIVE && graceEnd < today) {
+      updates.status = ContractStatus.OVERDUE;
     }
 
     await this.contractRepo.update(contractId, updates);
@@ -242,6 +292,7 @@ export class PaymentService {
       if (unpaidDays.length === 0) continue;
 
       const totalAmount = unpaidDays.reduce((sum, pd) => sum + pd.amount, 0);
+      const lateFee = await this.calculateLateFee(unpaidDays, now);
       const periodStart = new Date(unpaidDays[0].date);
       periodStart.setHours(0, 0, 0, 0);
       const periodEnd = new Date(unpaidDays[unpaidDays.length - 1].date);
@@ -253,7 +304,7 @@ export class PaymentService {
         contractId: contract.id,
         customerId: contract.customerId,
         amount: totalAmount,
-        lateFee: 0,
+        lateFee,
         type: InvoiceType.DAILY_BILLING,
         status: PaymentStatus.PENDING,
         qrCodeData: '',
@@ -287,41 +338,6 @@ export class PaymentService {
     }
 
     return generated;
-  }
-
-  private async createDailyPayment(contract: Contract, usageDate: Date): Promise<Invoice> {
-    const periodStart = new Date(usageDate);
-    periodStart.setHours(0, 0, 0, 0);
-    const periodEnd = new Date(usageDate);
-    periodEnd.setHours(23, 59, 59, 999);
-
-    const payment: Invoice = {
-      id: uuidv4(),
-      invoiceNumber: await this.generatePaymentNumber(),
-      contractId: contract.id,
-      customerId: contract.customerId,
-      amount: contract.dailyRate,
-      lateFee: 0,
-      type: InvoiceType.DAILY_BILLING,
-      status: PaymentStatus.PENDING,
-      qrCodeData: '',
-      dueDate: periodEnd,
-      paidAt: null,
-      extensionDays: 1,
-      dokuPaymentUrl: null,
-      dokuReferenceId: null,
-      dailyRate: contract.dailyRate,
-      daysCount: 1,
-      periodStart,
-      periodEnd,
-      expiredAt: null,
-      previousPaymentId: null,
-      isHoliday: false,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-
-    return this.invoiceRepo.create(payment);
   }
 
   private async createHolidayPayment(contract: Contract, targetDate: Date): Promise<Invoice> {
@@ -358,8 +374,8 @@ export class PaymentService {
 
     const created = await this.invoiceRepo.create(payment);
 
-    // Credit 1 free day to contract
-    await this.creditDayToContract(contract, 1, true);
+    // Recalculate contract from PaymentDay data (contiguous walk)
+    await this.syncContractFromPaymentDays(contract.id);
 
     return created;
   }
@@ -461,6 +477,7 @@ export class PaymentService {
     }
 
     const totalAmount = unpaidDays.reduce((sum, pd) => sum + pd.amount, 0);
+    const lateFee = await this.calculateLateFee(unpaidDays, today);
     const periodStart = new Date(unpaidDays[0].date);
     periodStart.setHours(0, 0, 0, 0);
     const periodEnd = new Date(unpaidDays[unpaidDays.length - 1].date);
@@ -472,7 +489,7 @@ export class PaymentService {
       contractId: contract.id,
       customerId: contract.customerId,
       amount: totalAmount,
-      lateFee: 0,
+      lateFee,
       type: InvoiceType.DAILY_BILLING,
       status: PaymentStatus.PENDING,
       qrCodeData: '',
@@ -588,50 +605,60 @@ export class PaymentService {
     });
   }
 
-  // ============ Credit Days to Contract ============
-
-  private async creditDayToContract(contract: Contract, days: number, isHoliday: boolean): Promise<void> {
-    const newTotalDaysPaid = contract.totalDaysPaid + days;
-    const newProgress = parseFloat(((newTotalDaysPaid / contract.ownershipTargetDays) * 100).toFixed(2));
-    const isCompleted = newTotalDaysPaid >= contract.ownershipTargetDays;
-
-    const newEndDate = new Date(contract.endDate);
-    if (isHoliday) {
-      newEndDate.setDate(newEndDate.getDate() + days);
-    } else {
-      let remaining = days;
-      while (remaining > 0) {
-        newEndDate.setDate(newEndDate.getDate() + 1);
-        if (!this.isLiburBayar(contract, newEndDate)) {
-          remaining--;
-        }
-      }
-    }
-
-    const updateData: Partial<Contract> = {
-      totalDaysPaid: newTotalDaysPaid,
-      ownershipProgress: Math.min(newProgress, 100),
-      endDate: newEndDate,
-    };
-
-    if (isHoliday) {
-      updateData.holidayDaysPaid = contract.holidayDaysPaid + days;
-      updateData.durationDays = contract.durationDays + days;
-    } else {
-      updateData.workingDaysPaid = contract.workingDaysPaid + days;
-      updateData.durationDays = contract.durationDays + days;
-      updateData.totalAmount = contract.totalAmount + (contract.dailyRate * days);
-    }
-
-    if (isCompleted) {
-      updateData.status = ContractStatus.COMPLETED;
-      updateData.completedAt = new Date();
-    }
-
-    await this.contractRepo.update(contract.id, updateData);
-  }
-
   // ============ Manual Payment ============
+
+  async previewManualPayment(contractId: string, days: number): Promise<{
+    amount: number;
+    lateFee: number;
+    total: number;
+    daysCount: number;
+    dailyRate: number;
+  }> {
+    if (days < 1 || days > 7) throw new Error('Manual payment must be 1-7 days');
+
+    const contract = await this.contractRepo.findById(contractId);
+    if (!contract) throw new Error('Contract not found');
+    if (!contract.billingStartDate) throw new Error('Billing has not started yet');
+
+    const today = getWibToday();
+
+    // Ensure PaymentDay records exist
+    const billingStart = new Date(contract.billingStartDate);
+    billingStart.setHours(0, 0, 0, 0);
+    const futureEnd = new Date(today);
+    futureEnd.setDate(futureEnd.getDate() + 7);
+    const totalDaysToGenerate = Math.floor((futureEnd.getTime() - billingStart.getTime()) / 86400000) + 1;
+    await this.generatePaymentDaysForPeriod(contract, billingStart, totalDaysToGenerate);
+
+    // Check existing active payment (same logic as createManualPayment)
+    const existingActive = await this.invoiceRepo.findActiveByContractId(contractId);
+    const existingDaysCount = existingActive ? (existingActive.daysCount || 0) : 0;
+
+    // FIFO: query ALL UNPAID + PENDING working days
+    const allUnpaid = await this.paymentDayRepo.findByContractAndStatus(contract.id, PaymentDayStatus.UNPAID);
+    const pendingDays = existingActive
+      ? await this.paymentDayRepo.findByContractAndStatus(contract.id, PaymentDayStatus.PENDING)
+      : [];
+    const combinedDays = [...allUnpaid, ...pendingDays]
+      .filter(pd => pd.amount > 0)
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    const totalDaysNeeded = existingDaysCount + days;
+    const selectedDays = combinedDays.slice(0, totalDaysNeeded);
+
+    if (selectedDays.length === 0) throw new Error('No unpaid days available');
+
+    const amount = selectedDays.reduce((sum, pd) => sum + pd.amount, 0);
+    const lateFee = await this.calculateLateFee(selectedDays, today);
+
+    return {
+      amount,
+      lateFee,
+      total: amount + lateFee,
+      daysCount: selectedDays.length,
+      dailyRate: contract.dailyRate,
+    };
+  }
 
   async createManualPayment(contractId: string, days: number, adminId: string): Promise<Invoice> {
     if (days < 1 || days > 7) throw new Error('Manual payment must be 1-7 days');
@@ -683,6 +710,7 @@ export class PaymentService {
     if (selectedDays.length === 0) throw new Error('No unpaid days available');
 
     const totalAmount = selectedDays.reduce((sum, pd) => sum + pd.amount, 0);
+    const lateFee = await this.calculateLateFee(selectedDays, today);
     const periodStart = new Date(selectedDays[0].date);
     periodStart.setHours(0, 0, 0, 0);
     const periodEnd = new Date(selectedDays[selectedDays.length - 1].date);
@@ -694,7 +722,7 @@ export class PaymentService {
       contractId: contract.id,
       customerId: contract.customerId,
       amount: totalAmount,
-      lateFee: 0,
+      lateFee,
       type: InvoiceType.MANUAL_PAYMENT,
       status: PaymentStatus.PENDING,
       qrCodeData: '',
@@ -1235,6 +1263,8 @@ export class PaymentService {
     const periodStart = new Date(eligibleDays[0].date);
     const periodEnd = new Date(eligibleDays[eligibleDays.length - 1].date);
     const totalAmount = eligibleDays.reduce((sum, pd) => sum + pd.amount, 0);
+    const today = getWibToday();
+    const lateFee = await this.calculateLateFee(eligibleDays, today);
 
     // Step 3: Buat invoice baru
     const newPayment: Invoice = {
@@ -1243,7 +1273,7 @@ export class PaymentService {
       contractId: contract.id,
       customerId: contract.customerId,
       amount: totalAmount,
-      lateFee: 0,
+      lateFee,
       type: InvoiceType.DAILY_BILLING,
       status: PaymentStatus.PENDING,
       qrCodeData: '',

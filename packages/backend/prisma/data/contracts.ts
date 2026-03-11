@@ -72,7 +72,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 1, 2],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 51,
+    workingDaysPaid: 58,
     notes: "",
   },
   {
@@ -95,7 +95,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 1, 3],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 50,
+    workingDaysPaid: 56,
     notes: "",
   },
   {
@@ -141,7 +141,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 1, 6],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 49,
+    workingDaysPaid: 54,
     notes: "",
   },
   {
@@ -164,7 +164,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 1, 7],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 47,
+    workingDaysPaid: 53,
     notes: "",
   },
   {
@@ -210,7 +210,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 1, 10],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 41,
+    workingDaysPaid: 45,
     notes: "",
   },
   {
@@ -256,7 +256,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 1, 18],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 38,
+    workingDaysPaid: 44,
     notes: "",
   },
   {
@@ -279,7 +279,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 2, 5],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 18,
+    workingDaysPaid: 20,
     notes: "",
   },
   {
@@ -302,7 +302,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 1, 19],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 36,
+    workingDaysPaid: 43,
     notes: "",
   },
   {
@@ -325,7 +325,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 1, 20],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 37,
+    workingDaysPaid: 42,
     notes: "",
   },
   {
@@ -371,7 +371,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 1, 27],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 30,
+    workingDaysPaid: 36,
     notes: "",
   },
   {
@@ -394,7 +394,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 1, 22],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 34,
+    workingDaysPaid: 39,
     notes: "",
   },
   {
@@ -463,7 +463,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 1, 28],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 29,
+    workingDaysPaid: 34,
     notes: "",
   },
   {
@@ -486,7 +486,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 1, 28],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 29,
+    workingDaysPaid: 35,
     notes: "",
   },
   {
@@ -509,7 +509,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 1, 28],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 33,
+    workingDaysPaid: 39,
     notes: "",
   },
   {
@@ -555,7 +555,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 1, 30],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 27,
+    workingDaysPaid: 33,
     notes: "",
   },
   {
@@ -578,7 +578,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 2, 2],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 25,
+    workingDaysPaid: 31,
     notes: "",
   },
   {
@@ -624,7 +624,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 2, 2],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 23,
+    workingDaysPaid: 31,
     notes: "",
   },
   {
@@ -647,7 +647,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 2, 3],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 25,
+    workingDaysPaid: 30,
     notes: "",
   },
   {
@@ -670,7 +670,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 2, 4],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 24,
+    workingDaysPaid: 29,
     notes: "",
   },
   {
@@ -693,7 +693,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 2, 6],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 21,
+    workingDaysPaid: 27,
     notes: "",
   },
   {
@@ -716,7 +716,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 2, 6],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 20,
+    workingDaysPaid: 24,
     notes: "",
   },
   {
@@ -739,7 +739,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 2, 4],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 24,
+    workingDaysPaid: 28,
     notes: "",
   },
   {
@@ -762,7 +762,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 2, 5],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 23,
+    workingDaysPaid: 28,
     notes: "",
   },
   {
@@ -785,7 +785,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 2, 5],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 23,
+    workingDaysPaid: 27,
     notes: "",
   },
   {
@@ -808,7 +808,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 2, 6],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 23,
+    workingDaysPaid: 25,
     notes: "",
   },
   {
@@ -831,7 +831,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 2, 6],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 21,
+    workingDaysPaid: 26,
     notes: "",
   },
   {
@@ -854,7 +854,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 2, 5],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 23,
+    workingDaysPaid: 28,
     notes: "",
   },
   {
@@ -877,7 +877,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 2, 10],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 17,
+    workingDaysPaid: 22,
     notes: "",
   },
   {
@@ -900,7 +900,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 2, 9],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 19,
+    workingDaysPaid: 24,
     notes: "",
   },
   {
@@ -923,7 +923,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 2, 11],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 18,
+    workingDaysPaid: 23,
     notes: "",
   },
   {
@@ -946,7 +946,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 2, 11],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 17,
+    workingDaysPaid: 21,
     notes: "",
   },
   {
@@ -969,7 +969,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 2, 10],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 19,
+    workingDaysPaid: 24,
     notes: "",
   },
   {
@@ -992,7 +992,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 2, 11],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 17,
+    workingDaysPaid: 23,
     notes: "",
   },
   {
@@ -1015,7 +1015,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 2, 11],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 18,
+    workingDaysPaid: 23,
     notes: "",
   },
   {
@@ -1061,7 +1061,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 2, 11],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 16,
+    workingDaysPaid: 22,
     notes: "",
   },
   {
@@ -1084,7 +1084,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 2, 12],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 16,
+    workingDaysPaid: 20,
     notes: "",
   },
   {
@@ -1107,7 +1107,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 2, 13],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 15,
+    workingDaysPaid: 19,
     notes: "",
   },
   {
@@ -1130,7 +1130,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 2, 17],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 12,
+    workingDaysPaid: 14,
     notes: "",
   },
   {
@@ -1153,7 +1153,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 2, 16],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 14,
+    workingDaysPaid: 19,
     notes: "",
   },
   {
@@ -1176,7 +1176,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 2, 18],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 11,
+    workingDaysPaid: 16,
     notes: "",
   },
   {
@@ -1199,7 +1199,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 2, 18],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 12,
+    workingDaysPaid: 16,
     notes: "",
   },
   {
@@ -1222,7 +1222,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 2, 18],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 12,
+    workingDaysPaid: 17,
     notes: "",
   },
   {
@@ -1245,7 +1245,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 2, 18],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 12,
+    workingDaysPaid: 17,
     notes: "",
   },
   {
@@ -1268,7 +1268,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 2, 20],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 10,
+    workingDaysPaid: 15,
     notes: "",
   },
   {
@@ -1291,7 +1291,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 2, 19],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 11,
+    workingDaysPaid: 16,
     notes: "",
   },
   {
@@ -1314,7 +1314,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 2, 20],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 9,
+    workingDaysPaid: 14,
     notes: "",
   },
   {
@@ -1337,7 +1337,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 2, 21],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 9,
+    workingDaysPaid: 14,
     notes: "",
   },
   {
@@ -1360,7 +1360,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 2, 24],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 10,
+    workingDaysPaid: 12,
     notes: "",
   },
   {
@@ -1383,7 +1383,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 2, 27],
     bastNotes: "",
     holidayScheme: "NEW_CONTRACT",
-    workingDaysPaid: 5,
+    workingDaysPaid: 11,
     notes: "",
   },
   {
@@ -1406,7 +1406,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 2, 27],
     bastNotes: "",
     holidayScheme: "NEW_CONTRACT",
-    workingDaysPaid: 5,
+    workingDaysPaid: 9,
     notes: "",
   },
   {
@@ -1426,10 +1426,10 @@ export const contracts: ContractSeed[] = [
     repossessedAt: null,
     cancelledAt: null,
     dpPaid: 580000,
-    unitReceivedDate: [2026, 3, 2],
+    unitReceivedDate: [2028, 3, 2],
     bastNotes: "",
     holidayScheme: "NEW_CONTRACT",
-    workingDaysPaid: 2,
+    workingDaysPaid: 8,
     notes: "",
   },
   {
@@ -1452,7 +1452,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 2, 28],
     bastNotes: "",
     holidayScheme: "NEW_CONTRACT",
-    workingDaysPaid: 4,
+    workingDaysPaid: 10,
     notes: "",
   },
   {
@@ -1475,7 +1475,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 2, 26],
     bastNotes: "",
     holidayScheme: "OLD_CONTRACT",
-    workingDaysPaid: 4,
+    workingDaysPaid: 8,
     notes: "",
   },
   {
@@ -1498,7 +1498,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 2, 28],
     bastNotes: "",
     holidayScheme: "NEW_CONTRACT",
-    workingDaysPaid: 4,
+    workingDaysPaid: 9,
     notes: "",
   },
   {
@@ -1521,7 +1521,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 2, 27],
     bastNotes: "",
     holidayScheme: "NEW_CONTRACT",
-    workingDaysPaid: 5,
+    workingDaysPaid: 11,
     notes: "",
   },
   {
@@ -1544,7 +1544,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 2, 27],
     bastNotes: "",
     holidayScheme: "NEW_CONTRACT",
-    workingDaysPaid: 5,
+    workingDaysPaid: 11,
     notes: "",
   },
   {
@@ -1567,7 +1567,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 2, 27],
     bastNotes: "",
     holidayScheme: "NEW_CONTRACT",
-    workingDaysPaid: 4,
+    workingDaysPaid: 11,
     notes: "",
   },
   {
@@ -1590,7 +1590,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 3, 2],
     bastNotes: "",
     holidayScheme: "NEW_CONTRACT",
-    workingDaysPaid: 2,
+    workingDaysPaid: 7,
     notes: "",
   },
   {
@@ -1636,7 +1636,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 2, 28],
     bastNotes: "",
     holidayScheme: "NEW_CONTRACT",
-    workingDaysPaid: 1,
+    workingDaysPaid: 8,
     notes: "",
   },
   {
@@ -1649,7 +1649,7 @@ export const contracts: ContractSeed[] = [
     dpScheme: "INSTALLMENT",
     color: "White",
     year: 2026,
-    vinNumber: "MGNAALB2ESJ000018",
+    vinNumber: "MGNAALB2ESJ000018 ",
     engineNumber: "QS3000722510000050",
     startDate: [2026, 3, 2],
     status: "ACTIVE",
@@ -1682,7 +1682,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 3, 2],
     bastNotes: "",
     holidayScheme: "NEW_CONTRACT",
-    workingDaysPaid: 2,
+    workingDaysPaid: 8,
     notes: "",
   },
   {
@@ -1705,7 +1705,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 3, 3],
     bastNotes: "",
     holidayScheme: "NEW_CONTRACT",
-    workingDaysPaid: 1,
+    workingDaysPaid: 7,
     notes: "",
   },
   {
@@ -1725,10 +1725,10 @@ export const contracts: ContractSeed[] = [
     repossessedAt: null,
     cancelledAt: null,
     dpPaid: 780000,
-    unitReceivedDate: null,
+    unitReceivedDate: [2026, 3, 5],
     bastNotes: "",
     holidayScheme: "NEW_CONTRACT",
-    workingDaysPaid: null,
+    workingDaysPaid: 0,
     notes: "",
   },
   {
@@ -1751,7 +1751,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 3, 2],
     bastNotes: "",
     holidayScheme: "NEW_CONTRACT",
-    workingDaysPaid: 2,
+    workingDaysPaid: 9,
     notes: "",
   },
   {
@@ -1774,7 +1774,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 3, 3],
     bastNotes: "",
     holidayScheme: "NEW_CONTRACT",
-    workingDaysPaid: 1,
+    workingDaysPaid: 7,
     notes: "",
   },
   {
@@ -1787,7 +1787,7 @@ export const contracts: ContractSeed[] = [
     dpScheme: "INSTALLMENT",
     color: "Red",
     year: 2026,
-    vinNumber: "MGNAALB2CSJ000062",
+    vinNumber: "MGNAALB2CSJ000062	",
     engineNumber: "QS3000722506000190",
     startDate: [2026, 3, 3],
     status: "ACTIVE",
@@ -1797,7 +1797,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 3, 3],
     bastNotes: "",
     holidayScheme: "NEW_CONTRACT",
-    workingDaysPaid: 1,
+    workingDaysPaid: 7,
     notes: "",
   },
   {
@@ -1820,7 +1820,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 3, 3],
     bastNotes: "",
     holidayScheme: "NEW_CONTRACT",
-    workingDaysPaid: 1,
+    workingDaysPaid: 7,
     notes: "",
   },
   {
@@ -1843,7 +1843,7 @@ export const contracts: ContractSeed[] = [
     unitReceivedDate: [2026, 3, 4],
     bastNotes: "",
     holidayScheme: "NEW_CONTRACT",
-    workingDaysPaid: 0,
+    workingDaysPaid: 5,
     notes: "",
   },
 ];

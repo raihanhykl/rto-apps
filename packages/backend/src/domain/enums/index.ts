@@ -78,7 +78,9 @@ export const DP_AMOUNTS: Record<string, number> = {
 
 export const MAX_RENTAL_DAYS = 7;
 export const DEFAULT_OWNERSHIP_TARGET_DAYS = 1278;
-export const DEFAULT_GRACE_PERIOD_DAYS = 7;
+export const DEFAULT_GRACE_PERIOD_DAYS = 7; // hari setelah endDate sebelum status OVERDUE
+export const DEFAULT_PENALTY_GRACE_DAYS = 2; // hari toleransi sebelum denda keterlambatan
+export const DEFAULT_LATE_FEE_PER_DAY = 20000; // Rp 20.000 per hari
 export enum HolidayScheme {
   OLD_CONTRACT = 'OLD_CONTRACT',
   NEW_CONTRACT = 'NEW_CONTRACT',
