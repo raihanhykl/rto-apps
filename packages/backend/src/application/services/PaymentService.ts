@@ -846,15 +846,20 @@ export class PaymentService {
     const contract = await this.contractRepo.findById(contractId);
     if (!contract) throw new Error('Contract not found');
 
-    const startDate = new Date(year, month - 1, 1);
-    startDate.setHours(0, 0, 0, 0);
-    const endDate = new Date(year, month, 0);
-    endDate.setHours(0, 0, 0, 0);
-    const daysInMonth = endDate.getDate();
-
+    const daysInMonth = new Date(year, month, 0).getDate();
     const today = getWibToday();
 
-    const paymentDays = await this.paymentDayRepo.findByContractAndDateRange(contractId, startDate, endDate);
+    // Pad query range ±1 day to handle timezone offset.
+    // WIB midnight (00:00 WIB) is stored as 17:00 UTC previous day in PostgreSQL
+    // when seed runs locally. Without padding, range starting at midnight UTC
+    // would miss the 1st of each month.
+    // toDateKey()-based matching below correctly filters to the target month only.
+    const queryStart = new Date(year, month - 1, 0);
+    queryStart.setHours(0, 0, 0, 0);
+    const queryEnd = new Date(year, month, 1);
+    queryEnd.setHours(23, 59, 59, 999);
+
+    const paymentDays = await this.paymentDayRepo.findByContractAndDateRange(contractId, queryStart, queryEnd);
 
     const dayMap = new Map<string, PaymentDay>();
     paymentDays.forEach(pd => {
