@@ -5,7 +5,7 @@ import {
 } from '../../domain/interfaces';
 import { Contract, Customer, Invoice } from '../../domain/entities';
 import { ContractStatus, PaymentStatus, MotorModel, BatteryType } from '../../domain/enums';
-import { getWibToday } from '../../domain/utils/dateUtils';
+import { getWibToday, getWibParts } from '../../domain/utils/dateUtils';
 
 export interface ReportData {
   generatedAt: Date;
@@ -117,15 +117,17 @@ export class ReportService {
 
     // Revenue by month (last 6 months)
     const revenueByMonth: Array<{ month: string; revenue: number }> = [];
+    const todayParts = getWibParts(getWibToday());
     for (let m = 5; m >= 0; m--) {
-      const d = getWibToday();
-      d.setMonth(d.getMonth() - m);
-      const month = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`;
+      const d = new Date(todayParts.year, todayParts.month - 1 - m, 1);
+      const wibD = getWibParts(d);
+      const month = `${wibD.year}-${String(wibD.month).padStart(2, '0')}`;
       const monthRevenue = paidInvoices
         .filter(i => {
           if (!i.paidAt) return false;
           const pd = i.paidAt instanceof Date ? i.paidAt : new Date(i.paidAt);
-          return `${pd.getFullYear()}-${(pd.getMonth() + 1).toString().padStart(2, '0')}` === month;
+          const wibPd = getWibParts(pd);
+          return `${wibPd.year}-${String(wibPd.month).padStart(2, '0')}` === month;
         })
         .reduce((sum, i) => sum + i.amount + i.lateFee, 0);
       revenueByMonth.push({ month, revenue: monthRevenue });

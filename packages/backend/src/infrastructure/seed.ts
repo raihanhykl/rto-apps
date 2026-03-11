@@ -42,10 +42,13 @@ function generateInvoiceNumber(idx: number): string {
  * NEW_CONTRACT: dates 29-31 are holidays.
  */
 function isLiburBayar(date: Date, scheme: HolidayScheme): boolean {
+  const wibStr = date.toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+  const [, , d] = wibStr.split('-').map(Number);
   if (scheme === HolidayScheme.OLD_CONTRACT) {
-    return date.getDay() === 0;
+    const wibDate = new Date(...(wibStr.split('-').map((v, i) => i === 1 ? Number(v) - 1 : Number(v)) as [number, number, number]));
+    return wibDate.getDay() === 0;
   } else {
-    return date.getDate() > 28;
+    return d > 28;
   }
 }
 

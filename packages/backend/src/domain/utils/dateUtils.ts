@@ -22,12 +22,21 @@ export function getWibDateParts(): { year: number; month: number; day: number } 
 
 /**
  * Convert a Date to a YYYY-MM-DD string key for calendar/map lookups.
+ * Uses WIB timezone to avoid date shift on UTC servers.
  */
 export function toDateKey(date: Date): string {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  return date.toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+}
+
+/**
+ * Extract WIB date parts from a Date object.
+ * Returns year, month (1-indexed), day, and dayOfWeek (0=Sunday).
+ * Safe to use on any server timezone.
+ */
+export function getWibParts(date: Date): { year: number; month: number; day: number; dayOfWeek: number } {
+  const wibStr = date.toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+  const [y, m, d] = wibStr.split('-').map(Number);
+  // Reconstruct date from WIB parts to get accurate day of week
+  const reconstructed = new Date(y, m - 1, d);
+  return { year: y, month: m, day: d, dayOfWeek: reconstructed.getDay() };
 }

@@ -17,7 +17,7 @@ import {
   DEFAULT_LATE_FEE_PER_DAY,
 } from '../../domain/enums';
 import { IPaymentDayRepository } from '../../domain/interfaces';
-import { getWibToday, getWibDateParts, toDateKey } from '../../domain/utils/dateUtils';
+import { getWibToday, getWibDateParts, toDateKey, getWibParts } from '../../domain/utils/dateUtils';
 import { computeLateFee } from '../../domain/utils/lateFeeCalculator';
 import { SettingService } from './SettingService';
 import { SavingService } from './SavingService';
@@ -86,10 +86,11 @@ export class PaymentService {
   // ============ Libur Bayar Logic ============
 
   isLiburBayar(contract: Contract, date: Date): boolean {
+    const wib = getWibParts(date);
     if (contract.holidayScheme === HolidayScheme.OLD_CONTRACT) {
-      return date.getDay() === 0; // Semua Minggu = libur
+      return wib.dayOfWeek === 0; // Semua Minggu = libur
     } else {
-      return date.getDate() > 28; // Tanggal 29-31 = libur
+      return wib.day > 28; // Tanggal 29-31 = libur
     }
   }
 
