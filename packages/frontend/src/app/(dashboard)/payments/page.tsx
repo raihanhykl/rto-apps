@@ -21,7 +21,7 @@ export default function PaymentsPage() {
 
   const loadInvoices = async () => {
     try {
-      const data = await api.getInvoices();
+      const data = await api.getPayments();
       setInvoices(data);
     } catch (error) {
       console.error("Failed to load invoices:", error);

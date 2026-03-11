@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { useCustomersList, useContractsList } from "@/hooks/useApi";
+import { api } from "@/lib/api";
 import {
   Search,
   Users,
@@ -16,7 +17,7 @@ import {
 } from "lucide-react";
 
 interface SearchResult {
-  type: "page" | "customer" | "contract";
+  type: "page" | "customer" | "contract" | "payment";
   id: string;
   title: string;
   subtitle?: string;
@@ -36,6 +37,7 @@ const PAGES: SearchResult[] = [
 const getIcon = (result: SearchResult) => {
   if (result.type === "customer") return Users;
   if (result.type === "contract") return FileText;
+  if (result.type === "payment") return Receipt;
   switch (result.id) {
     case "dashboard": return LayoutDashboard;
     case "customers": return Users;
@@ -53,6 +55,7 @@ export function CommandPalette() {
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [paymentResults, setPaymentResults] = useState<SearchResult[]>([]);
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -65,6 +68,7 @@ export function CommandPalette() {
     setQuery("");
     setDebouncedQuery("");
     setSelectedIndex(0);
+    setPaymentResults([]);
   }, []);
 
   useEffect(() => {
@@ -91,11 +95,39 @@ export function CommandPalette() {
   useEffect(() => {
     if (!query.trim()) {
       setDebouncedQuery("");
+      setPaymentResults([]);
       return;
     }
     const timer = setTimeout(() => setDebouncedQuery(query), 200);
     return () => clearTimeout(timer);
   }, [query]);
+
+  // Search payments when query looks like PMT-xxx or is long enough
+  useEffect(() => {
+    if (!debouncedQuery.trim()) {
+      setPaymentResults([]);
+      return;
+    }
+
+    const q = debouncedQuery.toUpperCase();
+    if (q.startsWith("PMT") || debouncedQuery.length >= 3) {
+      api.searchPayments(debouncedQuery)
+        .then((results: any[]) => {
+          setPaymentResults(
+            results.slice(0, 5).map((p: any) => ({
+              type: "payment" as const,
+              id: p.id,
+              title: p.invoiceNumber,
+              subtitle: `${p.status} — Rp ${(p.amount || 0).toLocaleString("id-ID")}`,
+              href: `/invoices?search=${encodeURIComponent(p.invoiceNumber)}`,
+            }))
+          );
+        })
+        .catch(() => setPaymentResults([]));
+    } else {
+      setPaymentResults([]);
+    }
+  }, [debouncedQuery]);
 
   // Derive results from SWR data
   const results = (() => {
@@ -136,6 +168,9 @@ export function CommandPalette() {
         });
     }
 
+    // Add payment results
+    items.push(...paymentResults);
+
     return items;
   })();
 
@@ -169,7 +204,7 @@ export function CommandPalette() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Cari halaman, customer, kontrak..."
+            placeholder="Cari halaman, customer, kontrak, pembayaran..."
             className="border-0 shadow-none focus-visible:ring-0 h-12"
           />
           <kbd className="hidden sm:inline-flex h-5 items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground">

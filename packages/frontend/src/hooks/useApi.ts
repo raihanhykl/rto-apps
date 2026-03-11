@@ -9,7 +9,7 @@ const TTL = {
   LONG: 10 * 60 * 1000,   // 10 min - settings, motor rates
   MEDIUM: 5 * 60 * 1000,  // 5 min  - dashboard
   DEFAULT: 60 * 1000,     // 1 min  - paginated lists, detail pages
-  SHORT: 15 * 1000,       // 15 sec - billing, calendar
+  SHORT: 15 * 1000,       // 15 sec - payments, calendar
 };
 
 // --- Helper: build cache key from path + params ---
@@ -39,6 +39,7 @@ export function useCustomersPaginated(params: {
   sortBy?: string;
   sortOrder?: "asc" | "desc";
   search?: string;
+  gender?: string;
 }) {
   const key = buildKey("/customers", params);
   return useSWR(key, () => api.getCustomersPaginated(params), {
@@ -67,6 +68,10 @@ export function useContractsPaginated(params: {
   sortOrder?: "asc" | "desc";
   search?: string;
   status?: string;
+  motorModel?: string;
+  batteryType?: string;
+  dpScheme?: string;
+  dpFullyPaid?: string;
 }) {
   const key = buildKey("/contracts", params);
   return useSWR(key, () => api.getContractsPaginated(params), {
@@ -94,8 +99,8 @@ export function useContractsList() {
   });
 }
 
-// --- Invoices ---
-export function useInvoicesPaginated(params: {
+// --- Payments (unified billing + invoice) ---
+export function usePaymentsPaginated(params: {
   page?: number;
   limit?: number;
   sortBy?: string;
@@ -103,41 +108,35 @@ export function useInvoicesPaginated(params: {
   search?: string;
   status?: string;
   customerId?: string;
+  invoiceType?: string;
+  startDate?: string;
+  endDate?: string;
 }) {
-  const key = buildKey("/invoices", params);
-  return useSWR(key, () => api.getInvoicesPaginated(params), {
+  const key = buildKey("/payments", params);
+  return useSWR(key, () => api.getPaymentsPaginated(params), {
     dedupingInterval: TTL.DEFAULT,
   });
 }
 
-export function useInvoicesByCustomer(customerId: string | undefined) {
+export function usePaymentsByContract(contractId: string | undefined) {
   return useSWR(
-    customerId ? `/invoices?customerId=${customerId}` : null,
-    () => api.getInvoicesByCustomer(customerId!),
-    { dedupingInterval: TTL.DEFAULT }
-  );
-}
-
-// --- Billings ---
-export function useBillingsByContract(contractId: string | undefined) {
-  return useSWR(
-    contractId ? `/billings/contract/${contractId}` : null,
-    () => api.getBillingsByContract(contractId!),
+    contractId ? `/payments/contract/${contractId}` : null,
+    () => api.getPaymentsByContract(contractId!),
     { dedupingInterval: TTL.SHORT }
   );
 }
 
-export function useActiveBilling(contractId: string | undefined) {
+export function useActivePayment(contractId: string | undefined) {
   return useSWR(
-    contractId ? `/billings/contract/${contractId}/active` : null,
-    () => api.getActiveBillingByContract(contractId!),
+    contractId ? `/payments/contract/${contractId}/active` : null,
+    () => api.getActivePaymentByContract(contractId!),
     { dedupingInterval: TTL.SHORT }
   );
 }
 
 export function useCalendarData(contractId: string | undefined, year: number, month: number) {
   return useSWR(
-    contractId ? `/billings/contract/${contractId}/calendar?year=${year}&month=${month}` : null,
+    contractId ? `/payments/contract/${contractId}/calendar?year=${year}&month=${month}` : null,
     () => api.getCalendarData(contractId!, year, month),
     { dedupingInterval: TTL.SHORT }
   );
@@ -149,6 +148,7 @@ export function useReport(filters?: {
   endDate?: string;
   status?: string;
   motorModel?: string;
+  batteryType?: string;
 }) {
   const key = buildKey("/reports", filters);
   return useSWR(key, () => api.getReport(filters), {
@@ -182,6 +182,23 @@ export function useMotorRates() {
   return useSWR("/settings/rates", () => api.getMotorRates(), {
     dedupingInterval: TTL.LONG,
   });
+}
+
+// --- Saving ---
+export function useSavingByContract(contractId: string | undefined) {
+  return useSWR(
+    contractId ? `/savings/contract/${contractId}` : null,
+    () => api.getSavingByContract(contractId!),
+    { dedupingInterval: TTL.SHORT }
+  );
+}
+
+export function useSavingBalance(contractId: string | undefined) {
+  return useSWR(
+    contractId ? `/savings/contract/${contractId}/balance` : null,
+    () => api.getSavingBalance(contractId!),
+    { dedupingInterval: TTL.SHORT }
+  );
 }
 
 // ===================== INVALIDATION =====================

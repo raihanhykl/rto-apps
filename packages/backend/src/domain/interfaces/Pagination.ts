@@ -9,6 +9,13 @@ export interface PaginationParams {
   endDate?: string;
   module?: string;
   customerId?: string;
+  // Additional filters
+  gender?: string;
+  motorModel?: string;
+  batteryType?: string;
+  dpScheme?: string;
+  dpFullyPaid?: string;
+  invoiceType?: string;
 }
 
 export interface PaginatedResult<T> {

@@ -29,6 +29,7 @@ export const contractSchema = z.object({
   motorModel: z.enum(["ATHENA", "VICTORY", "EDPOWER"], { message: "Model motor wajib dipilih" }),
   batteryType: z.enum(["REGULAR", "EXTENDED"], { message: "Tipe baterai wajib dipilih" }),
   dpScheme: z.enum(["FULL", "INSTALLMENT"], { message: "Skema DP wajib dipilih" }),
+  holidayScheme: z.enum(["OLD_CONTRACT", "NEW_CONTRACT"], { message: "Tipe kontrak wajib dipilih" }),
   startDate: z.string().min(1, "Tanggal mulai wajib diisi"),
   color: z.string(),
   year: z.string(),
@@ -38,3 +39,20 @@ export const contractSchema = z.object({
 });
 
 export type ContractFormData = z.infer<typeof contractSchema>;
+
+// Saving Schemas
+export const debitSavingSchema = z.object({
+  amount: z.number().int().positive('Nominal harus lebih dari 0'),
+  description: z.string().min(1, 'Deskripsi wajib diisi'),
+  photo: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+export type DebitSavingFormData = z.infer<typeof debitSavingSchema>;
+
+export const claimSavingSchema = z.object({
+  amount: z.number().int().positive('Nominal harus lebih dari 0').optional(),
+  notes: z.string().optional(),
+});
+
+export type ClaimSavingFormData = z.infer<typeof claimSavingSchema>;

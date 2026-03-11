@@ -1,5 +1,5 @@
 import { schedule, ScheduledTask } from 'node-cron';
-import { BillingService } from '../application/services/BillingService';
+import { PaymentService } from '../application/services/PaymentService';
 import { ContractService } from '../application/services/ContractService';
 
 /**
@@ -11,7 +11,7 @@ export class Scheduler {
   private isRunning = false;
 
   constructor(
-    private billingService: BillingService,
+    private paymentService: PaymentService,
     private contractService: ContractService,
   ) {}
 
@@ -50,8 +50,8 @@ export class Scheduler {
 
   /**
    * Run all daily tasks:
-   * 1. Rollover expired billings
-   * 2. Generate new daily billings
+   * 1. Rollover expired payments
+   * 2. Generate new daily payments
    * 3. Check and update overdue contracts
    */
   async runDailyTasks(): Promise<void> {
@@ -59,15 +59,18 @@ export class Scheduler {
     console.log(`⏰ Running daily tasks at ${now.toISOString()}`);
 
     try {
-      // 1. Rollover expired billings from previous day(s)
-      const rolledOver = await this.billingService.rolloverExpiredBillings();
+      // 0. Extend PaymentDay records 30 days ahead
+      await this.paymentService.extendPaymentDayRecords();
+
+      // 1. Rollover expired payments from previous day(s)
+      const rolledOver = await this.paymentService.rolloverExpiredPayments();
       if (rolledOver > 0) {
-        console.log(`  📋 Rolled over ${rolledOver} expired billings`);
+        console.log(`  📋 Rolled over ${rolledOver} expired payments`);
       }
 
-      // 2. Generate new daily billings
-      const generated = await this.billingService.generateDailyBilling();
-      console.log(`  📋 Generated ${generated} daily billings`);
+      // 2. Generate new daily payments
+      const generated = await this.paymentService.generateDailyPayments();
+      console.log(`  📋 Generated ${generated} daily payments`);
 
       // 3. Check for overdue contracts
       const overdueCount = await this.contractService.checkAndUpdateOverdueContracts();

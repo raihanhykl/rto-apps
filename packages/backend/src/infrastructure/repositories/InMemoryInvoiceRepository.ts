@@ -1,6 +1,6 @@
 import { Invoice } from '../../domain/entities';
 import { IInvoiceRepository } from '../../domain/interfaces';
-import { PaymentStatus } from '../../domain/enums';
+import { PaymentStatus, InvoiceType } from '../../domain/enums';
 import { PaginationParams, PaginatedResult } from '../../domain/interfaces/Pagination';
 
 export class InMemoryInvoiceRepository implements IInvoiceRepository {
@@ -17,6 +17,7 @@ export class InMemoryInvoiceRepository implements IInvoiceRepository {
     if (params.search) { const q = params.search.toLowerCase(); items = items.filter(i => i.invoiceNumber.toLowerCase().includes(q)); }
     if (params.status && params.status !== 'ALL') { items = items.filter(i => i.status === params.status); }
     if (params.customerId) { items = items.filter(i => i.customerId === params.customerId); }
+    if (params.invoiceType && params.invoiceType !== 'ALL') { items = items.filter(i => i.type === params.invoiceType); }
     if (params.startDate) { const s = new Date(params.startDate); items = items.filter(i => i.createdAt >= s); }
     if (params.endDate) { const e = new Date(params.endDate); e.setDate(e.getDate() + 1); items = items.filter(i => i.createdAt < e); }
     const sortBy = params.sortBy || 'createdAt';
@@ -48,6 +49,23 @@ export class InMemoryInvoiceRepository implements IInvoiceRepository {
     return Array.from(this.invoices.values()).filter(i => i.status === status);
   }
 
+  async findActiveByContractId(contractId: string): Promise<Invoice | null> {
+    const active = Array.from(this.invoices.values()).find(
+      i => i.contractId === contractId
+        && i.status === PaymentStatus.PENDING
+        && (i.type === InvoiceType.DAILY_BILLING || i.type === InvoiceType.MANUAL_PAYMENT)
+    );
+    return active || null;
+  }
+
+  async search(query: string): Promise<Invoice[]> {
+    const q = query.toLowerCase();
+    return Array.from(this.invoices.values())
+      .filter(i => i.invoiceNumber.toLowerCase().includes(q))
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, 20);
+  }
+
   async create(invoice: Invoice): Promise<Invoice> {
     this.invoices.set(invoice.id, { ...invoice });
     return { ...invoice };
@@ -77,5 +95,17 @@ export class InMemoryInvoiceRepository implements IInvoiceRepository {
     return Array.from(this.invoices.values())
       .filter(i => i.status === status)
       .reduce((sum, i) => sum + i.amount + (i.lateFee || 0), 0);
+  }
+
+  async findMaxInvoiceSequence(): Promise<number> {
+    let max = 0;
+    for (const i of this.invoices.values()) {
+      const match = i.invoiceNumber.match(/PMT-\d{6}-(\d+)/);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num > max) max = num;
+      }
+    }
+    return max;
   }
 }

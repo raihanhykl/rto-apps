@@ -5,6 +5,7 @@ import {
   IAuditLogRepository,
 } from '../../domain/interfaces';
 import { ContractStatus, PaymentStatus } from '../../domain/enums';
+import { getWibToday } from '../../domain/utils/dateUtils';
 
 export interface DashboardStats {
   totalCustomers: number;
@@ -13,6 +14,7 @@ export interface DashboardStats {
   completedContracts: number;
   overdueContracts: number;
   repossessedContracts: number;
+  cancelledContracts: number;
   pendingPayments: number;
   totalRevenue: number;
   pendingRevenue: number;
@@ -44,6 +46,7 @@ export class DashboardService {
       completedContracts,
       overdueContracts,
       repossessedContracts,
+      cancelledContracts,
       pendingPayments,
       totalRevenue,
       pendingRevenue,
@@ -55,6 +58,7 @@ export class DashboardService {
       this.contractRepo.countByStatus(ContractStatus.COMPLETED),
       this.contractRepo.countByStatus(ContractStatus.OVERDUE),
       this.contractRepo.countByStatus(ContractStatus.REPOSSESSED),
+      this.contractRepo.countByStatus(ContractStatus.CANCELLED),
       this.invoiceRepo.countByStatus(PaymentStatus.PENDING),
       this.invoiceRepo.sumByStatus(PaymentStatus.PAID),
       this.invoiceRepo.sumByStatus(PaymentStatus.PENDING),
@@ -66,7 +70,7 @@ export class DashboardService {
     const paidInvoices = allInvoices.filter(inv => inv.status === PaymentStatus.PAID);
 
     // Revenue by month (last 6 months)
-    const now = new Date();
+    const now = getWibToday();
     const revenueByMonth: Array<{ month: string; revenue: number }> = [];
     for (let i = 5; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
@@ -87,7 +91,6 @@ export class DashboardService {
       OVERDUE: overdueContracts,
       REPOSSESSED: repossessedContracts,
     };
-    const cancelledContracts = await this.contractRepo.countByStatus(ContractStatus.CANCELLED);
     if (cancelledContracts > 0) {
       contractsByStatus.CANCELLED = cancelledContracts;
     }
@@ -99,6 +102,7 @@ export class DashboardService {
       completedContracts,
       overdueContracts,
       repossessedContracts,
+      cancelledContracts,
       pendingPayments,
       totalRevenue,
       pendingRevenue,

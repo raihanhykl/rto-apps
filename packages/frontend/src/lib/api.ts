@@ -88,13 +88,14 @@ class ApiClient {
     return this.request<any[]>(`/customers${query}`);
   }
 
-  async getCustomersPaginated(params: { page?: number; limit?: number; sortBy?: string; sortOrder?: 'asc' | 'desc'; search?: string }) {
+  async getCustomersPaginated(params: { page?: number; limit?: number; sortBy?: string; sortOrder?: 'asc' | 'desc'; search?: string; gender?: string }) {
     const query = new URLSearchParams();
     query.set('page', String(params.page || 1));
     query.set('limit', String(params.limit || 20));
     if (params.sortBy) query.set('sortBy', params.sortBy);
     if (params.sortOrder) query.set('sortOrder', params.sortOrder);
     if (params.search) query.set('search', params.search);
+    if (params.gender) query.set('gender', params.gender);
     return this.request<any>(`/customers?${query.toString()}`);
   }
 
@@ -125,7 +126,7 @@ class ApiClient {
     return this.request<any[]>('/contracts');
   }
 
-  async getContractsPaginated(params: { page?: number; limit?: number; sortBy?: string; sortOrder?: 'asc' | 'desc'; search?: string; status?: string }) {
+  async getContractsPaginated(params: { page?: number; limit?: number; sortBy?: string; sortOrder?: 'asc' | 'desc'; search?: string; status?: string; motorModel?: string; batteryType?: string; dpScheme?: string; dpFullyPaid?: string }) {
     const query = new URLSearchParams();
     query.set('page', String(params.page || 1));
     query.set('limit', String(params.limit || 20));
@@ -133,6 +134,10 @@ class ApiClient {
     if (params.sortOrder) query.set('sortOrder', params.sortOrder);
     if (params.search) query.set('search', params.search);
     if (params.status) query.set('status', params.status);
+    if (params.motorModel) query.set('motorModel', params.motorModel);
+    if (params.batteryType) query.set('batteryType', params.batteryType);
+    if (params.dpScheme) query.set('dpScheme', params.dpScheme);
+    if (params.dpFullyPaid) query.set('dpFullyPaid', params.dpFullyPaid);
     return this.request<any>(`/contracts?${query.toString()}`);
   }
 
@@ -146,10 +151,6 @@ class ApiClient {
 
   async getContractsByCustomer(customerId: string) {
     return this.request<any[]>(`/contracts/customer/${customerId}`);
-  }
-
-  async getInvoicesByCustomer(customerId: string) {
-    return this.request<any[]>(`/invoices?customerId=${customerId}`);
   }
 
   async createContract(data: any) {
@@ -210,12 +211,12 @@ class ApiClient {
     return this.request<any[]>('/contracts/overdue-warnings');
   }
 
-  // Invoices
-  async getInvoices() {
-    return this.request<any[]>('/invoices');
+  // Payments (unified billing + invoice)
+  async getPayments() {
+    return this.request<any[]>('/payments');
   }
 
-  async getInvoicesPaginated(params: { page?: number; limit?: number; sortBy?: string; sortOrder?: 'asc' | 'desc'; search?: string; status?: string; customerId?: string }) {
+  async getPaymentsPaginated(params: { page?: number; limit?: number; sortBy?: string; sortOrder?: 'asc' | 'desc'; search?: string; status?: string; customerId?: string; invoiceType?: string; startDate?: string; endDate?: string }) {
     const query = new URLSearchParams();
     query.set('page', String(params.page || 1));
     query.set('limit', String(params.limit || 20));
@@ -224,125 +225,154 @@ class ApiClient {
     if (params.search) query.set('search', params.search);
     if (params.status) query.set('status', params.status);
     if (params.customerId) query.set('customerId', params.customerId);
-    return this.request<any>(`/invoices?${query.toString()}`);
+    if (params.invoiceType) query.set('invoiceType', params.invoiceType);
+    if (params.startDate) query.set('startDate', params.startDate);
+    if (params.endDate) query.set('endDate', params.endDate);
+    return this.request<any>(`/payments?${query.toString()}`);
   }
 
-  async getInvoice(id: string) {
-    return this.request<any>(`/invoices/${id}`);
+  async getPayment(id: string) {
+    return this.request<any>(`/payments/${id}`);
   }
 
-  async getInvoiceQR(id: string) {
-    return this.request<{ qrCode: string }>(`/invoices/${id}/qr`);
+  async searchPayments(query: string) {
+    return this.request<any[]>(`/payments/search?q=${encodeURIComponent(query)}`);
+  }
+
+  async getPaymentQR(id: string) {
+    return this.request<{ qrCode: string }>(`/payments/${id}/qr`);
   }
 
   async simulatePayment(id: string, status: 'PAID' | 'FAILED') {
-    return this.request<any>(`/invoices/${id}/payment`, {
+    return this.request<any>(`/payments/${id}/simulate`, {
       method: 'POST',
       body: JSON.stringify({ status }),
     });
   }
 
-  async voidInvoice(id: string) {
-    return this.request<any>(`/invoices/${id}/void`, {
+  async voidPayment(id: string) {
+    return this.request<any>(`/payments/${id}/void`, {
       method: 'PATCH',
     });
   }
 
-  async markInvoicePaid(id: string) {
-    return this.request<any>(`/invoices/${id}/mark-paid`, {
+  async markPaymentPaid(id: string) {
+    return this.request<any>(`/payments/${id}/mark-paid`, {
       method: 'PATCH',
     });
   }
 
-  async revertInvoiceStatus(id: string) {
-    return this.request<any>(`/invoices/${id}/revert`, {
+  async revertPaymentStatus(id: string) {
+    return this.request<any>(`/payments/${id}/revert`, {
       method: 'PATCH',
     });
   }
 
-  async bulkMarkPaid(invoiceIds: string[]) {
-    return this.request<{ success: string[]; failed: Array<{ id: string; error: string }> }>('/invoices/bulk-pay', {
+  async bulkMarkPaid(paymentIds: string[]) {
+    return this.request<{ success: string[]; failed: Array<{ id: string; error: string }> }>('/payments/bulk-pay', {
       method: 'POST',
-      body: JSON.stringify({ invoiceIds }),
+      body: JSON.stringify({ paymentIds }),
     });
   }
 
-  // Billings
-  async getBillingsByContract(contractId: string) {
-    return this.request<any[]>(`/billings/contract/${contractId}`);
+  async payPayment(id: string) {
+    return this.request<any>(`/payments/${id}/pay`, {
+      method: 'POST',
+    });
   }
 
-  async getActiveBillingByContract(contractId: string) {
-    return this.request<any>(`/billings/contract/${contractId}/active`);
+  async getPaymentsByContract(contractId: string) {
+    return this.request<any[]>(`/payments/contract/${contractId}`);
+  }
+
+  async getActivePaymentByContract(contractId: string) {
+    return this.request<any>(`/payments/contract/${contractId}/active`);
   }
 
   async getCalendarData(contractId: string, year: number, month: number) {
     return this.request<Array<{ date: string; status: string; amount?: number }>>(
-      `/billings/contract/${contractId}/calendar?year=${year}&month=${month}`
+      `/payments/contract/${contractId}/calendar?year=${year}&month=${month}`
     );
   }
 
-  async payBilling(id: string) {
-    return this.request<any>(`/billings/${id}/pay`, {
-      method: 'POST',
-    });
+  async previewManualPayment(contractId: string, days: number) {
+    return this.request<{ amount: number; lateFee: number; total: number; daysCount: number; dailyRate: number }>(
+      `/payments/contract/${contractId}/manual-preview?days=${days}`
+    );
   }
 
-  async createManualBilling(contractId: string, days: number) {
-    return this.request<any>(`/billings/contract/${contractId}/manual`, {
+  async createManualPayment(contractId: string, days: number) {
+    return this.request<any>(`/payments/contract/${contractId}/manual`, {
       method: 'POST',
       body: JSON.stringify({ days }),
     });
   }
 
-  async cancelBilling(billingId: string) {
-    return this.request<any>(`/billings/${billingId}/cancel`, {
+  async cancelPayment(paymentId: string) {
+    return this.request<any>(`/payments/${paymentId}/cancel`, {
       method: 'PATCH',
     });
   }
 
-  // Invoice PDF
-  async downloadInvoicePdf(id: string) {
-    return this.request<Blob>(`/invoices/${id}/pdf`);
+  async updatePaymentDayStatus(contractId: string, date: string, status: string, notes?: string) {
+    return this.request<any>(`/payments/contract/${contractId}/day/${date}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status, notes }),
+    });
+  }
+
+  async reducePayment(paymentId: string, newDaysCount: number, notes?: string) {
+    return this.request<any>(`/payments/${paymentId}/reduce`, {
+      method: 'POST',
+      body: JSON.stringify({ newDaysCount, notes }),
+    });
+  }
+
+  async downloadPaymentPdf(id: string) {
+    return this.request<Blob>(`/payments/${id}/pdf`);
   }
 
   // Reports
-  async getReport(filters?: { startDate?: string; endDate?: string; status?: string; motorModel?: string }) {
+  async getReport(filters?: { startDate?: string; endDate?: string; status?: string; motorModel?: string; batteryType?: string }) {
     const query = new URLSearchParams();
     if (filters?.startDate) query.set('startDate', filters.startDate);
     if (filters?.endDate) query.set('endDate', filters.endDate);
     if (filters?.status) query.set('status', filters.status);
     if (filters?.motorModel) query.set('motorModel', filters.motorModel);
+    if (filters?.batteryType) query.set('batteryType', filters.batteryType);
     const queryStr = query.toString() ? `?${query.toString()}` : '';
     return this.request<any>(`/reports${queryStr}`);
   }
 
-  async exportReportJSON(filters?: { startDate?: string; endDate?: string; status?: string; motorModel?: string }) {
+  async exportReportJSON(filters?: { startDate?: string; endDate?: string; status?: string; motorModel?: string; batteryType?: string }) {
     const query = new URLSearchParams();
     if (filters?.startDate) query.set('startDate', filters.startDate);
     if (filters?.endDate) query.set('endDate', filters.endDate);
     if (filters?.status) query.set('status', filters.status);
     if (filters?.motorModel) query.set('motorModel', filters.motorModel);
+    if (filters?.batteryType) query.set('batteryType', filters.batteryType);
     const queryStr = query.toString() ? `?${query.toString()}` : '';
     return this.request<string>(`/reports/export/json${queryStr}`);
   }
 
-  async exportReportCSV(filters?: { startDate?: string; endDate?: string; status?: string; motorModel?: string }) {
+  async exportReportCSV(filters?: { startDate?: string; endDate?: string; status?: string; motorModel?: string; batteryType?: string }) {
     const query = new URLSearchParams();
     if (filters?.startDate) query.set('startDate', filters.startDate);
     if (filters?.endDate) query.set('endDate', filters.endDate);
     if (filters?.status) query.set('status', filters.status);
     if (filters?.motorModel) query.set('motorModel', filters.motorModel);
+    if (filters?.batteryType) query.set('batteryType', filters.batteryType);
     const queryStr = query.toString() ? `?${query.toString()}` : '';
     return this.request<string>(`/reports/export/csv${queryStr}`);
   }
 
-  async exportReportXLSV(filters?: { startDate?: string; endDate?: string; status?: string; motorModel?: string }) {
+  async exportReportXLSV(filters?: { startDate?: string; endDate?: string; status?: string; motorModel?: string; batteryType?: string }) {
     const query = new URLSearchParams();
     if (filters?.startDate) query.set('startDate', filters.startDate);
     if (filters?.endDate) query.set('endDate', filters.endDate);
     if (filters?.status) query.set('status', filters.status);
     if (filters?.motorModel) query.set('motorModel', filters.motorModel);
+    if (filters?.batteryType) query.set('batteryType', filters.batteryType);
     const queryStr = query.toString() ? `?${query.toString()}` : '';
     return this.request<string>(`/reports/export/xlsv${queryStr}`);
   }
@@ -384,6 +414,42 @@ class ApiClient {
     return this.request<any>('/settings', {
       method: 'PUT',
       body: JSON.stringify(data),
+    });
+  }
+
+  // Saving
+  async getSavingByContract(contractId: string) {
+    return this.request<{ balance: number; transactions: any[] }>(`/savings/contract/${contractId}`);
+  }
+
+  async getSavingBalance(contractId: string) {
+    return this.request<{ balance: number }>(`/savings/contract/${contractId}/balance`);
+  }
+
+  async debitSavingForService(contractId: string, data: { amount: number; description: string; photo?: string; notes?: string }) {
+    return this.request<any>(`/savings/contract/${contractId}/debit/service`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async debitSavingForTransfer(contractId: string, data: { amount: number; description: string; photo?: string; notes?: string }) {
+    return this.request<any>(`/savings/contract/${contractId}/debit/transfer`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async claimSaving(contractId: string, data?: { amount?: number; notes?: string }) {
+    return this.request<any>(`/savings/contract/${contractId}/claim`, {
+      method: 'POST',
+      body: JSON.stringify(data || {}),
+    });
+  }
+
+  async recalculateSavingBalance(contractId: string) {
+    return this.request<{ balance: number }>(`/savings/contract/${contractId}/recalculate`, {
+      method: 'POST',
     });
   }
 }

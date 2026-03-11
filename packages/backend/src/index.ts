@@ -8,35 +8,37 @@ import {
   InMemoryInvoiceRepository,
   InMemoryAuditLogRepository,
   InMemorySettingRepository,
-  InMemoryBillingRepository,
+  InMemoryPaymentDayRepository,
+  InMemorySavingTransactionRepository,
   PrismaUserRepository,
   PrismaCustomerRepository,
   PrismaContractRepository,
   PrismaInvoiceRepository,
   PrismaAuditLogRepository,
   PrismaSettingRepository,
-  PrismaBillingRepository,
+  PrismaPaymentDayRepository,
+  PrismaSavingTransactionRepository,
 } from './infrastructure/repositories';
 import {
   AuthService,
   CustomerService,
   ContractService,
-  InvoiceService,
+  PaymentService,
   DashboardService,
   ReportService,
   AuditService,
   SettingService,
-  BillingService,
+  SavingService,
 } from './application/services';
 import { AuthController } from './presentation/controllers/AuthController';
 import { CustomerController } from './presentation/controllers/CustomerController';
 import { ContractController } from './presentation/controllers/ContractController';
-import { InvoiceController } from './presentation/controllers/InvoiceController';
+import { PaymentController } from './presentation/controllers/PaymentController';
 import { DashboardController } from './presentation/controllers/DashboardController';
 import { ReportController } from './presentation/controllers/ReportController';
 import { AuditController } from './presentation/controllers/AuditController';
 import { SettingController } from './presentation/controllers/SettingController';
-import { BillingController } from './presentation/controllers/BillingController';
+import { SavingController } from './presentation/controllers/SavingController';
 import { createRoutes } from './presentation/routes';
 import { createAuthMiddleware } from './infrastructure/middleware/authMiddleware';
 import { errorHandler } from './infrastructure/middleware/errorHandler';
@@ -48,7 +50,8 @@ import { IContractRepository } from './domain/interfaces/IContractRepository';
 import { IInvoiceRepository } from './domain/interfaces/IInvoiceRepository';
 import { IAuditLogRepository } from './domain/interfaces/IAuditLogRepository';
 import { ISettingRepository } from './domain/interfaces/ISettingRepository';
-import { IBillingRepository } from './domain/interfaces/IBillingRepository';
+import { IPaymentDayRepository } from './domain/interfaces/IPaymentDayRepository';
+import { ISavingTransactionRepository } from './domain/interfaces/ISavingTransactionRepository';
 
 async function bootstrap() {
   const app = express();
@@ -66,7 +69,8 @@ async function bootstrap() {
   let invoiceRepo: IInvoiceRepository;
   let auditRepo: IAuditLogRepository;
   let settingRepo: ISettingRepository;
-  let billingRepo: IBillingRepository;
+  let paymentDayRepo: IPaymentDayRepository;
+  let savingTxRepo: ISavingTransactionRepository;
 
   if (usePrisma) {
     const { prisma } = await import('./infrastructure/prisma/client');
@@ -79,7 +83,8 @@ async function bootstrap() {
     invoiceRepo = new PrismaInvoiceRepository(prisma);
     auditRepo = new PrismaAuditLogRepository(prisma);
     settingRepo = new PrismaSettingRepository(prisma);
-    billingRepo = new PrismaBillingRepository(prisma);
+    paymentDayRepo = new PrismaPaymentDayRepository(prisma);
+    savingTxRepo = new PrismaSavingTransactionRepository(prisma);
   } else {
     console.log('Using In-Memory repositories');
     userRepo = new InMemoryUserRepository();
@@ -88,16 +93,21 @@ async function bootstrap() {
     invoiceRepo = new InMemoryInvoiceRepository();
     auditRepo = new InMemoryAuditLogRepository();
     settingRepo = new InMemorySettingRepository();
-    billingRepo = new InMemoryBillingRepository();
+    paymentDayRepo = new InMemoryPaymentDayRepository();
+    savingTxRepo = new InMemorySavingTransactionRepository();
   }
 
   // Initialize Services
   const authService = new AuthService(userRepo, auditRepo);
-  const settingService = new SettingService(settingRepo, auditRepo);
+  const settingService = new SettingService(settingRepo, auditRepo, contractRepo);
   const customerService = new CustomerService(customerRepo, auditRepo, contractRepo);
-  const contractService = new ContractService(contractRepo, customerRepo, invoiceRepo, auditRepo, settingService);
-  const invoiceService = new InvoiceService(invoiceRepo, contractRepo, auditRepo);
-  const billingService = new BillingService(billingRepo, contractRepo, invoiceRepo, auditRepo, settingService);
+  const contractService = new ContractService(contractRepo, customerRepo, invoiceRepo, paymentDayRepo, auditRepo, settingService);
+  const paymentService = new PaymentService(invoiceRepo, contractRepo, paymentDayRepo, auditRepo, settingService);
+  const savingService = new SavingService(savingTxRepo, contractRepo, invoiceRepo, auditRepo);
+
+  // Wire saving service ke payment service (setter injection)
+  paymentService.setSavingService(savingService);
+
   const dashboardService = new DashboardService(contractRepo, customerRepo, invoiceRepo, auditRepo);
   const reportService = new ReportService(contractRepo, customerRepo, invoiceRepo);
   const auditService = new AuditService(auditRepo);
@@ -114,20 +124,20 @@ async function bootstrap() {
     }
   }
 
-  // Start scheduler for daily billing
-  const scheduler = new Scheduler(billingService, contractService);
+  // Start scheduler for daily payments
+  const scheduler = new Scheduler(paymentService, contractService);
   scheduler.start();
 
   // Initialize Controllers
   const authController = new AuthController(authService);
   const customerController = new CustomerController(customerService);
   const contractController = new ContractController(contractService);
-  const invoiceController = new InvoiceController(invoiceService, contractService, customerService);
+  const paymentController = new PaymentController(paymentService, contractService, customerService);
   const dashboardController = new DashboardController(dashboardService);
   const reportController = new ReportController(reportService, auditRepo);
   const auditController = new AuditController(auditService);
   const settingController = new SettingController(settingService);
-  const billingController = new BillingController(billingService);
+  const savingController = new SavingController(savingService);
 
   // Auth Middleware
   const authMiddleware = createAuthMiddleware(authService);
@@ -137,12 +147,12 @@ async function bootstrap() {
     authController,
     customerController,
     contractController,
-    invoiceController,
-    billingController,
+    paymentController,
     dashboardController,
     reportController,
     auditController,
     settingController,
+    savingController,
     authMiddleware,
   });
 
