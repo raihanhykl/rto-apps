@@ -7,7 +7,7 @@ import {
   PaginatedResult,
 } from '../../domain/interfaces';
 import { Contract, Invoice, Customer } from '../../domain/entities';
-import { getWibToday, getWibDateParts } from '../../domain/utils/dateUtils';
+import { getWibToday, getWibDateParts, getWibParts } from '../../domain/utils/dateUtils';
 import {
   ContractStatus,
   PaymentStatus,
@@ -325,8 +325,9 @@ export class ContractService {
     for (let i = 0; i < 60; i++) {
       const d = new Date(cursor);
       d.setHours(0, 0, 0, 0);
-      const isSunday = d.getDay() === 0;
-      const isDate29Plus = d.getDate() > 28;
+      const wib = getWibParts(d);
+      const isSunday = wib.dayOfWeek === 0;
+      const isDate29Plus = wib.day > 28;
       const isHoliday = existing.holidayScheme === HolidayScheme.OLD_CONTRACT ? isSunday : isDate29Plus;
 
       records.push({

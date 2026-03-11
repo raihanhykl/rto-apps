@@ -5,7 +5,7 @@ import {
   IAuditLogRepository,
 } from '../../domain/interfaces';
 import { ContractStatus, PaymentStatus } from '../../domain/enums';
-import { getWibToday } from '../../domain/utils/dateUtils';
+import { getWibToday, getWibParts } from '../../domain/utils/dateUtils';
 
 export interface DashboardStats {
   totalCustomers: number;
@@ -70,15 +70,18 @@ export class DashboardService {
     const paidInvoices = allInvoices.filter(inv => inv.status === PaymentStatus.PAID);
 
     // Revenue by month (last 6 months)
-    const now = getWibToday();
+    const nowParts = getWibParts(getWibToday());
     const revenueByMonth: Array<{ month: string; revenue: number }> = [];
     for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const monthStr = d.toLocaleDateString('id-ID', { month: 'short', year: '2-digit' });
+      const d = new Date(nowParts.year, nowParts.month - 1 - i, 1);
+      const monthStr = d.toLocaleDateString('id-ID', { month: 'short', year: '2-digit', timeZone: 'Asia/Jakarta' });
+      const targetMonth = `${d.toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' }).slice(0, 7)}`;
       const revenue = paidInvoices
         .filter(inv => {
-          const paidDate = inv.paidAt ? new Date(inv.paidAt) : null;
-          return paidDate && paidDate.getMonth() === d.getMonth() && paidDate.getFullYear() === d.getFullYear();
+          if (!inv.paidAt) return false;
+          const paidWib = getWibParts(new Date(inv.paidAt));
+          const paidMonth = `${paidWib.year}-${String(paidWib.month).padStart(2, '0')}`;
+          return paidMonth === targetMonth;
         })
         .reduce((sum, inv) => sum + inv.amount + (inv.lateFee || 0), 0);
       revenueByMonth.push({ month: monthStr, revenue });
