@@ -1,4 +1,5 @@
 import { PaymentDay } from '../entities';
+import { toLocalMidnightWib } from './dateUtils';
 
 /**
  * Pure domain function — hitung total denda keterlambatan.
@@ -20,13 +21,13 @@ export function computeLateFee(
   penaltyGraceDays: number,
   feePerDay: number,
 ): number {
-  const todayMs = new Date(today).setHours(0, 0, 0, 0);
+  const todayNorm = toLocalMidnightWib(today);
   let total = 0;
 
   for (const pd of unpaidDays) {
     if (pd.amount === 0) continue;
-    const dayMs = new Date(pd.date).setHours(0, 0, 0, 0);
-    const diffDays = Math.floor((todayMs - dayMs) / 86400000);
+    const dayNorm = toLocalMidnightWib(new Date(pd.date));
+    const diffDays = Math.floor((todayNorm.getTime() - dayNorm.getTime()) / 86400000);
     if (diffDays >= penaltyGraceDays) {
       total += feePerDay;
     }
