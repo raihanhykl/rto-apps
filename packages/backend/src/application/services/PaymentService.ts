@@ -290,7 +290,6 @@ export class PaymentService {
       const lateFee = await this.calculateLateFee(unpaidDays, now);
       const periodStart = toLocalMidnightWib(new Date(unpaidDays[0].date));
       const periodEnd = toLocalMidnightWib(new Date(unpaidDays[unpaidDays.length - 1].date));
-      periodEnd.setHours(23, 59, 59, 999);
 
       const payment: Invoice = {
         id: uuidv4(),
@@ -337,7 +336,6 @@ export class PaymentService {
   private async createHolidayPayment(contract: Contract, targetDate: Date): Promise<Invoice> {
     const periodStart = toLocalMidnightWib(new Date(targetDate));
     const periodEnd = toLocalMidnightWib(new Date(targetDate));
-    periodEnd.setHours(23, 59, 59, 999);
 
     const payment: Invoice = {
       id: uuidv4(),
@@ -433,7 +431,6 @@ export class PaymentService {
     if (unpaidDays.length === 0) {
       // Edge case: no unpaid days (all holidays?), create minimal rollover
       const periodEnd = new Date(today);
-      periodEnd.setHours(23, 59, 59, 999);
       const newPayment: Invoice = {
         id: uuidv4(),
         invoiceNumber: await this.generatePaymentNumber(),
@@ -466,7 +463,6 @@ export class PaymentService {
     const lateFee = await this.calculateLateFee(unpaidDays, today);
     const periodStart = toLocalMidnightWib(new Date(unpaidDays[0].date));
     const periodEnd = toLocalMidnightWib(new Date(unpaidDays[unpaidDays.length - 1].date));
-    periodEnd.setHours(23, 59, 59, 999);
 
     const newPayment: Invoice = {
       id: uuidv4(),
@@ -696,7 +692,6 @@ export class PaymentService {
     const lateFee = await this.calculateLateFee(selectedDays, today);
     const periodStart = toLocalMidnightWib(new Date(selectedDays[0].date));
     const periodEnd = toLocalMidnightWib(new Date(selectedDays[selectedDays.length - 1].date));
-    periodEnd.setHours(23, 59, 59, 999);
 
     const payment: Invoice = {
       id: uuidv4(),
