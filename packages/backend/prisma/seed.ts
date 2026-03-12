@@ -28,32 +28,31 @@ function checkEnvironment() {
   }
 }
 
-// ====== Date Helpers ======
+// ====== Date Helpers (UTC-safe) ======
+// Semua date helpers menggunakan Date.UTC() agar timestamp konsisten
+// di mesin manapun (WIB, UTC, US/Pacific, dll).
+// Tanggal disimpan sebagai midnight UTC dari tanggal WIB yang dimaksud.
+
 function toDate([y, m, d]: DateTuple): Date {
-  return new Date(y, m - 1, d, 9, 0, 0, 0);
+  return new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0));
 }
 
 function addDays(date: Date, n: number): Date {
-  const r = new Date(date);
-  r.setDate(r.getDate() + n);
+  const r = new Date(date.getTime());
+  r.setUTCDate(r.getUTCDate() + n);
   return r;
 }
 
 function startOfDay(d: Date): Date {
   const wib = getWibParts(d);
-  return new Date(wib.year, wib.month - 1, wib.day, 0, 0, 0, 0);
+  return new Date(Date.UTC(wib.year, wib.month - 1, wib.day, 0, 0, 0, 0));
 }
 
 function getWibToday(): Date {
   const now = new Date();
   const wibStr = now.toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" });
   const [y, m, d] = wibStr.split("-").map(Number);
-  return new Date(y, m - 1, d, 0, 0, 0, 0);
-}
-
-function endOfDay(d: Date): Date {
-  const wib = getWibParts(d);
-  return new Date(wib.year, wib.month - 1, wib.day, 23, 59, 59, 999);
+  return new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0));
 }
 
 function toDateKey(d: Date): string {
@@ -69,8 +68,8 @@ function fmtDateCompact(d: Date): string {
 function getWibParts(date: Date): { year: number; month: number; day: number; dayOfWeek: number } {
   const wibStr = date.toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" });
   const [y, m, d] = wibStr.split("-").map(Number);
-  const reconstructed = new Date(y, m - 1, d);
-  return { year: y, month: m, day: d, dayOfWeek: reconstructed.getDay() };
+  const utcDate = new Date(Date.UTC(y, m - 1, d));
+  return { year: y, month: m, day: d, dayOfWeek: utcDate.getUTCDay() };
 }
 
 function isLiburBayar(
@@ -91,7 +90,7 @@ function countCalendarDays(
   workingDays: number,
   scheme: "OLD_CONTRACT" | "NEW_CONTRACT",
 ) {
-  let cursor = new Date(billingStart);
+  let cursor = new Date(billingStart.getTime());
   let workingCount = 0;
   let holidayCount = 0;
   while (workingCount < workingDays) {
@@ -312,8 +311,7 @@ async function seedContracts(adminId: string): Promise<{
     // Auto-detect OVERDUE: jika ACTIVE tapi endDate + grace period sudah lewat
     let finalStatus: string = row.status;
     if (row.status === "ACTIVE" && billingStartDate && workingDaysPaid > 0) {
-      const graceEnd = new Date(endDate);
-      graceEnd.setDate(graceEnd.getDate() + GRACE_DAYS);
+      const graceEnd = addDays(endDate, GRACE_DAYS);
       if (graceEnd < TODAY) {
         finalStatus = "OVERDUE" as any;
       }
@@ -419,12 +417,11 @@ async function seedContracts(adminId: string): Promise<{
 
     // ====== Daily payments for paid days (walk calendar, not linear count) ======
     if (billingStartDate && workingDaysPaid > 0) {
-      let currentDate = new Date(billingStartDate);
+      let currentDate = new Date(billingStartDate.getTime());
       let generatedWorkingDays = 0;
       while (generatedWorkingDays < workingDaysPaid) {
         const isHoliday = isLiburBayar(currentDate, row.holidayScheme);
         const sd = startOfDay(currentDate);
-        const ed = endOfDay(currentDate);
 
         if (isHoliday) {
           // Holiday payment: amount 0, auto-PAID, credits 1 day
@@ -439,13 +436,13 @@ async function seedContracts(adminId: string): Promise<{
             type: "DAILY_BILLING",
             status: "PAID",
             qrCodeData: `WEDISON-PAY-${pmtNum}-0`,
-            dueDate: ed,
+            dueDate: sd,
             paidAt: sd,
             extensionDays: 0,
             dailyRate,
             daysCount: 0,
             periodStart: sd,
-            periodEnd: ed,
+            periodEnd: sd,
             isHoliday: true,
             createdAt: sd,
           });
@@ -462,13 +459,13 @@ async function seedContracts(adminId: string): Promise<{
             type: "DAILY_BILLING",
             status: "PAID",
             qrCodeData: `WEDISON-PAY-${pmtNum}-${dailyRate}`,
-            dueDate: ed,
+            dueDate: sd,
             paidAt: sd,
             extensionDays: 1,
             dailyRate,
             daysCount: 1,
             periodStart: sd,
-            periodEnd: ed,
+            periodEnd: sd,
             isHoliday: false,
             createdAt: sd,
           });
@@ -506,7 +503,7 @@ async function seedContracts(adminId: string): Promise<{
           : null;
       const pdEnd = addDays(TODAY, 30);
 
-      let pdCursor = new Date(billingStartDate);
+      let pdCursor = new Date(billingStartDate.getTime());
       while (pdCursor <= pdEnd) {
         const d = startOfDay(new Date(pdCursor));
         const key = toDateKey(d);
