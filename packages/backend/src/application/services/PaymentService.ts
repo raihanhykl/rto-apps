@@ -17,7 +17,7 @@ import {
   DEFAULT_LATE_FEE_PER_DAY,
 } from '../../domain/enums';
 import { IPaymentDayRepository } from '../../domain/interfaces';
-import { getWibToday, getWibDateParts, toDateKey, getWibParts } from '../../domain/utils/dateUtils';
+import { getWibToday, getWibDateParts, toDateKey, getWibParts, toLocalMidnightWib } from '../../domain/utils/dateUtils';
 import { computeLateFee } from '../../domain/utils/lateFeeCalculator';
 import { SettingService } from './SettingService';
 import { SavingService } from './SavingService';
@@ -108,12 +108,10 @@ export class PaymentService {
     daysAhead: number
   ): Promise<void> {
     const records: PaymentDay[] = [];
-    const current = new Date(startDate);
-    current.setHours(0, 0, 0, 0);
+    const current = toLocalMidnightWib(new Date(startDate));
 
     for (let i = 0; i < daysAhead; i++) {
       const dateKey = new Date(current);
-      dateKey.setHours(0, 0, 0, 0);
 
       const existing = await this.paymentDayRepo.findByContractAndDate(contract.id, dateKey);
       if (!existing) {
@@ -246,8 +244,7 @@ export class PaymentService {
     for (const contract of contracts) {
       if (!contract.billingStartDate) continue;
 
-      const billingStart = new Date(contract.billingStartDate);
-      billingStart.setHours(0, 0, 0, 0);
+      const billingStart = toLocalMidnightWib(new Date(contract.billingStartDate));
 
       if (now < billingStart) continue;
 
@@ -283,21 +280,16 @@ export class PaymentService {
       if (activePayment) continue;
 
       // Opsi B: Query ALL UNPAID PaymentDays where date <= today
+      const todayKey = toDateKey(now);
       const allUnpaid = await this.paymentDayRepo.findByContractAndStatus(contract.id, PaymentDayStatus.UNPAID);
-      const unpaidDays = allUnpaid.filter(pd => {
-        const pdDate = new Date(pd.date);
-        pdDate.setHours(0, 0, 0, 0);
-        return pdDate <= now;
-      });
+      const unpaidDays = allUnpaid.filter(pd => toDateKey(pd.date) <= todayKey);
 
       if (unpaidDays.length === 0) continue;
 
       const totalAmount = unpaidDays.reduce((sum, pd) => sum + pd.amount, 0);
       const lateFee = await this.calculateLateFee(unpaidDays, now);
-      const periodStart = new Date(unpaidDays[0].date);
-      periodStart.setHours(0, 0, 0, 0);
-      const periodEnd = new Date(unpaidDays[unpaidDays.length - 1].date);
-      periodEnd.setHours(23, 59, 59, 999);
+      const periodStart = toLocalMidnightWib(new Date(unpaidDays[0].date));
+      const periodEnd = toLocalMidnightWib(new Date(unpaidDays[unpaidDays.length - 1].date));
 
       const payment: Invoice = {
         id: uuidv4(),
@@ -342,10 +334,8 @@ export class PaymentService {
   }
 
   private async createHolidayPayment(contract: Contract, targetDate: Date): Promise<Invoice> {
-    const periodStart = new Date(targetDate);
-    periodStart.setHours(0, 0, 0, 0);
-    const periodEnd = new Date(targetDate);
-    periodEnd.setHours(23, 59, 59, 999);
+    const periodStart = toLocalMidnightWib(new Date(targetDate));
+    const periodEnd = toLocalMidnightWib(new Date(targetDate));
 
     const payment: Invoice = {
       id: uuidv4(),
@@ -395,10 +385,7 @@ export class PaymentService {
       if (payment.type !== InvoiceType.DAILY_BILLING && payment.type !== InvoiceType.MANUAL_PAYMENT) continue;
       if (!payment.periodEnd) continue;
 
-      const periodEnd = new Date(payment.periodEnd);
-      periodEnd.setHours(0, 0, 0, 0);
-
-      if (now > periodEnd) {
+      if (toDateKey(now) > toDateKey(new Date(payment.periodEnd))) {
         const contract = await this.contractRepo.findById(payment.contractId);
         if (!contract) continue;
         if (contract.status !== ContractStatus.ACTIVE && contract.status !== ContractStatus.OVERDUE) continue;
@@ -426,8 +413,7 @@ export class PaymentService {
 
     // Ensure PaymentDay records exist from billingStartDate to today (for gap billing)
     if (contract.billingStartDate) {
-      const billingStart = new Date(contract.billingStartDate);
-      billingStart.setHours(0, 0, 0, 0);
+      const billingStart = toLocalMidnightWib(new Date(contract.billingStartDate));
       const daysFromStart = Math.floor((today.getTime() - billingStart.getTime()) / 86400000) + 1;
       await this.generatePaymentDaysForPeriod(contract, billingStart, daysFromStart);
     } else {
@@ -438,17 +424,13 @@ export class PaymentService {
     // so just create the rollover invoice with accumulated UNPAID days
 
     // Opsi B: Link ALL UNPAID days (including gap) to new payment
+    const todayKeyRollover = toDateKey(today);
     const allUnpaid = await this.paymentDayRepo.findByContractAndStatus(contract.id, PaymentDayStatus.UNPAID);
-    const unpaidDays = allUnpaid.filter(pd => {
-      const pdDate = new Date(pd.date);
-      pdDate.setHours(0, 0, 0, 0);
-      return pdDate <= today;
-    });
+    const unpaidDays = allUnpaid.filter(pd => toDateKey(pd.date) <= todayKeyRollover);
 
     if (unpaidDays.length === 0) {
       // Edge case: no unpaid days (all holidays?), create minimal rollover
       const periodEnd = new Date(today);
-      periodEnd.setHours(23, 59, 59, 999);
       const newPayment: Invoice = {
         id: uuidv4(),
         invoiceNumber: await this.generatePaymentNumber(),
@@ -479,10 +461,8 @@ export class PaymentService {
 
     const totalAmount = unpaidDays.reduce((sum, pd) => sum + pd.amount, 0);
     const lateFee = await this.calculateLateFee(unpaidDays, today);
-    const periodStart = new Date(unpaidDays[0].date);
-    periodStart.setHours(0, 0, 0, 0);
-    const periodEnd = new Date(unpaidDays[unpaidDays.length - 1].date);
-    periodEnd.setHours(23, 59, 59, 999);
+    const periodStart = toLocalMidnightWib(new Date(unpaidDays[0].date));
+    const periodEnd = toLocalMidnightWib(new Date(unpaidDays[unpaidDays.length - 1].date));
 
     const newPayment: Invoice = {
       id: uuidv4(),
@@ -624,12 +604,11 @@ export class PaymentService {
     const today = getWibToday();
 
     // Ensure PaymentDay records exist
-    const billingStart = new Date(contract.billingStartDate);
-    billingStart.setHours(0, 0, 0, 0);
+    const billingStartPreview = toLocalMidnightWib(new Date(contract.billingStartDate));
     const futureEnd = new Date(today);
     futureEnd.setDate(futureEnd.getDate() + 7);
-    const totalDaysToGenerate = Math.floor((futureEnd.getTime() - billingStart.getTime()) / 86400000) + 1;
-    await this.generatePaymentDaysForPeriod(contract, billingStart, totalDaysToGenerate);
+    const totalDaysToGenerate = Math.floor((futureEnd.getTime() - billingStartPreview.getTime()) / 86400000) + 1;
+    await this.generatePaymentDaysForPeriod(contract, billingStartPreview, totalDaysToGenerate);
 
     // Check existing active payment (same logic as createManualPayment)
     const existingActive = await this.invoiceRepo.findActiveByContractId(contractId);
@@ -674,12 +653,11 @@ export class PaymentService {
     const today = getWibToday();
 
     // Ensure PaymentDay records exist from billingStartDate to today + 7 days
-    const billingStart = new Date(contract.billingStartDate);
-    billingStart.setHours(0, 0, 0, 0);
-    const futureEnd = new Date(today);
-    futureEnd.setDate(futureEnd.getDate() + 7);
-    const totalDaysToGenerate = Math.floor((futureEnd.getTime() - billingStart.getTime()) / 86400000) + 1;
-    await this.generatePaymentDaysForPeriod(contract, billingStart, totalDaysToGenerate);
+    const billingStartManual = toLocalMidnightWib(new Date(contract.billingStartDate));
+    const futureEndManual = new Date(today);
+    futureEndManual.setDate(futureEndManual.getDate() + 7);
+    const totalDaysToGenerate = Math.floor((futureEndManual.getTime() - billingStartManual.getTime()) / 86400000) + 1;
+    await this.generatePaymentDaysForPeriod(contract, billingStartManual, totalDaysToGenerate);
 
     // Check for existing active payment
     const existingActive = await this.invoiceRepo.findActiveByContractId(contractId);
@@ -712,10 +690,8 @@ export class PaymentService {
 
     const totalAmount = selectedDays.reduce((sum, pd) => sum + pd.amount, 0);
     const lateFee = await this.calculateLateFee(selectedDays, today);
-    const periodStart = new Date(selectedDays[0].date);
-    periodStart.setHours(0, 0, 0, 0);
-    const periodEnd = new Date(selectedDays[selectedDays.length - 1].date);
-    periodEnd.setHours(23, 59, 59, 999);
+    const periodStart = toLocalMidnightWib(new Date(selectedDays[0].date));
+    const periodEnd = toLocalMidnightWib(new Date(selectedDays[selectedDays.length - 1].date));
 
     const payment: Invoice = {
       id: uuidv4(),
@@ -803,10 +779,8 @@ export class PaymentService {
         if (previous.periodStart && previous.periodEnd) {
           const prevContract = await this.contractRepo.findById(payment.contractId);
           if (prevContract) {
-            const d = new Date(previous.periodStart);
-            d.setHours(0, 0, 0, 0);
-            const end = new Date(previous.periodEnd);
-            end.setHours(0, 0, 0, 0);
+            const d = toLocalMidnightWib(new Date(previous.periodStart));
+            const end = toLocalMidnightWib(new Date(previous.periodEnd));
             while (d <= end) {
               if (!this.isLiburBayar(prevContract, d)) {
                 await this.paymentDayRepo.updateByContractAndDate(payment.contractId, new Date(d), {
@@ -1187,8 +1161,8 @@ export class PaymentService {
     adminId: string,
     notes?: string,
   ): Promise<PaymentDay> {
-    date.setHours(0, 0, 0, 0);
-    const pd = await this.paymentDayRepo.findByContractAndDate(contractId, date);
+    const normalizedDate = toLocalMidnightWib(date);
+    const pd = await this.paymentDayRepo.findByContractAndDate(contractId, normalizedDate);
     if (!pd) throw new Error('PaymentDay not found for this date');
 
     if (pd.status === PaymentDayStatus.VOIDED) {
@@ -1255,12 +1229,9 @@ export class PaymentService {
       contract.id,
       PaymentDayStatus.UNPAID,
     );
+    const todayKeyReduce = toDateKey(getWibToday());
     const eligibleDays = allUnpaid
-      .filter(pd => {
-        const d = new Date(pd.date);
-        d.setHours(0, 0, 0, 0);
-        return d <= getWibToday();
-      })
+      .filter(pd => toDateKey(pd.date) <= todayKeyReduce)
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
       .slice(0, newDaysCount);
 
@@ -1342,18 +1313,16 @@ export class PaymentService {
     for (const contract of contracts) {
       if (!contract.billingStartDate) continue;
 
-      const billingStart = new Date(contract.billingStartDate);
-      billingStart.setHours(0, 0, 0, 0);
-      const endDate = new Date(contract.endDate);
-      endDate.setHours(0, 0, 0, 0);
+      const billingStart = toLocalMidnightWib(new Date(contract.billingStartDate));
+      const endDateKey = toDateKey(new Date(contract.endDate));
 
       const targetEnd = new Date(today);
       targetEnd.setDate(targetEnd.getDate() + 30);
 
       let current = new Date(billingStart);
       while (current <= targetEnd) {
-        const d = new Date(current);
-        d.setHours(0, 0, 0, 0);
+        const d = toLocalMidnightWib(new Date(current));
+        const dKey = toDateKey(d);
 
         const existing = await this.paymentDayRepo.findByContractAndDate(contract.id, d);
         if (!existing) {
@@ -1362,7 +1331,7 @@ export class PaymentService {
           let status: PaymentDayStatus;
           if (isHoliday) {
             status = PaymentDayStatus.HOLIDAY;
-          } else if (d <= endDate && contract.totalDaysPaid > 0) {
+          } else if (dKey <= endDateKey && contract.totalDaysPaid > 0) {
             status = PaymentDayStatus.PAID;
           } else {
             status = PaymentDayStatus.UNPAID;
@@ -1372,11 +1341,9 @@ export class PaymentService {
           if (status === PaymentDayStatus.UNPAID) {
             const activePayment = await this.invoiceRepo.findActiveByContractId(contract.id);
             if (activePayment && activePayment.periodStart && activePayment.periodEnd) {
-              const ps = new Date(activePayment.periodStart);
-              ps.setHours(0, 0, 0, 0);
-              const pe = new Date(activePayment.periodEnd);
-              pe.setHours(0, 0, 0, 0);
-              if (d >= ps && d <= pe) {
+              const psKey = toDateKey(new Date(activePayment.periodStart));
+              const peKey = toDateKey(new Date(activePayment.periodEnd));
+              if (dKey >= psKey && dKey <= peKey) {
                 status = PaymentDayStatus.PENDING;
               }
             }

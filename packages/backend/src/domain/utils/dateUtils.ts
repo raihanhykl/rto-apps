@@ -40,3 +40,17 @@ export function getWibParts(date: Date): { year: number; month: number; day: num
   const reconstructed = new Date(y, m - 1, d);
   return { year: y, month: m, day: d, dayOfWeek: reconstructed.getDay() };
 }
+
+/**
+ * Normalize a date (e.g. from DB) to midnight local of its WIB date.
+ *
+ * JANGAN gunakan `setHours(0,0,0,0)` pada date dari database!
+ * Pada server UTC (Railway), setHours menggeser WIB midnight (17:00 UTC)
+ * ke UTC midnight (00:00 UTC) — yang merupakan tanggal WIB berbeda.
+ *
+ * Fungsi ini mengekstrak tanggal WIB lalu membuat midnight local.
+ */
+export function toLocalMidnightWib(date: Date): Date {
+  const { year, month, day } = getWibParts(date);
+  return new Date(year, month - 1, day, 0, 0, 0, 0);
+}
