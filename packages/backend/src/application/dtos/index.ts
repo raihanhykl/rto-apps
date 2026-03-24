@@ -1,5 +1,13 @@
 import { z } from 'zod';
-import { MotorModel, BatteryType, DPScheme, ContractStatus, PaymentStatus, Gender, HolidayScheme } from '../../domain/enums';
+import {
+  MotorModel,
+  BatteryType,
+  DPScheme,
+  ContractStatus,
+  PaymentStatus,
+  Gender,
+  HolidayScheme,
+} from '../../domain/enums';
 
 // Auth DTOs
 export const LoginDto = z.object({
@@ -11,7 +19,12 @@ export type LoginDto = z.infer<typeof LoginDto>;
 // Customer DTOs
 export const CreateCustomerDto = z.object({
   fullName: z.string().min(1, 'Full name is required'),
-  phone: z.string().regex(/^(\+62|62|0)8[0-9]{8,12}$/, 'Format nomor telepon tidak valid (contoh: 08xxx atau +628xxx)'),
+  phone: z
+    .string()
+    .regex(
+      /^(\+62|62|0)8[0-9]{8,12}$/,
+      'Format nomor telepon tidak valid (contoh: 08xxx atau +628xxx)',
+    ),
   email: z.string().email('Invalid email').optional().default(''),
   address: z.string().min(1, 'Address is required'),
   birthDate: z.string().optional().nullable().default(null),
@@ -104,7 +117,7 @@ export const DebitSavingDto = z.object({
 export type DebitSavingDto = z.infer<typeof DebitSavingDto>;
 
 export const ClaimSavingDto = z.object({
-  amount: z.number().int().positive('Nominal harus lebih dari 0').optional(),  // Jika tidak diisi = claim semua sisa
+  amount: z.number().int().positive('Nominal harus lebih dari 0').optional(), // Jika tidak diisi = claim semua sisa
   notes: z.string().optional().nullable().default(null),
 });
 export type ClaimSavingDto = z.infer<typeof ClaimSavingDto>;

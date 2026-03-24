@@ -3,7 +3,12 @@ import { IContractRepository } from '../../domain/interfaces/IContractRepository
 import { IInvoiceRepository } from '../../domain/interfaces/IInvoiceRepository';
 import { IAuditLogRepository } from '../../domain/interfaces/IAuditLogRepository';
 import { SavingTransaction } from '../../domain/entities/SavingTransaction';
-import { SavingTransactionType, SAVING_PER_DAY, AuditAction, ContractStatus } from '../../domain/enums';
+import {
+  SavingTransactionType,
+  SAVING_PER_DAY,
+  AuditAction,
+  ContractStatus,
+} from '../../domain/enums';
 import { v4 as uuidv4 } from 'uuid';
 
 interface DebitSavingInput {
@@ -93,9 +98,12 @@ export class SavingService {
    * Auto-reverse saving credit saat payment di-revert.
    * Return null jika tidak ada credit yang perlu di-reverse.
    */
-  async reverseCreditFromPayment(paymentId: string, adminId: string): Promise<SavingTransaction | null> {
+  async reverseCreditFromPayment(
+    paymentId: string,
+    adminId: string,
+  ): Promise<SavingTransaction | null> {
     const creditTxs = await this.savingTxRepo.findByPaymentId(paymentId);
-    const creditTx = creditTxs.find(tx => tx.type === SavingTransactionType.CREDIT);
+    const creditTx = creditTxs.find((tx) => tx.type === SavingTransactionType.CREDIT);
 
     if (!creditTx) return null; // Tidak ada credit untuk invoice ini
 
@@ -107,7 +115,9 @@ export class SavingService {
 
     // Guard: saldo tidak boleh negatif
     if (balanceAfter < 0) {
-      throw new Error(`Insufficient saving balance for reversal. Current: Rp ${balanceBefore.toLocaleString('id-ID')}, reversal: Rp ${creditTx.amount.toLocaleString('id-ID')}`);
+      throw new Error(
+        `Insufficient saving balance for reversal. Current: Rp ${balanceBefore.toLocaleString('id-ID')}, reversal: Rp ${creditTx.amount.toLocaleString('id-ID')}`,
+      );
     }
 
     const reversalTx: SavingTransaction = {
@@ -158,17 +168,27 @@ export class SavingService {
    * Debit saving untuk biaya service motor.
    * Validasi: contract exists, status ACTIVE/OVERDUE/COMPLETED, amount <= savingBalance.
    */
-  async debitForService(contractId: string, dto: DebitSavingInput, adminId: string): Promise<SavingTransaction> {
+  async debitForService(
+    contractId: string,
+    dto: DebitSavingInput,
+    adminId: string,
+  ): Promise<SavingTransaction> {
     const contract = await this.contractRepo.findById(contractId);
     if (!contract) throw new Error('Contract not found');
 
-    const allowedStatuses = [ContractStatus.ACTIVE, ContractStatus.OVERDUE, ContractStatus.COMPLETED];
+    const allowedStatuses = [
+      ContractStatus.ACTIVE,
+      ContractStatus.OVERDUE,
+      ContractStatus.COMPLETED,
+    ];
     if (!allowedStatuses.includes(contract.status)) {
       throw new Error(`Saving tidak dapat digunakan pada kontrak berstatus ${contract.status}`);
     }
 
     if (dto.amount > contract.savingBalance) {
-      throw new Error(`Saldo saving tidak cukup. Saldo: Rp ${contract.savingBalance.toLocaleString('id-ID')}, dibutuhkan: Rp ${dto.amount.toLocaleString('id-ID')}`);
+      throw new Error(
+        `Saldo saving tidak cukup. Saldo: Rp ${contract.savingBalance.toLocaleString('id-ID')}, dibutuhkan: Rp ${dto.amount.toLocaleString('id-ID')}`,
+      );
     }
 
     const balanceBefore = contract.savingBalance;
@@ -218,7 +238,11 @@ export class SavingService {
    * Debit saving untuk biaya balik nama STNK & BPKB.
    * Validasi: contract exists, status HARUS COMPLETED, amount <= savingBalance.
    */
-  async debitForTransfer(contractId: string, dto: DebitSavingInput, adminId: string): Promise<SavingTransaction> {
+  async debitForTransfer(
+    contractId: string,
+    dto: DebitSavingInput,
+    adminId: string,
+  ): Promise<SavingTransaction> {
     const contract = await this.contractRepo.findById(contractId);
     if (!contract) throw new Error('Contract not found');
 
@@ -227,7 +251,9 @@ export class SavingService {
     }
 
     if (dto.amount > contract.savingBalance) {
-      throw new Error(`Saldo saving tidak cukup. Saldo: Rp ${contract.savingBalance.toLocaleString('id-ID')}, dibutuhkan: Rp ${dto.amount.toLocaleString('id-ID')}`);
+      throw new Error(
+        `Saldo saving tidak cukup. Saldo: Rp ${contract.savingBalance.toLocaleString('id-ID')}, dibutuhkan: Rp ${dto.amount.toLocaleString('id-ID')}`,
+      );
     }
 
     const balanceBefore = contract.savingBalance;
@@ -278,12 +304,19 @@ export class SavingService {
    * Validasi: contract COMPLETED (bukan CANCELLED/REPOSSESSED), savingBalance > 0.
    * Jika dto.amount tidak diisi → claim semua sisa.
    */
-  async claimSaving(contractId: string, dto: ClaimSavingInput, adminId: string): Promise<SavingTransaction> {
+  async claimSaving(
+    contractId: string,
+    dto: ClaimSavingInput,
+    adminId: string,
+  ): Promise<SavingTransaction> {
     const contract = await this.contractRepo.findById(contractId);
     if (!contract) throw new Error('Contract not found');
 
     if (contract.status !== ContractStatus.COMPLETED) {
-      if (contract.status === ContractStatus.CANCELLED || contract.status === ContractStatus.REPOSSESSED) {
+      if (
+        contract.status === ContractStatus.CANCELLED ||
+        contract.status === ContractStatus.REPOSSESSED
+      ) {
         throw new Error('Saving tidak dapat di-claim pada kontrak yang CANCELLED atau REPOSSESSED');
       }
       throw new Error('Saving hanya dapat di-claim pada kontrak yang sudah COMPLETED');
@@ -295,7 +328,9 @@ export class SavingService {
 
     const claimAmount = dto.amount || contract.savingBalance; // Default: claim semua
     if (claimAmount > contract.savingBalance) {
-      throw new Error(`Saldo saving tidak cukup. Saldo: Rp ${contract.savingBalance.toLocaleString('id-ID')}, diminta: Rp ${claimAmount.toLocaleString('id-ID')}`);
+      throw new Error(
+        `Saldo saving tidak cukup. Saldo: Rp ${contract.savingBalance.toLocaleString('id-ID')}, diminta: Rp ${claimAmount.toLocaleString('id-ID')}`,
+      );
     }
 
     const balanceBefore = contract.savingBalance;

@@ -1,4 +1,10 @@
-import { ICustomerRepository, IContractRepository, IAuditLogRepository, PaginationParams, PaginatedResult } from '../../domain/interfaces';
+import {
+  ICustomerRepository,
+  IContractRepository,
+  IAuditLogRepository,
+  PaginationParams,
+  PaginatedResult,
+} from '../../domain/interfaces';
 import { Customer } from '../../domain/entities';
 import { AuditAction, ContractStatus } from '../../domain/enums';
 import { CreateCustomerDto, UpdateCustomerDto } from '../dtos';
@@ -8,7 +14,7 @@ export class CustomerService {
   constructor(
     private customerRepo: ICustomerRepository,
     private auditRepo: IAuditLogRepository,
-    private contractRepo?: IContractRepository
+    private contractRepo?: IContractRepository,
   ) {}
 
   async getAll(): Promise<Customer[]> {
@@ -110,7 +116,7 @@ export class CustomerService {
     if (this.contractRepo) {
       const contracts = await this.contractRepo.findByCustomerId(id);
       const activeContracts = contracts.filter(
-        c => c.status === ContractStatus.ACTIVE || c.status === ContractStatus.OVERDUE
+        (c) => c.status === ContractStatus.ACTIVE || c.status === ContractStatus.OVERDUE,
       );
       if (activeContracts.length > 0) {
         throw new Error(`Cannot delete customer with ${activeContracts.length} active contract(s)`);

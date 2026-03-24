@@ -23,10 +23,14 @@ export class PrismaPaymentDayRepository implements IPaymentDayRepository {
       where: { contractId },
       orderBy: { date: 'asc' },
     });
-    return rows.map(r => this.toEntity(r));
+    return rows.map((r) => this.toEntity(r));
   }
 
-  async findByContractAndDateRange(contractId: string, startDate: Date, endDate: Date): Promise<PaymentDay[]> {
+  async findByContractAndDateRange(
+    contractId: string,
+    startDate: Date,
+    endDate: Date,
+  ): Promise<PaymentDay[]> {
     const rows = await this.prisma.paymentDay.findMany({
       where: {
         contractId,
@@ -34,7 +38,7 @@ export class PrismaPaymentDayRepository implements IPaymentDayRepository {
       },
       orderBy: { date: 'asc' },
     });
-    return rows.map(r => this.toEntity(r));
+    return rows.map((r) => this.toEntity(r));
   }
 
   async findByPaymentId(paymentId: string): Promise<PaymentDay[]> {
@@ -42,7 +46,7 @@ export class PrismaPaymentDayRepository implements IPaymentDayRepository {
       where: { paymentId },
       orderBy: { date: 'asc' },
     });
-    return rows.map(r => this.toEntity(r));
+    return rows.map((r) => this.toEntity(r));
   }
 
   async findByContractAndDate(contractId: string, date: Date): Promise<PaymentDay | null> {
@@ -62,12 +66,15 @@ export class PrismaPaymentDayRepository implements IPaymentDayRepository {
     return row ? this.toEntity(row) : null;
   }
 
-  async findByContractAndStatus(contractId: string, status: PaymentDayStatus): Promise<PaymentDay[]> {
+  async findByContractAndStatus(
+    contractId: string,
+    status: PaymentDayStatus,
+  ): Promise<PaymentDay[]> {
     const rows = await this.prisma.paymentDay.findMany({
       where: { contractId, status: status as any },
       orderBy: { date: 'asc' },
     });
-    return rows.map(r => this.toEntity(r));
+    return rows.map((r) => this.toEntity(r));
   }
 
   async create(paymentDay: PaymentDay): Promise<PaymentDay> {
@@ -89,7 +96,7 @@ export class PrismaPaymentDayRepository implements IPaymentDayRepository {
 
   async createMany(paymentDays: PaymentDay[]): Promise<number> {
     const result = await this.prisma.paymentDay.createMany({
-      data: paymentDays.map(pd => ({
+      data: paymentDays.map((pd) => ({
         id: pd.id,
         contractId: pd.contractId,
         date: pd.date,
@@ -118,7 +125,11 @@ export class PrismaPaymentDayRepository implements IPaymentDayRepository {
     }
   }
 
-  async updateByContractAndDate(contractId: string, date: Date, data: Partial<PaymentDay>): Promise<PaymentDay | null> {
+  async updateByContractAndDate(
+    contractId: string,
+    date: Date,
+    data: Partial<PaymentDay>,
+  ): Promise<PaymentDay | null> {
     try {
       // Use timezone-safe findByContractAndDate, then update by id
       const existing = await this.findByContractAndDate(contractId, date);
@@ -150,11 +161,14 @@ export class PrismaPaymentDayRepository implements IPaymentDayRepository {
     });
   }
 
-  async countByContractAndStatuses(contractId: string, statuses: PaymentDayStatus[]): Promise<number> {
+  async countByContractAndStatuses(
+    contractId: string,
+    statuses: PaymentDayStatus[],
+  ): Promise<number> {
     return this.prisma.paymentDay.count({
       where: {
         contractId,
-        status: { in: statuses.map(s => s as any) },
+        status: { in: statuses.map((s) => s as any) },
       },
     });
   }

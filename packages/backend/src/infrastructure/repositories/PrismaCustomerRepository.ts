@@ -15,7 +15,7 @@ export class PrismaCustomerRepository implements ICustomerRepository {
       where: { isDeleted: false },
       orderBy: { createdAt: 'desc' },
     });
-    return rows.map(r => this.toEntity(r));
+    return rows.map((r) => this.toEntity(r));
   }
 
   async findAllPaginated(params: PaginationParams): Promise<PaginatedResult<Customer>> {
@@ -49,7 +49,7 @@ export class PrismaCustomerRepository implements ICustomerRepository {
     ]);
 
     return {
-      data: rows.map(r => this.toEntity(r)),
+      data: rows.map((r) => this.toEntity(r)),
       total,
       page,
       limit,
@@ -81,7 +81,7 @@ export class PrismaCustomerRepository implements ICustomerRepository {
         ],
       },
     });
-    return rows.map(r => this.toEntity(r));
+    return rows.map((r) => this.toEntity(r));
   }
 
   async create(customer: Customer): Promise<Customer> {

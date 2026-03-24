@@ -1,3 +1,8 @@
+import { initSentry, Sentry } from './infrastructure/sentry';
+
+// Initialize Sentry before anything else
+initSentry();
+
 import express from 'express';
 import cors from 'cors';
 import { config } from './infrastructure/config';
@@ -44,6 +49,7 @@ import { createAuthMiddleware } from './infrastructure/middleware/authMiddleware
 import { errorHandler } from './infrastructure/middleware/errorHandler';
 import { seedDummyData } from './infrastructure/seed';
 import { Scheduler } from './infrastructure/scheduler';
+import { setupSwagger } from './infrastructure/swagger';
 import { IUserRepository } from './domain/interfaces/IUserRepository';
 import { ICustomerRepository } from './domain/interfaces/ICustomerRepository';
 import { IContractRepository } from './domain/interfaces/IContractRepository';
@@ -101,8 +107,21 @@ async function bootstrap() {
   const authService = new AuthService(userRepo, auditRepo);
   const settingService = new SettingService(settingRepo, auditRepo, contractRepo);
   const customerService = new CustomerService(customerRepo, auditRepo, contractRepo);
-  const contractService = new ContractService(contractRepo, customerRepo, invoiceRepo, paymentDayRepo, auditRepo, settingService);
-  const paymentService = new PaymentService(invoiceRepo, contractRepo, paymentDayRepo, auditRepo, settingService);
+  const contractService = new ContractService(
+    contractRepo,
+    customerRepo,
+    invoiceRepo,
+    paymentDayRepo,
+    auditRepo,
+    settingService,
+  );
+  const paymentService = new PaymentService(
+    invoiceRepo,
+    contractRepo,
+    paymentDayRepo,
+    auditRepo,
+    settingService,
+  );
   const savingService = new SavingService(savingTxRepo, contractRepo, invoiceRepo, auditRepo);
 
   // Wire saving service ke payment service (setter injection)
@@ -158,10 +177,23 @@ async function bootstrap() {
 
   app.use('/api', routes);
 
+  // Swagger API Documentation
+  setupSwagger(app);
+
   // Health check
   app.get('/health', (_req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
+
+  // Sentry test endpoint (development only)
+  if (config.nodeEnv !== 'production') {
+    app.get('/debug-sentry', () => {
+      throw new Error('Sentry test error — jika muncul di dashboard, berarti Sentry bekerja!');
+    });
+  }
+
+  // Sentry error handler (must be before custom error handler)
+  Sentry.setupExpressErrorHandler(app);
 
   // Error handler
   app.use(errorHandler);
@@ -172,6 +204,7 @@ async function bootstrap() {
     console.log(`Database: ${usePrisma ? 'PostgreSQL (Prisma)' : 'In-Memory'}`);
     console.log(`API: http://localhost:${config.port}/api`);
     console.log(`Default admin: admin / admin123`);
+    console.log(`API Docs: http://localhost:${config.port}/api-docs`);
   });
 
   // Graceful shutdown

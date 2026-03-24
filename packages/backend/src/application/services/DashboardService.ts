@@ -35,7 +35,7 @@ export class DashboardService {
     private contractRepo: IContractRepository,
     private customerRepo: ICustomerRepository,
     private invoiceRepo: IInvoiceRepository,
-    private auditRepo: IAuditLogRepository
+    private auditRepo: IAuditLogRepository,
   ) {}
 
   async getStats(): Promise<DashboardStats> {
@@ -67,17 +67,21 @@ export class DashboardService {
 
     // Build chart data
     const allInvoices = await this.invoiceRepo.findAll();
-    const paidInvoices = allInvoices.filter(inv => inv.status === PaymentStatus.PAID);
+    const paidInvoices = allInvoices.filter((inv) => inv.status === PaymentStatus.PAID);
 
     // Revenue by month (last 6 months)
     const nowParts = getWibParts(getWibToday());
     const revenueByMonth: Array<{ month: string; revenue: number }> = [];
     for (let i = 5; i >= 0; i--) {
       const d = new Date(nowParts.year, nowParts.month - 1 - i, 1);
-      const monthStr = d.toLocaleDateString('id-ID', { month: 'short', year: '2-digit', timeZone: 'Asia/Jakarta' });
+      const monthStr = d.toLocaleDateString('id-ID', {
+        month: 'short',
+        year: '2-digit',
+        timeZone: 'Asia/Jakarta',
+      });
       const targetMonth = `${d.toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' }).slice(0, 7)}`;
       const revenue = paidInvoices
-        .filter(inv => {
+        .filter((inv) => {
           if (!inv.paidAt) return false;
           const paidWib = getWibParts(new Date(inv.paidAt));
           const paidMonth = `${paidWib.year}-${String(paidWib.month).padStart(2, '0')}`;
@@ -109,7 +113,7 @@ export class DashboardService {
       pendingPayments,
       totalRevenue,
       pendingRevenue,
-      recentActivity: recentLogs.map(log => ({
+      recentActivity: recentLogs.map((log) => ({
         id: log.id,
         action: log.action,
         description: log.description,

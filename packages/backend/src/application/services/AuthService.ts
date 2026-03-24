@@ -11,7 +11,7 @@ const tokenStore = new Map<string, { userId: string; expiresAt: Date }>();
 export class AuthService {
   constructor(
     private userRepo: IUserRepository,
-    private auditRepo: IAuditLogRepository
+    private auditRepo: IAuditLogRepository,
   ) {}
 
   async login(dto: LoginDto): Promise<{ token: string; user: Omit<User, 'password'> }> {

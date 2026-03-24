@@ -45,24 +45,24 @@ describe('AuthService', () => {
     });
 
     it('should throw on invalid username', async () => {
-      await expect(
-        authService.login({ username: 'wrong', password: 'admin123' })
-      ).rejects.toThrow('Invalid credentials');
+      await expect(authService.login({ username: 'wrong', password: 'admin123' })).rejects.toThrow(
+        'Invalid credentials',
+      );
     });
 
     it('should throw on invalid password', async () => {
-      await expect(
-        authService.login({ username: 'admin', password: 'wrong' })
-      ).rejects.toThrow('Invalid credentials');
+      await expect(authService.login({ username: 'admin', password: 'wrong' })).rejects.toThrow(
+        'Invalid credentials',
+      );
     });
 
     it('should throw if account is deactivated', async () => {
       const admin = await userRepo.findByUsername('admin');
       await userRepo.update(admin!.id, { isActive: false });
 
-      await expect(
-        authService.login({ username: 'admin', password: 'admin123' })
-      ).rejects.toThrow('Account is deactivated');
+      await expect(authService.login({ username: 'admin', password: 'admin123' })).rejects.toThrow(
+        'Account is deactivated',
+      );
     });
 
     it('should create audit log on login', async () => {
@@ -106,7 +106,7 @@ describe('AuthService', () => {
 
       const logs = await auditRepo.findAll();
       expect(logs.length).toBe(2); // login + logout
-      const actions = logs.map(l => l.action);
+      const actions = logs.map((l) => l.action);
       expect(actions).toContain('LOGIN');
       expect(actions).toContain('LOGOUT');
     });

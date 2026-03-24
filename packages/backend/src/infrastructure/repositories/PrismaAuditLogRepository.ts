@@ -10,7 +10,7 @@ export class PrismaAuditLogRepository implements IAuditLogRepository {
     const rows = await this.prisma.auditLog.findMany({
       orderBy: { createdAt: 'desc' },
     });
-    return rows.map(r => this.toEntity(r));
+    return rows.map((r) => this.toEntity(r));
   }
 
   async findAllPaginated(params: PaginationParams): Promise<PaginatedResult<AuditLog>> {
@@ -53,7 +53,7 @@ export class PrismaAuditLogRepository implements IAuditLogRepository {
     ]);
 
     return {
-      data: rows.map(r => this.toEntity(r)),
+      data: rows.map((r) => this.toEntity(r)),
       total,
       page,
       limit,
@@ -66,7 +66,7 @@ export class PrismaAuditLogRepository implements IAuditLogRepository {
       where: { userId },
       orderBy: { createdAt: 'desc' },
     });
-    return rows.map(r => this.toEntity(r));
+    return rows.map((r) => this.toEntity(r));
   }
 
   async findByModule(module: string): Promise<AuditLog[]> {
@@ -74,7 +74,7 @@ export class PrismaAuditLogRepository implements IAuditLogRepository {
       where: { module },
       orderBy: { createdAt: 'desc' },
     });
-    return rows.map(r => this.toEntity(r));
+    return rows.map((r) => this.toEntity(r));
   }
 
   async findRecent(limit: number): Promise<AuditLog[]> {
@@ -82,7 +82,7 @@ export class PrismaAuditLogRepository implements IAuditLogRepository {
       orderBy: { createdAt: 'desc' },
       take: limit,
     });
-    return rows.map(r => this.toEntity(r));
+    return rows.map((r) => this.toEntity(r));
   }
 
   async create(log: AuditLog): Promise<AuditLog> {

@@ -11,22 +11,25 @@ export class InMemorySavingTransactionRepository implements ISavingTransactionRe
 
   async findByContractId(contractId: string): Promise<SavingTransaction[]> {
     return Array.from(this.data.values())
-      .filter(tx => tx.contractId === contractId)
+      .filter((tx) => tx.contractId === contractId)
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-      .map(tx => ({ ...tx }));
+      .map((tx) => ({ ...tx }));
   }
 
   async findByPaymentId(paymentId: string): Promise<SavingTransaction[]> {
     return Array.from(this.data.values())
-      .filter(tx => tx.paymentId === paymentId)
-      .map(tx => ({ ...tx }));
+      .filter((tx) => tx.paymentId === paymentId)
+      .map((tx) => ({ ...tx }));
   }
 
-  async findByContractAndType(contractId: string, type: SavingTransactionType): Promise<SavingTransaction[]> {
+  async findByContractAndType(
+    contractId: string,
+    type: SavingTransactionType,
+  ): Promise<SavingTransaction[]> {
     return Array.from(this.data.values())
-      .filter(tx => tx.contractId === contractId && tx.type === type)
+      .filter((tx) => tx.contractId === contractId && tx.type === type)
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-      .map(tx => ({ ...tx }));
+      .map((tx) => ({ ...tx }));
   }
 
   async create(tx: SavingTransaction): Promise<SavingTransaction> {
@@ -35,8 +38,6 @@ export class InMemorySavingTransactionRepository implements ISavingTransactionRe
   }
 
   async count(contractId: string): Promise<number> {
-    return Array.from(this.data.values())
-      .filter(tx => tx.contractId === contractId)
-      .length;
+    return Array.from(this.data.values()).filter((tx) => tx.contractId === contractId).length;
   }
 }

@@ -4,7 +4,20 @@ import { InMemoryCustomerRepository } from '../infrastructure/repositories/InMem
 import { InMemoryInvoiceRepository } from '../infrastructure/repositories/InMemoryInvoiceRepository';
 import { InMemoryAuditLogRepository } from '../infrastructure/repositories/InMemoryAuditLogRepository';
 import { InMemoryPaymentDayRepository } from '../infrastructure/repositories/InMemoryPaymentDayRepository';
-import { MotorModel, BatteryType, DPScheme, ContractStatus, PaymentStatus, InvoiceType, HolidayScheme, DEFAULT_OWNERSHIP_TARGET_DAYS, DEFAULT_GRACE_PERIOD_DAYS, DEFAULT_HOLIDAY_SCHEME, MOTOR_DAILY_RATES, DP_AMOUNTS } from '../domain/enums';
+import {
+  MotorModel,
+  BatteryType,
+  DPScheme,
+  ContractStatus,
+  PaymentStatus,
+  InvoiceType,
+  HolidayScheme,
+  DEFAULT_OWNERSHIP_TARGET_DAYS,
+  DEFAULT_GRACE_PERIOD_DAYS,
+  DEFAULT_HOLIDAY_SCHEME,
+  MOTOR_DAILY_RATES,
+  DP_AMOUNTS,
+} from '../domain/enums';
 import { v4 as uuidv4 } from 'uuid';
 
 describe('ContractService', () => {
@@ -23,7 +36,13 @@ describe('ContractService', () => {
     invoiceRepo = new InMemoryInvoiceRepository();
     auditRepo = new InMemoryAuditLogRepository();
     paymentDayRepo = new InMemoryPaymentDayRepository();
-    contractService = new ContractService(contractRepo, customerRepo, invoiceRepo, paymentDayRepo, auditRepo);
+    contractService = new ContractService(
+      contractRepo,
+      customerRepo,
+      invoiceRepo,
+      paymentDayRepo,
+      auditRepo,
+    );
 
     // Seed a customer
     customerId = uuidv4();
@@ -73,7 +92,10 @@ describe('ContractService', () => {
   async function payDpInvoices(contractId: string) {
     const invoices = await invoiceRepo.findByContractId(contractId);
     for (const inv of invoices) {
-      if ((inv.type === InvoiceType.DP || inv.type === InvoiceType.DP_INSTALLMENT) && inv.status === PaymentStatus.PENDING) {
+      if (
+        (inv.type === InvoiceType.DP || inv.type === InvoiceType.DP_INSTALLMENT) &&
+        inv.status === PaymentStatus.PENDING
+      ) {
         await invoiceRepo.update(inv.id, { status: PaymentStatus.PAID, paidAt: new Date() });
       }
     }
@@ -115,7 +137,7 @@ describe('ContractService', () => {
     it('should create contract with DP INSTALLMENT scheme and generate 2 invoices', async () => {
       const result = await contractService.create(
         defaultCreateDto({ customerId, dpScheme: DPScheme.INSTALLMENT }),
-        adminId
+        adminId,
       );
 
       const dpAmount = DP_AMOUNTS['ATHENA_REGULAR'];
@@ -130,8 +152,12 @@ describe('ContractService', () => {
 
     it('should create contract with EdPower Extended battery type', async () => {
       const result = await contractService.create(
-        defaultCreateDto({ customerId, motorModel: MotorModel.EDPOWER, batteryType: BatteryType.EXTENDED }),
-        adminId
+        defaultCreateDto({
+          customerId,
+          motorModel: MotorModel.EDPOWER,
+          batteryType: BatteryType.EXTENDED,
+        }),
+        adminId,
       );
 
       const rateKey = 'EDPOWER_EXTENDED';
@@ -142,7 +168,7 @@ describe('ContractService', () => {
 
     it('should reject if customer not found', async () => {
       await expect(
-        contractService.create(defaultCreateDto({ customerId: 'non-existent' }), adminId)
+        contractService.create(defaultCreateDto({ customerId: 'non-existent' }), adminId),
       ).rejects.toThrow('Customer not found');
     });
 
@@ -180,7 +206,12 @@ describe('ContractService', () => {
       const { contract } = await contractService.create(defaultCreateDto({ customerId }), adminId);
       await payDpInvoices(contract.id);
 
-      const updated = await contractService.receiveUnit(contract.id, adminId, bastPhoto, 'Test notes');
+      const updated = await contractService.receiveUnit(
+        contract.id,
+        adminId,
+        bastPhoto,
+        'Test notes',
+      );
       expect(updated.unitReceivedDate).not.toBeNull();
       expect(updated.billingStartDate).not.toBeNull();
       expect(updated.bastPhoto).toBe(bastPhoto);
@@ -190,7 +221,7 @@ describe('ContractService', () => {
     it('should allow receive unit when 1st DP installment is paid (INSTALLMENT)', async () => {
       const { contract, invoices } = await contractService.create(
         defaultCreateDto({ customerId, dpScheme: DPScheme.INSTALLMENT }),
-        adminId
+        adminId,
       );
 
       // Pay only the first installment
@@ -205,28 +236,28 @@ describe('ContractService', () => {
       const { contract } = await contractService.create(defaultCreateDto({ customerId }), adminId);
       await payDpInvoices(contract.id);
 
-      await expect(
-        contractService.receiveUnit(contract.id, adminId, '')
-      ).rejects.toThrow('Foto BAST wajib dilampirkan saat serah terima unit');
+      await expect(contractService.receiveUnit(contract.id, adminId, '')).rejects.toThrow(
+        'Foto BAST wajib dilampirkan saat serah terima unit',
+      );
     });
 
     it('should reject if DP is not paid (FULL)', async () => {
       const { contract } = await contractService.create(defaultCreateDto({ customerId }), adminId);
 
-      await expect(
-        contractService.receiveUnit(contract.id, adminId, bastPhoto)
-      ).rejects.toThrow('DP harus dibayar lunas sebelum unit bisa diterima');
+      await expect(contractService.receiveUnit(contract.id, adminId, bastPhoto)).rejects.toThrow(
+        'DP harus dibayar lunas sebelum unit bisa diterima',
+      );
     });
 
     it('should reject if 1st installment is not paid (INSTALLMENT)', async () => {
       const { contract } = await contractService.create(
         defaultCreateDto({ customerId, dpScheme: DPScheme.INSTALLMENT }),
-        adminId
+        adminId,
       );
 
-      await expect(
-        contractService.receiveUnit(contract.id, adminId, bastPhoto)
-      ).rejects.toThrow('DP cicilan pertama harus dibayar sebelum unit bisa diterima');
+      await expect(contractService.receiveUnit(contract.id, adminId, bastPhoto)).rejects.toThrow(
+        'DP cicilan pertama harus dibayar sebelum unit bisa diterima',
+      );
     });
 
     it('should reject if unit already received', async () => {
@@ -234,18 +265,18 @@ describe('ContractService', () => {
       await payDpInvoices(contract.id);
       await contractService.receiveUnit(contract.id, adminId, bastPhoto);
 
-      await expect(
-        contractService.receiveUnit(contract.id, adminId, bastPhoto)
-      ).rejects.toThrow('Unit already received for this contract');
+      await expect(contractService.receiveUnit(contract.id, adminId, bastPhoto)).rejects.toThrow(
+        'Unit already received for this contract',
+      );
     });
 
     it('should reject if contract is not ACTIVE', async () => {
       const { contract } = await contractService.create(defaultCreateDto({ customerId }), adminId);
       await contractRepo.update(contract.id, { status: ContractStatus.COMPLETED });
 
-      await expect(
-        contractService.receiveUnit(contract.id, adminId, bastPhoto)
-      ).rejects.toThrow('Only ACTIVE contracts can receive unit');
+      await expect(contractService.receiveUnit(contract.id, adminId, bastPhoto)).rejects.toThrow(
+        'Only ACTIVE contracts can receive unit',
+      );
     });
 
     it('should create audit log', async () => {
@@ -254,7 +285,7 @@ describe('ContractService', () => {
       await contractService.receiveUnit(contract.id, adminId, bastPhoto);
 
       const logs = await auditRepo.findAll();
-      const receiveLog = logs.find(l => l.description.includes('Unit received'));
+      const receiveLog = logs.find((l) => l.description.includes('Unit received'));
       expect(receiveLog).toBeDefined();
     });
   });
@@ -289,7 +320,7 @@ describe('ContractService', () => {
       await contractRepo.update(contract.id, { status: ContractStatus.COMPLETED });
 
       await expect(
-        contractService.extend(contract.id, { durationDays: 3 }, adminId)
+        contractService.extend(contract.id, { durationDays: 3 }, adminId),
       ).rejects.toThrow('Only ACTIVE or OVERDUE contracts can be extended');
     });
 
@@ -298,7 +329,7 @@ describe('ContractService', () => {
       await payAllPendingInvoices(contract.id);
 
       await expect(
-        contractService.extend(contract.id, { durationDays: 8 }, adminId)
+        contractService.extend(contract.id, { durationDays: 8 }, adminId),
       ).rejects.toThrow('Maximum extension is 7 days');
     });
 
@@ -317,7 +348,7 @@ describe('ContractService', () => {
 
       // DP invoice is still PENDING, so extension should be blocked
       await expect(
-        contractService.extend(contract.id, { durationDays: 5 }, adminId)
+        contractService.extend(contract.id, { durationDays: 5 }, adminId),
       ).rejects.toThrow('masih ada invoice yang belum dibayar');
     });
   });
@@ -337,9 +368,9 @@ describe('ContractService', () => {
       await contractService.repossess(contract.id, adminId);
 
       const invoices = await invoiceRepo.findByContractId(contract.id);
-      const pendingInvoices = invoices.filter(i => i.status === PaymentStatus.PENDING);
+      const pendingInvoices = invoices.filter((i) => i.status === PaymentStatus.PENDING);
       expect(pendingInvoices.length).toBe(0);
-      const voidedInvoices = invoices.filter(i => i.status === PaymentStatus.VOID);
+      const voidedInvoices = invoices.filter((i) => i.status === PaymentStatus.VOID);
       expect(voidedInvoices.length).toBe(1); // DP invoice voided
     });
 
@@ -347,18 +378,18 @@ describe('ContractService', () => {
       const { contract } = await contractService.create(defaultCreateDto({ customerId }), adminId);
       await contractRepo.update(contract.id, { status: ContractStatus.COMPLETED });
 
-      await expect(
-        contractService.repossess(contract.id, adminId)
-      ).rejects.toThrow('Cannot repossess a completed contract');
+      await expect(contractService.repossess(contract.id, adminId)).rejects.toThrow(
+        'Cannot repossess a completed contract',
+      );
     });
 
     it('should reject repossessing an already repossessed contract', async () => {
       const { contract } = await contractService.create(defaultCreateDto({ customerId }), adminId);
       await contractService.repossess(contract.id, adminId);
 
-      await expect(
-        contractService.repossess(contract.id, adminId)
-      ).rejects.toThrow('Contract already repossessed');
+      await expect(contractService.repossess(contract.id, adminId)).rejects.toThrow(
+        'Contract already repossessed',
+      );
     });
 
     it('should create audit log for repossession', async () => {
@@ -366,7 +397,7 @@ describe('ContractService', () => {
       await contractService.repossess(contract.id, adminId);
 
       const logs = await auditRepo.findAll();
-      const repossessLog = logs.find(l => l.description.includes('Repossessed'));
+      const repossessLog = logs.find((l) => l.description.includes('Repossessed'));
       expect(repossessLog).toBeDefined();
     });
   });
@@ -378,7 +409,7 @@ describe('ContractService', () => {
       const updated = await contractService.updateStatus(
         contract.id,
         { status: ContractStatus.COMPLETED },
-        adminId
+        adminId,
       );
 
       expect(updated.status).toBe(ContractStatus.COMPLETED);
@@ -389,13 +420,13 @@ describe('ContractService', () => {
       await contractRepo.update(contract.id, { status: ContractStatus.COMPLETED });
 
       await expect(
-        contractService.updateStatus(contract.id, { status: ContractStatus.ACTIVE }, adminId)
+        contractService.updateStatus(contract.id, { status: ContractStatus.ACTIVE }, adminId),
       ).rejects.toThrow('Invalid status transition');
     });
 
     it('should throw if contract not found', async () => {
       await expect(
-        contractService.updateStatus('non-existent', { status: ContractStatus.CANCELLED }, adminId)
+        contractService.updateStatus('non-existent', { status: ContractStatus.CANCELLED }, adminId),
       ).rejects.toThrow('Contract not found');
     });
   });
@@ -420,7 +451,9 @@ describe('ContractService', () => {
     });
 
     it('should throw if contract not found', async () => {
-      await expect(contractService.getDetailById('non-existent')).rejects.toThrow('Contract not found');
+      await expect(contractService.getDetailById('non-existent')).rejects.toThrow(
+        'Contract not found',
+      );
     });
   });
 
@@ -429,7 +462,7 @@ describe('ContractService', () => {
       await contractService.create(defaultCreateDto({ customerId }), adminId);
       await contractService.create(
         defaultCreateDto({ customerId, motorModel: MotorModel.VICTORY }),
-        adminId
+        adminId,
       );
 
       const contracts = await contractService.getByCustomerId(customerId);
@@ -441,28 +474,40 @@ describe('ContractService', () => {
     it('should update notes', async () => {
       const { contract } = await contractService.create(defaultCreateDto({ customerId }), adminId);
 
-      const updated = await contractService.editContract(contract.id, { notes: 'Updated notes' }, adminId);
+      const updated = await contractService.editContract(
+        contract.id,
+        { notes: 'Updated notes' },
+        adminId,
+      );
       expect(updated.notes).toBe('Updated notes');
     });
 
     it('should update grace period', async () => {
       const { contract } = await contractService.create(defaultCreateDto({ customerId }), adminId);
 
-      const updated = await contractService.editContract(contract.id, { gracePeriodDays: 5 }, adminId);
+      const updated = await contractService.editContract(
+        contract.id,
+        { gracePeriodDays: 5 },
+        adminId,
+      );
       expect(updated.gracePeriodDays).toBe(5);
     });
 
     it('should update ownership target and recalculate progress', async () => {
       const { contract } = await contractService.create(defaultCreateDto({ customerId }), adminId);
 
-      const updated = await contractService.editContract(contract.id, { ownershipTargetDays: 100 }, adminId);
+      const updated = await contractService.editContract(
+        contract.id,
+        { ownershipTargetDays: 100 },
+        adminId,
+      );
       expect(updated.ownershipTargetDays).toBe(100);
       expect(updated.ownershipProgress).toBe(0);
     });
 
     it('should throw if contract not found', async () => {
       await expect(
-        contractService.editContract('non-existent', { notes: 'test' }, adminId)
+        contractService.editContract('non-existent', { notes: 'test' }, adminId),
       ).rejects.toThrow('Contract not found');
     });
   });
@@ -471,12 +516,16 @@ describe('ContractService', () => {
     it('should cancel an active contract and auto-void pending invoices', async () => {
       const { contract } = await contractService.create(defaultCreateDto({ customerId }), adminId);
 
-      const updated = await contractService.cancelContract(contract.id, { reason: 'Customer request' }, adminId);
+      const updated = await contractService.cancelContract(
+        contract.id,
+        { reason: 'Customer request' },
+        adminId,
+      );
       expect(updated.status).toBe(ContractStatus.CANCELLED);
       expect(updated.notes).toContain('[CANCELLED] Customer request');
 
       const invoices = await invoiceRepo.findByContractId(contract.id);
-      const pendingInvoices = invoices.filter(i => i.status === PaymentStatus.PENDING);
+      const pendingInvoices = invoices.filter((i) => i.status === PaymentStatus.PENDING);
       expect(pendingInvoices.length).toBe(0);
     });
 
@@ -485,7 +534,7 @@ describe('ContractService', () => {
       await contractRepo.update(contract.id, { status: ContractStatus.COMPLETED });
 
       await expect(
-        contractService.cancelContract(contract.id, { reason: 'test' }, adminId)
+        contractService.cancelContract(contract.id, { reason: 'test' }, adminId),
       ).rejects.toThrow('Cannot cancel a completed contract');
     });
 
@@ -494,7 +543,7 @@ describe('ContractService', () => {
       await contractService.cancelContract(contract.id, { reason: 'first' }, adminId);
 
       await expect(
-        contractService.cancelContract(contract.id, { reason: 'second' }, adminId)
+        contractService.cancelContract(contract.id, { reason: 'second' }, adminId),
       ).rejects.toThrow('Contract already cancelled');
     });
 
@@ -503,17 +552,21 @@ describe('ContractService', () => {
       await contractService.repossess(contract.id, adminId);
 
       await expect(
-        contractService.cancelContract(contract.id, { reason: 'test' }, adminId)
+        contractService.cancelContract(contract.id, { reason: 'test' }, adminId),
       ).rejects.toThrow('Cannot cancel a repossessed contract');
     });
 
     it('should append cancel reason to existing notes', async () => {
       const { contract } = await contractService.create(
         defaultCreateDto({ customerId, notes: 'Existing note' }),
-        adminId
+        adminId,
       );
 
-      const updated = await contractService.cancelContract(contract.id, { reason: 'No longer needed' }, adminId);
+      const updated = await contractService.cancelContract(
+        contract.id,
+        { reason: 'No longer needed' },
+        adminId,
+      );
       expect(updated.notes).toContain('Existing note');
       expect(updated.notes).toContain('[CANCELLED] No longer needed');
     });

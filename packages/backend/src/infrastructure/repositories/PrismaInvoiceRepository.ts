@@ -18,7 +18,7 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
     const rows = await this.prisma.invoice.findMany({
       orderBy: { createdAt: 'desc' },
     });
-    return rows.map(r => this.toEntity(r));
+    return rows.map((r) => this.toEntity(r));
   }
 
   async findAllPaginated(params: PaginationParams): Promise<PaginatedResult<Invoice>> {
@@ -64,7 +64,7 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
     ]);
 
     return {
-      data: rows.map(r => this.toEntity(r)),
+      data: rows.map((r) => this.toEntity(r)),
       total,
       page,
       limit,
@@ -82,21 +82,21 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
       where: { contractId },
       orderBy: { createdAt: 'desc' },
     });
-    return rows.map(r => this.toEntity(r));
+    return rows.map((r) => this.toEntity(r));
   }
 
   async findByCustomerId(customerId: string): Promise<Invoice[]> {
     const rows = await this.prisma.invoice.findMany({
       where: { customerId },
     });
-    return rows.map(r => this.toEntity(r));
+    return rows.map((r) => this.toEntity(r));
   }
 
   async findByStatus(status: PaymentStatus): Promise<Invoice[]> {
     const rows = await this.prisma.invoice.findMany({
       where: { status: status as any },
     });
-    return rows.map(r => this.toEntity(r));
+    return rows.map((r) => this.toEntity(r));
   }
 
   async findActiveByContractId(contractId: string): Promise<Invoice | null> {
@@ -118,7 +118,7 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
       orderBy: { createdAt: 'desc' },
       take: 20,
     });
-    return rows.map(r => this.toEntity(r));
+    return rows.map((r) => this.toEntity(r));
   }
 
   async create(invoice: Invoice): Promise<Invoice> {

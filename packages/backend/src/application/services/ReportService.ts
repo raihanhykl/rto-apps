@@ -38,7 +38,7 @@ export class ReportService {
   constructor(
     private contractRepo: IContractRepository,
     private customerRepo: ICustomerRepository,
-    private invoiceRepo: IInvoiceRepository
+    private invoiceRepo: IInvoiceRepository,
   ) {}
 
   async generateReport(filters?: ReportFilters): Promise<ReportData> {
@@ -49,69 +49,69 @@ export class ReportService {
     ]);
 
     const customerMap = new Map<string, Customer>();
-    customers.forEach(c => customerMap.set(c.id, c));
+    customers.forEach((c) => customerMap.set(c.id, c));
 
     // Filter contracts
-    let contracts = allContracts.filter(c => !c.isDeleted);
+    let contracts = allContracts.filter((c) => !c.isDeleted);
     let invoices = allInvoices;
 
     if (filters?.startDate) {
       const start = new Date(filters.startDate);
-      contracts = contracts.filter(c => c.createdAt >= start);
-      invoices = invoices.filter(i => i.createdAt >= start);
+      contracts = contracts.filter((c) => c.createdAt >= start);
+      invoices = invoices.filter((i) => i.createdAt >= start);
     }
     if (filters?.endDate) {
       const end = new Date(filters.endDate);
       end.setHours(23, 59, 59, 999);
-      contracts = contracts.filter(c => c.createdAt <= end);
-      invoices = invoices.filter(i => i.createdAt <= end);
+      contracts = contracts.filter((c) => c.createdAt <= end);
+      invoices = invoices.filter((i) => i.createdAt <= end);
     }
     if (filters?.status) {
-      contracts = contracts.filter(c => c.status === filters.status);
+      contracts = contracts.filter((c) => c.status === filters.status);
     }
     if (filters?.motorModel) {
-      contracts = contracts.filter(c => c.motorModel === filters.motorModel);
+      contracts = contracts.filter((c) => c.motorModel === filters.motorModel);
     }
     if (filters?.batteryType) {
-      contracts = contracts.filter(c => c.batteryType === filters.batteryType);
+      contracts = contracts.filter((c) => c.batteryType === filters.batteryType);
     }
 
     // Filter invoices to match filtered contracts
-    const contractIds = new Set(contracts.map(c => c.id));
+    const contractIds = new Set(contracts.map((c) => c.id));
     if (filters?.status || filters?.motorModel || filters?.batteryType) {
-      invoices = invoices.filter(i => contractIds.has(i.contractId));
+      invoices = invoices.filter((i) => contractIds.has(i.contractId));
     }
 
-    const enrichedContracts = contracts.map(contract => ({
+    const enrichedContracts = contracts.map((contract) => ({
       ...contract,
       customerName: customerMap.get(contract.customerId)?.fullName || 'Unknown',
     }));
 
-    const enrichedInvoices = invoices.map(invoice => ({
+    const enrichedInvoices = invoices.map((invoice) => ({
       ...invoice,
       customerName: customerMap.get(invoice.customerId)?.fullName || 'Unknown',
     }));
 
     // Calculate summary
-    const paidInvoices = invoices.filter(i => i.status === PaymentStatus.PAID);
+    const paidInvoices = invoices.filter((i) => i.status === PaymentStatus.PAID);
     const totalRevenue = paidInvoices.reduce((sum, i) => sum + i.amount + i.lateFee, 0);
     const pendingAmount = invoices
-      .filter(i => i.status === PaymentStatus.PENDING)
+      .filter((i) => i.status === PaymentStatus.PENDING)
       .reduce((sum, i) => sum + i.amount, 0);
 
     // Contracts by status
     const contractsByStatus: Record<string, number> = {};
     for (const status of Object.values(ContractStatus)) {
-      contractsByStatus[status] = contracts.filter(c => c.status === status).length;
+      contractsByStatus[status] = contracts.filter((c) => c.status === status).length;
     }
 
     // Revenue by motor model
     const revenueByMotor: Record<string, number> = {};
     for (const model of Object.values(MotorModel)) {
-      const modelContracts = contracts.filter(c => c.motorModel === model);
-      const modelContractIds = new Set(modelContracts.map(c => c.id));
+      const modelContracts = contracts.filter((c) => c.motorModel === model);
+      const modelContractIds = new Set(modelContracts.map((c) => c.id));
       revenueByMotor[model] = paidInvoices
-        .filter(i => modelContractIds.has(i.contractId))
+        .filter((i) => modelContractIds.has(i.contractId))
         .reduce((sum, i) => sum + i.amount + i.lateFee, 0);
     }
 
@@ -123,7 +123,7 @@ export class ReportService {
       const wibD = getWibParts(d);
       const month = `${wibD.year}-${String(wibD.month).padStart(2, '0')}`;
       const monthRevenue = paidInvoices
-        .filter(i => {
+        .filter((i) => {
           if (!i.paidAt) return false;
           const pd = i.paidAt instanceof Date ? i.paidAt : new Date(i.paidAt);
           const wibPd = getWibParts(pd);
@@ -134,7 +134,10 @@ export class ReportService {
     }
 
     // Top customers by total paid
-    const customerPayments = new Map<string, { name: string; totalPaid: number; contractCount: number }>();
+    const customerPayments = new Map<
+      string,
+      { name: string; totalPaid: number; contractCount: number }
+    >();
     for (const inv of paidInvoices) {
       const existing = customerPayments.get(inv.customerId) || {
         name: customerMap.get(inv.customerId)?.fullName || 'Unknown',
@@ -147,24 +150,36 @@ export class ReportService {
     for (const contract of contracts) {
       const existing = customerPayments.get(contract.customerId);
       if (existing && !existing.contractCount) {
-        existing.contractCount = contracts.filter(c => c.customerId === contract.customerId).length;
+        existing.contractCount = contracts.filter(
+          (c) => c.customerId === contract.customerId,
+        ).length;
       }
     }
     const topCustomers = Array.from(customerPayments.values())
       .sort((a, b) => b.totalPaid - a.totalPaid)
       .slice(0, 10);
 
-    const overdueCount = contracts.filter(c => c.status === ContractStatus.OVERDUE).length;
-    const activeContracts = contracts.filter(c =>
-      c.status === ContractStatus.ACTIVE || c.status === ContractStatus.OVERDUE || c.status === ContractStatus.COMPLETED
+    const overdueCount = contracts.filter((c) => c.status === ContractStatus.OVERDUE).length;
+    const activeContracts = contracts.filter(
+      (c) =>
+        c.status === ContractStatus.ACTIVE ||
+        c.status === ContractStatus.OVERDUE ||
+        c.status === ContractStatus.COMPLETED,
     );
-    const averageOwnershipProgress = activeContracts.length > 0
-      ? parseFloat((activeContracts.reduce((sum, c) => sum + c.ownershipProgress, 0) / activeContracts.length).toFixed(1))
-      : 0;
+    const averageOwnershipProgress =
+      activeContracts.length > 0
+        ? parseFloat(
+            (
+              activeContracts.reduce((sum, c) => sum + c.ownershipProgress, 0) /
+              activeContracts.length
+            ).toFixed(1),
+          )
+        : 0;
 
-    const period = filters?.startDate || filters?.endDate
-      ? `${filters.startDate || 'Start'} - ${filters.endDate || 'Now'}`
-      : 'All Time';
+    const period =
+      filters?.startDate || filters?.endDate
+        ? `${filters.startDate || 'Start'} - ${filters.endDate || 'Now'}`
+        : 'All Time';
 
     return {
       generatedAt: new Date(),
@@ -209,7 +224,7 @@ export class ReportService {
       'End Date',
     ];
 
-    const rows = report.contracts.map(c => [
+    const rows = report.contracts.map((c) => [
       c.contractNumber,
       `"${c.customerName}"`,
       c.motorModel,
@@ -221,11 +236,15 @@ export class ReportService {
       c.totalDaysPaid,
       c.workingDaysPaid,
       c.holidayDaysPaid,
-      c.startDate instanceof Date ? c.startDate.toISOString().split('T')[0] : String(c.startDate).split('T')[0],
-      c.endDate instanceof Date ? c.endDate.toISOString().split('T')[0] : String(c.endDate).split('T')[0],
+      c.startDate instanceof Date
+        ? c.startDate.toISOString().split('T')[0]
+        : String(c.startDate).split('T')[0],
+      c.endDate instanceof Date
+        ? c.endDate.toISOString().split('T')[0]
+        : String(c.endDate).split('T')[0],
     ]);
 
-    return [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    return [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
   }
 
   async exportXLSV(filters?: ReportFilters): Promise<string> {
@@ -272,22 +291,40 @@ export class ReportService {
     sections.push('');
 
     sections.push('=== CONTRACT DETAILS ===');
-    const contractHeaders = ['Contract Number', 'Customer', 'Motor', 'Status', 'Days Paid', 'Working Days', 'Holiday Days', 'Ownership %', 'Total Amount', 'Start Date', 'End Date'];
+    const contractHeaders = [
+      'Contract Number',
+      'Customer',
+      'Motor',
+      'Status',
+      'Days Paid',
+      'Working Days',
+      'Holiday Days',
+      'Ownership %',
+      'Total Amount',
+      'Start Date',
+      'End Date',
+    ];
     sections.push(contractHeaders.join('\t'));
     for (const c of report.contracts) {
-      sections.push([
-        c.contractNumber,
-        c.customerName,
-        c.motorModel,
-        c.status,
-        c.totalDaysPaid,
-        c.workingDaysPaid,
-        c.holidayDaysPaid,
-        `${c.ownershipProgress}%`,
-        c.totalAmount,
-        c.startDate instanceof Date ? c.startDate.toISOString().split('T')[0] : String(c.startDate).split('T')[0],
-        c.endDate instanceof Date ? c.endDate.toISOString().split('T')[0] : String(c.endDate).split('T')[0],
-      ].join('\t'));
+      sections.push(
+        [
+          c.contractNumber,
+          c.customerName,
+          c.motorModel,
+          c.status,
+          c.totalDaysPaid,
+          c.workingDaysPaid,
+          c.holidayDaysPaid,
+          `${c.ownershipProgress}%`,
+          c.totalAmount,
+          c.startDate instanceof Date
+            ? c.startDate.toISOString().split('T')[0]
+            : String(c.startDate).split('T')[0],
+          c.endDate instanceof Date
+            ? c.endDate.toISOString().split('T')[0]
+            : String(c.endDate).split('T')[0],
+        ].join('\t'),
+      );
     }
 
     return sections.join('\n');

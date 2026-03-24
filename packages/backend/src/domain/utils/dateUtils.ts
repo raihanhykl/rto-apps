@@ -33,7 +33,12 @@ export function toDateKey(date: Date): string {
  * Returns year, month (1-indexed), day, and dayOfWeek (0=Sunday).
  * Safe to use on any server timezone.
  */
-export function getWibParts(date: Date): { year: number; month: number; day: number; dayOfWeek: number } {
+export function getWibParts(date: Date): {
+  year: number;
+  month: number;
+  day: number;
+  dayOfWeek: number;
+} {
   const wibStr = date.toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
   const [y, m, d] = wibStr.split('-').map(Number);
   // Reconstruct date from WIB parts to get accurate day of week
