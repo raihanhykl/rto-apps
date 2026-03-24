@@ -1740,6 +1740,34 @@ describe('PaymentService', () => {
         const fee = await paymentService.calculateLateFee(days, today);
         expect(fee).toBe(3 * 20000);
       });
+
+      it('should return 0 for OLD_CONTRACT (no penalty for old contracts)', async () => {
+        const today = new Date(2026, 2, 15);
+        today.setHours(0, 0, 0, 0);
+
+        const days = [
+          makePD(new Date(2026, 2, 5)),  // diff=10 >= 2 → would be penalty for NEW_CONTRACT
+          makePD(new Date(2026, 2, 6)),  // diff=9 >= 2
+          makePD(new Date(2026, 2, 7)),  // diff=8 >= 2
+        ];
+
+        const fee = await paymentService.calculateLateFee(days, today, HolidayScheme.OLD_CONTRACT);
+        expect(fee).toBe(0); // OLD_CONTRACT = no penalty
+      });
+
+      it('should still apply penalty for NEW_CONTRACT', async () => {
+        const today = new Date(2026, 2, 15);
+        today.setHours(0, 0, 0, 0);
+
+        const days = [
+          makePD(new Date(2026, 2, 5)),
+          makePD(new Date(2026, 2, 6)),
+          makePD(new Date(2026, 2, 7)),
+        ];
+
+        const fee = await paymentService.calculateLateFee(days, today, HolidayScheme.NEW_CONTRACT);
+        expect(fee).toBe(3 * 20000); // NEW_CONTRACT = penalty applies
+      });
     });
 
     describe('Kasus 1: pembayaran incremental hari yang sama (EdPower 83k)', () => {

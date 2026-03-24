@@ -395,9 +395,10 @@ export class ContractService {
     const extensionAmount = existing.dailyRate * dto.durationDays;
 
     // Calculate late fee via shared domain utility
+    // Kontrak lama (OLD_CONTRACT) tidak dikenakan denda
     let lateFee = 0;
     const now = getWibToday();
-    if (existing.billingStartDate) {
+    if (existing.billingStartDate && existing.holidayScheme !== HolidayScheme.OLD_CONTRACT) {
       const penaltyGraceDays = await this.getSetting('penalty_grace_days', DEFAULT_PENALTY_GRACE_DAYS);
       const feePerDay = await this.getSetting('late_fee_per_day', DEFAULT_LATE_FEE_PER_DAY);
       const allUnpaid = await this.paymentDayRepo.findByContractAndStatus(existing.id, PaymentDayStatus.UNPAID);

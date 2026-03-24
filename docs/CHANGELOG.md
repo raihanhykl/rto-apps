@@ -34,6 +34,7 @@
 - [PaymentDay: Static Per-Date Records (2026-03-09)](#2026-03-09---paymentday-static-per-date-records)
 - [Saving Feature: Dana Sisihan Per Kontrak (2026-03-10)](#2026-03-10---saving-feature-dana-sisihan-per-kontrak)
 - [Late Payment Penalty & Penalty Grace Days (2026-03-10)](#2026-03-10---late-payment-penalty--grace-period-2-hari)
+- [Remove Penalty for Old Contracts (2026-03-24)](#2026-03-24---remove-penalty-for-old-contracts)
 - [Development Roadmap](#development-roadmap)
 
 ---
@@ -1355,6 +1356,29 @@ Dua bug kritis ditemukan setelah implementasi late payment penalty:
 ### Test count
 
 198 tests (5 suites) — naik dari 192 (tambah 6 tests contiguous walk + status transitions)
+
+---
+
+## 2026-03-24 - Remove Penalty for Old Contracts
+
+### Context
+Perubahan kebijakan bisnis: kontrak-kontrak lama (`OLD_CONTRACT` / holiday setiap Minggu) tidak dikenakan denda keterlambatan. Penalty hanya berlaku untuk kontrak baru (`NEW_CONTRACT`) dan kontrak yang dibuat ke depannya.
+
+### What was changed
+- `PaymentService.calculateLateFee()` — tambah parameter `holidayScheme?`, return 0 jika `OLD_CONTRACT`
+- Semua 5 pemanggilan `calculateLateFee()` di PaymentService di-update untuk pass `contract.holidayScheme`
+- `ContractService.extendContract()` — tambah pengecekan `holidayScheme !== OLD_CONTRACT` sebelum hitung denda
+- Dokumentasi `CLAUDE.md` section Late Payment Penalty di-update
+
+### Files modified
+- `packages/backend/src/application/services/PaymentService.ts` — calculateLateFee + 5 call sites
+- `packages/backend/src/application/services/ContractService.ts` — extendContract late fee check
+- `packages/backend/src/__tests__/PaymentService.test.ts` — +2 tests (OLD_CONTRACT no penalty, NEW_CONTRACT penalty)
+- `CLAUDE.md` — kebijakan denda updated
+- `docs/CHANGELOG.md` — entry ini
+
+### Tests
+200 tests (5 suites) — naik dari 198 (tambah 2 tests penalty per holiday scheme)
 
 ---
 
