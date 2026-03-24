@@ -7,6 +7,21 @@
 > - `README.md` — Dokumentasi project (tech stack, API endpoints, architecture, cara setup)
 > - `docs/CHANGELOG.md` — History lengkap semua perubahan per phase
 
+## Penggunaan Skills (WAJIB)
+
+**Claude WAJIB mengecek dan menggunakan available skills (slash commands) sebelum mengerjakan task apapun.** Setiap kali menerima request dari user:
+1. Periksa daftar skills yang tersedia di system context.
+2. Jika ada skill yang cocok dengan trigger condition-nya, **panggil skill tersebut via Skill tool** sebelum mulai bekerja.
+3. Jangan skip skill hanya karena merasa bisa mengerjakan langsung — skills menyediakan workflow dan quality gates yang penting.
+
+Contoh skills yang sering relevan:
+- `superpowers-using-superpowers` — di awal setiap conversation
+- `superpowers-writing-plans` — sebelum implementasi multi-step
+- `superpowers-verification-before-completion` — sebelum klaim selesai
+- `superpowers-systematic-debugging` — saat ada bug atau test failure
+
+---
+
 ## Bahasa Komunikasi
 
 **Claude WAJIB selalu berkomunikasi dalam Bahasa Indonesia dengan user.** Semua penjelasan, pertanyaan, summary, dan output teks harus dalam Bahasa Indonesia. Kecuali untuk:
@@ -285,6 +300,7 @@ OVERDUE → CANCELLED   (manual oleh admin)
 **PENTING**: `grace_period_days` hanya menentukan kapan kontrak berubah status ke OVERDUE (setelah endDate + N hari). `penalty_grace_days` menentukan kapan denda keterlambatan mulai berlaku. Kedua setting ini **independen** dan tidak boleh dicampur.
 
 **Kebijakan denda:**
+- **Kontrak lama (`OLD_CONTRACT` / holidayScheme Minggu) TIDAK dikenakan denda sama sekali.** Penalty hanya berlaku untuk `NEW_CONTRACT` dan kontrak-kontrak yang dibuat ke depannya.
 - Denda dikenakan per hari yang telat bayar **>= penalty_grace_days** (default 2 hari)
 - **Rumus**: hari kena denda jika `(today - tanggalHari) >= penalty_grace_days`
 
