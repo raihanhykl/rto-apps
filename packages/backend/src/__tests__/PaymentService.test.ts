@@ -1538,7 +1538,8 @@ describe('PaymentService', () => {
 
       // Trigger sync
       await paymentService.updatePaymentDayStatus(
-        contract.id, new Date(2026, 2, 10), PaymentDayStatus.PAID, adminId
+        contract.id, new Date(2026, 2, 10), PaymentDayStatus.PAID, adminId,
+        undefined, today
       );
 
       const updated = await contractRepo.findById(contract.id);

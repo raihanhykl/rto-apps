@@ -168,7 +168,7 @@ export class PaymentService {
    * - OVERDUE → ACTIVE jika endDate + grace >= today
    * - ACTIVE → OVERDUE jika endDate + grace < today
    */
-  private async syncContractFromPaymentDays(contractId: string): Promise<void> {
+  private async syncContractFromPaymentDays(contractId: string, today?: Date): Promise<void> {
     const contract = await this.contractRepo.findById(contractId);
     if (!contract) return;
 
@@ -213,7 +213,7 @@ export class PaymentService {
     }
 
     // Bidirectional status transition
-    const today = getWibToday();
+    const effectiveToday = today || getWibToday();
     const effectiveEndDate = lastContiguousDate || contract.endDate;
     const graceEnd = new Date(effectiveEndDate);
     graceEnd.setDate(graceEnd.getDate() + contract.gracePeriodDays);
@@ -221,9 +221,9 @@ export class PaymentService {
     if (totalPaid >= contract.ownershipTargetDays && contract.status !== ContractStatus.COMPLETED) {
       updates.status = ContractStatus.COMPLETED;
       updates.completedAt = new Date();
-    } else if (contract.status === ContractStatus.OVERDUE && graceEnd >= today) {
+    } else if (contract.status === ContractStatus.OVERDUE && graceEnd >= effectiveToday) {
       updates.status = ContractStatus.ACTIVE;
-    } else if (contract.status === ContractStatus.ACTIVE && graceEnd < today) {
+    } else if (contract.status === ContractStatus.ACTIVE && graceEnd < effectiveToday) {
       updates.status = ContractStatus.OVERDUE;
     }
 
@@ -1188,6 +1188,7 @@ export class PaymentService {
     newStatus: PaymentDayStatus,
     adminId: string,
     notes?: string,
+    today?: Date,
   ): Promise<PaymentDay> {
     const normalizedDate = toLocalMidnightWib(date);
     const pd = await this.paymentDayRepo.findByContractAndDate(contractId, normalizedDate);
@@ -1205,7 +1206,7 @@ export class PaymentService {
     });
     if (!updated) throw new Error('Failed to update PaymentDay');
 
-    await this.syncContractFromPaymentDays(contractId);
+    await this.syncContractFromPaymentDays(contractId, today);
 
     await this.auditRepo.create({
       id: uuidv4(),
