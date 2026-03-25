@@ -4,7 +4,7 @@ Use this prompt template when spawning scanner Tasks in Step 4. Use `subagent_ty
 
 ## Template
 
-```
+````
 You are a Semgrep scanner for [LANGUAGE_CATEGORY].
 
 ## Task
@@ -31,24 +31,28 @@ Example:
 mkdir -p [OUTPUT_DIR]/repos
 # For each GitHub URL ruleset, clone into [OUTPUT_DIR]/repos/[name]:
 git clone --depth 1 https://github.com/org/repo [OUTPUT_DIR]/repos/repo-name
-```
+````
 
 ### Generate commands for EACH approved ruleset:
+
 ```bash
 semgrep [--pro if available] --metrics=off [SEVERITY_FLAGS] [INCLUDE_FLAGS] --config [RULESET] --json -o [OUTPUT_DIR]/raw/[lang]-[ruleset].json --sarif-output=[OUTPUT_DIR]/raw/[lang]-[ruleset].sarif [TARGET] &
 ```
 
 Wait for all to complete:
+
 ```bash
 wait
 ```
 
 ### Clean up cloned repos:
+
 ```bash
 [ -n "[OUTPUT_DIR]" ] && rm -rf [OUTPUT_DIR]/repos
 ```
 
 ## Critical Rules
+
 - Use ONLY the rulesets listed above - do not add or remove any
 - Always use --metrics=off (prevents sending telemetry to Semgrep servers)
 - Use --pro when Pro is available (enables cross-file taint tracking)
@@ -60,11 +64,14 @@ wait
 - After all scans complete, delete [OUTPUT_DIR]/repos/ to avoid leaving cloned repos behind
 
 ## Output
+
 Report:
+
 - Number of findings per ruleset
 - Any scan errors
 - File paths of JSON results (in [OUTPUT_DIR]/raw/)
 - [If Pro] Note any cross-file findings detected
+
 ```
 
 ## Variable Substitutions
@@ -83,9 +90,11 @@ Report:
 ## Example: Python Scanner Task
 
 ```
+
 You are a Semgrep scanner for Python.
 
 ## Task
+
 Run Semgrep scans for Python files and save results to /path/to/static_analysis_semgrep_1/raw.
 
 ## Pro Engine Status: true
@@ -93,6 +102,7 @@ Run Semgrep scans for Python files and save results to /path/to/static_analysis_
 ## Scan Mode: run-all
 
 ## APPROVED RULESETS (from user-confirmed plan)
+
 - p/python
 - p/django
 - p/security-audit
@@ -102,12 +112,14 @@ Run Semgrep scans for Python files and save results to /path/to/static_analysis_
 ## Commands to Run (in parallel)
 
 ### Clone GitHub URL rulesets first:
+
 ```bash
 mkdir -p /path/to/static_analysis_semgrep_1/repos
 git clone --depth 1 https://github.com/trailofbits/semgrep-rules /path/to/static_analysis_semgrep_1/repos/trailofbits
 ```
 
 ### Run scans:
+
 ```bash
 semgrep --pro --metrics=off --include="*.py" --config p/python --json -o /path/to/static_analysis_semgrep_1/raw/python-python.json --sarif-output=/path/to/static_analysis_semgrep_1/raw/python-python.sarif /path/to/codebase &
 semgrep --pro --metrics=off --include="*.py" --config p/django --json -o /path/to/static_analysis_semgrep_1/raw/python-django.json --sarif-output=/path/to/static_analysis_semgrep_1/raw/python-django.sarif /path/to/codebase &
@@ -118,23 +130,30 @@ wait
 ```
 
 ### Clean up cloned repos:
+
 ```bash
 rm -rf /path/to/static_analysis_semgrep_1/repos
 ```
 
 ## Critical Rules
+
 - Use ONLY the rulesets listed above - do not add or remove any
 - Always use --metrics=off
 - Use --pro when Pro is available
 - Run all rulesets in parallel with & and wait
 - Clone GitHub URL rulesets into the output dir repos/ subfolder, use local path as --config
-- Add --include="*.py" to language-specific rulesets (p/python, p/django) but NOT to p/security-audit, p/secrets, or third-party repos
+- Add --include="\*.py" to language-specific rulesets (p/python, p/django) but NOT to p/security-audit, p/secrets, or third-party repos
 - Delete repos/ after scanning
 
 ## Output
+
 Report:
+
 - Number of findings per ruleset
 - Any scan errors
 - File paths of JSON results (in raw/ subdirectory)
 - Note any cross-file findings detected
+
+```
+
 ```

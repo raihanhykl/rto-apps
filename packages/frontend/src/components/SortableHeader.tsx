@@ -1,12 +1,12 @@
-"use client";
+'use client';
 
-import { ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 
 interface SortableHeaderProps {
   label: string;
   field: string;
   currentSortBy?: string;
-  currentSortOrder?: "asc" | "desc";
+  currentSortOrder?: 'asc' | 'desc';
   onSort: (field: string) => void;
   className?: string;
 }
@@ -17,7 +17,7 @@ export function SortableHeader({
   currentSortBy,
   currentSortOrder,
   onSort,
-  className = "",
+  className = '',
 }: SortableHeaderProps) {
   const isActive = currentSortBy === field;
 
@@ -29,7 +29,7 @@ export function SortableHeader({
       <div className="flex items-center gap-1">
         {label}
         {isActive ? (
-          currentSortOrder === "asc" ? (
+          currentSortOrder === 'asc' ? (
             <ArrowUp className="h-3.5 w-3.5" />
           ) : (
             <ArrowDown className="h-3.5 w-3.5" />

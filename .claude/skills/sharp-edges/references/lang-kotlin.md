@@ -15,6 +15,7 @@ result.length  // NPE if Java returned null!
 ```
 
 **Fix**: Explicitly declare nullability when calling Java:
+
 ```kotlin
 val result: String? = javaLibrary.getValue()  // Treat as nullable
 val result: String = javaLibrary.getValue()   // Throws if null
@@ -35,6 +36,7 @@ val name = user!!.profile!!.name!!  // Triple jeopardy
 ```
 
 **Fix**: Use safe calls and elvis operator:
+
 ```kotlin
 val value = nullableValue ?: return
 val value = nullableValue ?: throw IllegalStateException("...")
@@ -60,6 +62,7 @@ if (::config.isInitialized) {
 ```
 
 **Better alternatives**:
+
 ```kotlin
 // Lazy initialization
 val config: Config by lazy { loadConfig() }
@@ -131,6 +134,7 @@ suspend fun wrapped() {
 ```
 
 **Fix**: Check for cancellation and rethrow CancellationException:
+
 ```kotlin
 suspend fun longOperation() {
     while (true) {
@@ -227,6 +231,7 @@ list.asSequence()
 ```
 
 But sequences can also surprise:
+
 ```kotlin
 // DANGEROUS: Sequence operations return new sequences, not results
 val seq = listOf(1, 2, 3).asSequence()
@@ -251,15 +256,15 @@ obj.process()  // "member" - members always win
 
 ## Detection Patterns
 
-| Pattern | Risk |
-|---------|------|
-| Java interop without explicit nullability | Platform type NPE |
-| `!!` assertion | Null pointer exception |
-| `lateinit` without isInitialized check | Uninitialized access |
-| `data class` with validation in init | copy() bypasses validation |
-| `suspend fun` without ensureActive/yield | Can't cancel |
-| `catch (e: Exception)` in coroutines | Swallows cancellation |
-| `@JvmInline` with nullable/generic | Unexpected boxing |
-| `by lazy(LazyThreadSafetyMode.NONE)` | Thread safety |
-| `asSequence()` without terminal op | Nothing executes |
-| Extension function same name as member | Extension never called |
+| Pattern                                   | Risk                       |
+| ----------------------------------------- | -------------------------- |
+| Java interop without explicit nullability | Platform type NPE          |
+| `!!` assertion                            | Null pointer exception     |
+| `lateinit` without isInitialized check    | Uninitialized access       |
+| `data class` with validation in init      | copy() bypasses validation |
+| `suspend fun` without ensureActive/yield  | Can't cancel               |
+| `catch (e: Exception)` in coroutines      | Swallows cancellation      |
+| `@JvmInline` with nullable/generic        | Unexpected boxing          |
+| `by lazy(LazyThreadSafetyMode.NONE)`      | Thread safety              |
+| `asSequence()` without terminal op        | Nothing executes           |
+| Extension function same name as member    | Extension never called     |

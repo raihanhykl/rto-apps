@@ -1,6 +1,6 @@
 ---
 name: insecure-defaults
-description: "Detects fail-open insecure defaults (hardcoded secrets, weak auth, permissive security) that allow apps to run insecurely in production. Use when auditing security, reviewing config management, or analyzing environment variable handling."
+description: 'Detects fail-open insecure defaults (hardcoded secrets, weak auth, permissive security) that allow apps to run insecurely in production. Use when auditing security, reviewing config management, or analyzing environment variable handling.'
 allowed-tools:
   - Read
   - Grep
@@ -25,6 +25,7 @@ Finds **fail-open** vulnerabilities where apps run insecurely with missing confi
 ## When NOT to Use
 
 Do not use this skill for:
+
 - **Test fixtures** explicitly scoped to test environments (files in `test/`, `spec/`, `__tests__/`)
 - **Example/template files** (`.example`, `.template`, `.sample` suffixes)
 - **Development-only tools** (local Docker Compose for dev, debug scripts)
@@ -52,6 +53,7 @@ Determine language, framework, and project conventions. Use this information to 
 
 **Example**
 Search for patterns in `**/config/`, `**/auth/`, `**/database/`, and env files:
+
 - **Fallback secrets:** `getenv.*\) or ['"]`, `process\.env\.[A-Z_]+ \|\| ['"]`, `ENV\.fetch.*default:`
 - **Hardcoded credentials:** `password.*=.*['"][^'"]{8,}['"]`, `api[_-]?key.*=.*['"][^'"]+['"]`
 - **Weak defaults:** `DEBUG.*=.*true`, `AUTH.*=.*false`, `CORS.*=.*\*`
@@ -62,14 +64,17 @@ Tailor search approach based on discovery results.
 Focus on production-reachable code, not test fixtures or example files.
 
 ### 2. VERIFY: Actual Behavior
+
 For each match, trace the code path to understand runtime behavior.
 
 **Questions to answer:**
+
 - When is this code executed? (Startup vs. runtime)
 - What happens if a configuration variable is missing?
 - Is there validation that enforces secure configuration?
 
 ### 3. CONFIRM: Production Impact
+
 Determine if this issue reaches production:
 
 If production config provides the variable → Lower severity (but still a code-level vulnerability)
@@ -78,6 +83,7 @@ If production config missing or uses default → CRITICAL
 ### 4. REPORT: with Evidence
 
 **Example report:**
+
 ```
 Finding: Hardcoded JWT Secret Fallback
 Location: src/auth/jwt.ts:15

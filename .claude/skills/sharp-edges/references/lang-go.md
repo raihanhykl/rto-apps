@@ -17,6 +17,7 @@ func allocate(count int32, size int32) []byte {
 **The Problem**: Unlike Rust (debug panics), Go silently wraps. Fuzzing with go-fuzz may never find overflow bugs because they don't crash.
 
 **Detection**: Arithmetic on integer types, especially:
+
 - Multiplication for size calculations
 - Addition near max values
 - Conversions between integer sizes
@@ -102,6 +103,7 @@ type Config struct {
 ```
 
 **Fix**:
+
 ```go
 decoder := json.NewDecoder(r.Body)
 decoder.DisallowUnknownFields()  // Reject unknown fields
@@ -257,14 +259,14 @@ defer func() {
 
 ## Detection Patterns
 
-| Pattern | Risk |
-|---------|------|
-| `x * y` with int types | Silent overflow |
-| `slice[a:b]` without copy | Aliasing |
-| `return &ConcreteType{}` as interface | Interface nil confusion |
-| `json.Unmarshal` without DisallowUnknownFields | Field injection |
-| `defer` inside `for` | Resource leak |
-| `go func()` with unbuffered channel | Goroutine leak |
-| Closure in loop capturing loop var | Capture bug (pre-1.22) |
-| `map` access from multiple goroutines | Data race |
-| `_, err :=` instead of `_, err =` | Error shadowing |
+| Pattern                                        | Risk                    |
+| ---------------------------------------------- | ----------------------- |
+| `x * y` with int types                         | Silent overflow         |
+| `slice[a:b]` without copy                      | Aliasing                |
+| `return &ConcreteType{}` as interface          | Interface nil confusion |
+| `json.Unmarshal` without DisallowUnknownFields | Field injection         |
+| `defer` inside `for`                           | Resource leak           |
+| `go func()` with unbuffered channel            | Goroutine leak          |
+| Closure in loop capturing loop var             | Capture bug (pre-1.22)  |
+| `map` access from multiple goroutines          | Data race               |
+| `_, err :=` instead of `_, err =`              | Error shadowing         |

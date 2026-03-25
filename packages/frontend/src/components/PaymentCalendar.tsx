@@ -1,15 +1,15 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { useCalendarData } from "@/hooks/useApi";
-import { formatCurrency } from "@/lib/utils";
-import { ChevronLeft, ChevronRight, Calendar } from "lucide-react";
+import { useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { useCalendarData } from '@/hooks/useApi';
+import { formatCurrency } from '@/lib/utils';
+import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 
 interface CalendarDay {
   date: string;
-  status: "paid" | "pending" | "overdue" | "holiday" | "not_issued" | "voided";
+  status: 'paid' | 'pending' | 'overdue' | 'holiday' | 'not_issued' | 'voided';
   amount?: number;
 }
 
@@ -19,18 +19,32 @@ interface PaymentCalendarProps {
 }
 
 const STATUS_COLORS: Record<string, { bg: string; text: string; label: string }> = {
-  paid: { bg: "bg-green-500", text: "text-white", label: "Sudah Bayar" },
-  pending: { bg: "bg-yellow-400", text: "text-yellow-900", label: "Belum Bayar" },
-  overdue: { bg: "bg-red-500", text: "text-white", label: "Terlambat" },
-  holiday: { bg: "bg-blue-400", text: "text-white", label: "Libur Bayar" },
-  not_issued: { bg: "bg-gray-200 dark:bg-gray-700", text: "text-gray-400 dark:text-gray-500", label: "Belum Terbit" },
-  voided: { bg: "bg-gray-400", text: "text-white", label: "Dibatalkan" },
+  paid: { bg: 'bg-green-500', text: 'text-white', label: 'Sudah Bayar' },
+  pending: { bg: 'bg-yellow-400', text: 'text-yellow-900', label: 'Belum Bayar' },
+  overdue: { bg: 'bg-red-500', text: 'text-white', label: 'Terlambat' },
+  holiday: { bg: 'bg-blue-400', text: 'text-white', label: 'Libur Bayar' },
+  not_issued: {
+    bg: 'bg-gray-200 dark:bg-gray-700',
+    text: 'text-gray-400 dark:text-gray-500',
+    label: 'Belum Terbit',
+  },
+  voided: { bg: 'bg-gray-400', text: 'text-white', label: 'Dibatalkan' },
 };
 
-const DAY_NAMES = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
+const DAY_NAMES = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
 const MONTH_NAMES = [
-  "Januari", "Februari", "Maret", "April", "Mei", "Juni",
-  "Juli", "Agustus", "September", "Oktober", "November", "Desember",
+  'Januari',
+  'Februari',
+  'Maret',
+  'April',
+  'Mei',
+  'Juni',
+  'Juli',
+  'Agustus',
+  'September',
+  'Oktober',
+  'November',
+  'Desember',
 ];
 
 export default function PaymentCalendar({ contractId, billingStartDate }: PaymentCalendarProps) {
@@ -41,7 +55,7 @@ export default function PaymentCalendar({ contractId, billingStartDate }: Paymen
   const { data: calendarData, isLoading: loading } = useCalendarData(
     billingStartDate ? contractId : undefined,
     year,
-    month
+    month,
   );
   const days = (calendarData as CalendarDay[]) || [];
 
@@ -75,7 +89,7 @@ export default function PaymentCalendar({ contractId, billingStartDate }: Paymen
   // Build dayMap for quick lookup
   const dayMap = new Map<number, CalendarDay>();
   days.forEach((d) => {
-    const dayNum = parseInt(d.date.split("-")[2], 10);
+    const dayNum = parseInt(d.date.split('-')[2], 10);
     dayMap.set(dayNum, d);
   });
 
@@ -140,7 +154,10 @@ export default function PaymentCalendar({ contractId, billingStartDate }: Paymen
             {/* Day headers */}
             <div className="grid grid-cols-7 gap-1 mb-1">
               {DAY_NAMES.map((name) => (
-                <div key={name} className="text-center text-xs font-medium text-muted-foreground py-1">
+                <div
+                  key={name}
+                  className="text-center text-xs font-medium text-muted-foreground py-1"
+                >
                   {name}
                 </div>
               ))}
@@ -157,7 +174,7 @@ export default function PaymentCalendar({ contractId, billingStartDate }: Paymen
               {Array.from({ length: daysInMonth }).map((_, i) => {
                 const dayNum = i + 1;
                 const dayData = dayMap.get(dayNum);
-                const status = dayData?.status || "not_issued";
+                const status = dayData?.status || 'not_issued';
                 const colors = STATUS_COLORS[status];
                 const isToday = isCurrentMonth && dayNum === todayDate;
 
@@ -167,11 +184,11 @@ export default function PaymentCalendar({ contractId, billingStartDate }: Paymen
                     className={`
                       h-9 rounded-md flex items-center justify-center text-xs font-medium cursor-default
                       transition-all ${colors.bg} ${colors.text}
-                      ${isToday ? "ring-2 ring-primary ring-offset-1 ring-offset-background" : ""}
+                      ${isToday ? 'ring-2 ring-primary ring-offset-1 ring-offset-background' : ''}
                     `}
                     onMouseEnter={() => dayData && setHoveredDay(dayData)}
                     onMouseLeave={() => setHoveredDay(null)}
-                    title={`${dayNum} ${MONTH_NAMES[month - 1]} - ${colors.label}${dayData?.amount ? ` (${formatCurrency(dayData.amount)})` : ""}`}
+                    title={`${dayNum} ${MONTH_NAMES[month - 1]} - ${colors.label}${dayData?.amount ? ` (${formatCurrency(dayData.amount)})` : ''}`}
                   >
                     {dayNum}
                   </div>
@@ -183,7 +200,7 @@ export default function PaymentCalendar({ contractId, billingStartDate }: Paymen
             {hoveredDay && (
               <div className="mt-2 text-xs text-center text-muted-foreground">
                 {hoveredDay.date} — {STATUS_COLORS[hoveredDay.status]?.label}
-                {hoveredDay.amount ? ` — ${formatCurrency(hoveredDay.amount)}` : ""}
+                {hoveredDay.amount ? ` — ${formatCurrency(hoveredDay.amount)}` : ''}
               </div>
             )}
 

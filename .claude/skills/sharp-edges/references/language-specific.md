@@ -418,15 +418,15 @@ $obj = unserialize($user_input);
 ```javascript
 // DANGEROUS: Merging untrusted objects
 function merge(target, source) {
-    for (let key in source) {
-        target[key] = source[key];  // Includes __proto__!
-    }
+  for (let key in source) {
+    target[key] = source[key]; // Includes __proto__!
+  }
 }
 
 // Attacker sends: {"__proto__": {"isAdmin": true}}
 merge({}, userInput);
 // Now ALL objects have isAdmin === true
-({}).isAdmin  // true
+({}).isAdmin; // true
 ```
 
 **Fix**: Check `hasOwnProperty`, use `Object.create(null)`, or safe merge libraries.
@@ -436,7 +436,7 @@ merge({}, userInput);
 ```javascript
 // DANGEROUS: Catastrophic backtracking
 const regex = /^(a+)+$/;
-regex.test("aaaaaaaaaaaaaaaaaaaaaaaaaaaa!");
+regex.test('aaaaaaaaaaaaaaaaaaaaaaaaaaaa!');
 // Exponential time - freezes the event loop
 
 // Patterns to avoid: nested quantifiers (a+)+, (a*)*
@@ -447,11 +447,11 @@ regex.test("aaaaaaaaaaaaaaaaaaaaaaaaaaaa!");
 
 ```javascript
 // DANGEROUS: Radix not specified
-parseInt("08");   // 8 in modern JS, was 0 in old (octal)
-parseInt("0x10"); // 16 - hex prefix recognized
+parseInt('08'); // 8 in modern JS, was 0 in old (octal)
+parseInt('0x10'); // 16 - hex prefix recognized
 
 // SAFE: Always specify radix
-parseInt("08", 10);  // 8
+parseInt('08', 10); // 8
 ```
 
 ---
@@ -573,16 +573,16 @@ params.require(:user).permit(:name, :email)  # Explicitly allowlist
 
 ## Quick Reference Table
 
-| Language | Primary Sharp Edges |
-|----------|-------------------|
-| C/C++ | Integer overflow UB, buffer overflows, format strings, memory cleanup |
-| Go | Silent int overflow, slice aliasing, interface nil, JSON case-insensitive |
-| Rust | Debug/release overflow difference, unsafe blocks, mem::forget |
-| Swift | Force unwrap, implicitly unwrapped optionals |
-| Java | == vs equals, type erasure, serialization, swallowed exceptions |
-| Kotlin | Platform types, !!, lateinit |
-| C# | NRT opt-in, default struct values, IDisposable leaks |
-| PHP | Type juggling (==), extract(), unserialize() |
-| JS/TS | == coercion, prototype pollution, ReDoS, parseInt radix |
-| Python | Mutable defaults, eval/exec/pickle, late binding, is vs == |
-| Ruby | eval/send/constantize, YAML.load, mass assignment |
+| Language | Primary Sharp Edges                                                       |
+| -------- | ------------------------------------------------------------------------- |
+| C/C++    | Integer overflow UB, buffer overflows, format strings, memory cleanup     |
+| Go       | Silent int overflow, slice aliasing, interface nil, JSON case-insensitive |
+| Rust     | Debug/release overflow difference, unsafe blocks, mem::forget             |
+| Swift    | Force unwrap, implicitly unwrapped optionals                              |
+| Java     | == vs equals, type erasure, serialization, swallowed exceptions           |
+| Kotlin   | Platform types, !!, lateinit                                              |
+| C#       | NRT opt-in, default struct values, IDisposable leaks                      |
+| PHP      | Type juggling (==), extract(), unserialize()                              |
+| JS/TS    | == coercion, prototype pollution, ReDoS, parseInt radix                   |
+| Python   | Mutable defaults, eval/exec/pickle, late binding, is vs ==                |
+| Ruby     | eval/send/constantize, YAML.load, mass assignment                         |

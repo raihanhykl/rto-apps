@@ -9,14 +9,17 @@ Detailed patterns for identifying misuse-prone cryptographic interfaces.
 The JSON Web Token standard allows the token itself to specify which algorithm to use for verification. This is catastrophically wrong.
 
 **Attack 1: "none" algorithm**
+
 ```json
-{"alg": "none", "typ": "JWT"}
+{ "alg": "none", "typ": "JWT" }
 ```
+
 Many libraries accept this and skip signature verification entirely.
 
 **Attack 2: Algorithm confusion (RS256 → HS256)**
+
 - Server expects RSA signature, uses public key for verification
-- Attacker changes algorithm to HMAC, uses *public key* as HMAC secret
+- Attacker changes algorithm to HMAC, uses _public key_ as HMAC secret
 - Public key is public, so attacker can forge valid signatures
 
 **Root cause**: Trusting untrusted input to select security mechanisms.

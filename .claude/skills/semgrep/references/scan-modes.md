@@ -22,11 +22,11 @@ This excludes LOW/INFO severity findings at scan time, reducing output volume be
 
 After scanning, filter each JSON result file to keep only findings matching ALL of:
 
-| Metadata Field | Accepted Values | Rationale |
-|---|---|---|
-| `extra.metadata.category` | `"security"` | Excludes correctness, best-practice, maintainability, performance |
-| `extra.metadata.confidence` | `"MEDIUM"`, `"HIGH"` | Excludes low-precision rules (high false positive rate) |
-| `extra.metadata.impact` | `"MEDIUM"`, `"HIGH"` | Excludes low-impact informational findings |
+| Metadata Field              | Accepted Values      | Rationale                                                         |
+| --------------------------- | -------------------- | ----------------------------------------------------------------- |
+| `extra.metadata.category`   | `"security"`         | Excludes correctness, best-practice, maintainability, performance |
+| `extra.metadata.confidence` | `"MEDIUM"`, `"HIGH"` | Excludes low-precision rules (high false positive rate)           |
+| `extra.metadata.impact`     | `"MEDIUM"`, `"HIGH"` | Excludes low-impact informational findings                        |
 
 **Third-party rules** (Trail of Bits, 0xdea, Decurity, etc.) may not have `confidence`/`impact`/`category` metadata. Findings **without** these metadata fields are **kept** — we cannot filter what is not annotated, and third-party rules are typically security-focused.
 
@@ -34,14 +34,14 @@ After scanning, filter each JSON result file to keep only findings matching ALL 
 
 Semgrep security rules have these metadata fields (required for `category: security` in the official registry):
 
-| Field | Purpose | Values |
-|---|---|---|
-| `severity` (top-level) | Overall rule severity, derived from likelihood × impact | `LOW`, `MEDIUM`, `HIGH`, `CRITICAL` |
-| `category` | Rule category | `security`, `correctness`, `best-practice`, `maintainability`, `performance` |
-| `confidence` | True positive rate of the rule (precision) | `LOW`, `MEDIUM`, `HIGH` |
-| `impact` | Potential damage if vulnerability is exploited | `LOW`, `MEDIUM`, `HIGH` |
-| `likelihood` | How likely the vulnerability is exploitable | `LOW`, `MEDIUM`, `HIGH` |
-| `subcategory` | Finding type | `vuln`, `audit`, `secure default` |
+| Field                  | Purpose                                                 | Values                                                                       |
+| ---------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `severity` (top-level) | Overall rule severity, derived from likelihood × impact | `LOW`, `MEDIUM`, `HIGH`, `CRITICAL`                                          |
+| `category`             | Rule category                                           | `security`, `correctness`, `best-practice`, `maintainability`, `performance` |
+| `confidence`           | True positive rate of the rule (precision)              | `LOW`, `MEDIUM`, `HIGH`                                                      |
+| `impact`               | Potential damage if vulnerability is exploited          | `LOW`, `MEDIUM`, `HIGH`                                                      |
+| `likelihood`           | How likely the vulnerability is exploitable             | `LOW`, `MEDIUM`, `HIGH`                                                      |
+| `subcategory`          | Finding type                                            | `vuln`, `audit`, `secure default`                                            |
 
 Key relationship: `severity = f(likelihood, impact)` while `confidence` is independent (describes rule quality, not vulnerability severity).
 
@@ -106,5 +106,6 @@ semgrep [--pro if available] --metrics=off [SEVERITY_FLAGS] --config [RULESET] -
 ```
 
 Where `[SEVERITY_FLAGS]` is:
-- **Run all**: *(empty)*
+
+- **Run all**: _(empty)_
 - **Important only**: `--severity MEDIUM --severity HIGH --severity CRITICAL`

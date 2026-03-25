@@ -9,3 +9,4 @@ coverage
 pnpm-lock.yaml
 package-lock.json
 prisma/migrations
+.claude

@@ -22,13 +22,19 @@ test.describe('Dashboard', () => {
 
   test('should navigate to customers page', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('link', { name: /customer/i }).first().click();
+    await page
+      .getByRole('link', { name: /customer/i })
+      .first()
+      .click();
     await expect(page).toHaveURL(/\/customers/);
   });
 
   test('should navigate to contracts page', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('link', { name: /kontrak|contract/i }).first().click();
+    await page
+      .getByRole('link', { name: /kontrak|contract/i })
+      .first()
+      .click();
     await expect(page).toHaveURL(/\/contracts/);
   });
 });

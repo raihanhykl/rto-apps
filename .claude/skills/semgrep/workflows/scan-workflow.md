@@ -16,8 +16,8 @@ TaskCreate: "Merge results and report" (Step 5) - blockedBy: Step 4
 
 ### Mandatory Gate
 
-| Task | Gate Type | Cannot Proceed Until |
-|------|-----------|---------------------|
+| Task   | Gate Type     | Cannot Proceed Until                     |
+| ------ | ------------- | ---------------------------------------- |
 | Step 3 | **HARD GATE** | User explicitly approves rulesets + plan |
 
 Mark Step 3 as `completed` ONLY after user says "yes", "proceed", "approved", or equivalent.
@@ -69,19 +69,19 @@ Also check for framework markers: `package.json`, `pyproject.toml`, `Gemfile`, `
 
 Map findings to categories:
 
-| Detection | Category |
-|-----------|----------|
-| `.py`, `pyproject.toml` | Python |
+| Detection                    | Category              |
+| ---------------------------- | --------------------- |
+| `.py`, `pyproject.toml`      | Python                |
 | `.js`, `.ts`, `package.json` | JavaScript/TypeScript |
-| `.go`, `go.mod` | Go |
-| `.rb`, `Gemfile` | Ruby |
-| `.java`, `pom.xml` | Java |
-| `.php` | PHP |
-| `.c`, `.cpp` | C/C++ |
-| `.rs`, `Cargo.toml` | Rust |
-| `Dockerfile` | Docker |
-| `.tf` | Terraform |
-| k8s manifests | Kubernetes |
+| `.go`, `go.mod`              | Go                    |
+| `.rb`, `Gemfile`             | Ruby                  |
+| `.java`, `pom.xml`           | Java                  |
+| `.php`                       | PHP                   |
+| `.c`, `.cpp`                 | C/C++                 |
+| `.rs`, `Cargo.toml`          | Rust                  |
+| `Dockerfile`                 | Docker                |
+| `.tf`                        | Terraform             |
+| k8s manifests                | Kubernetes            |
 
 ---
 
@@ -108,6 +108,7 @@ Record the selected mode. It affects Steps 4 and 5.
 **Then, select rulesets.** Using the detected languages and frameworks from Step 1, follow the **Ruleset Selection Algorithm** in [rulesets.md](../references/rulesets.md).
 
 The algorithm covers:
+
 1. Security baseline (always included)
 2. Language-specific rulesets
 3. Framework rulesets (if detected)
@@ -193,6 +194,7 @@ Present plan to user with **explicit ruleset listing**:
 ### Pre-Scan Checklist
 
 Before marking Step 3 complete:
+
 - [ ] Target directory shown to user
 - [ ] Engine type (Pro/OSS) displayed
 - [ ] Languages detected and listed
@@ -236,6 +238,7 @@ RULESETS
 Use the scanner task prompt template from [scanner-task-prompt.md](../references/scanner-task-prompt.md).
 
 **Mode-dependent scanner flags:**
+
 - **Run all**: No additional flags
 - **Important only**: Add `--severity MEDIUM --severity HIGH --severity CRITICAL` to every `semgrep` command
 

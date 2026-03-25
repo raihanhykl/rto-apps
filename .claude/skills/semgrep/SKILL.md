@@ -101,12 +101,13 @@ semgrep --pro --validate --config p/default 2>/dev/null && echo "Pro available" 
 
 Select mode in Step 2 of the workflow. Mode affects both scanner flags and post-processing.
 
-| Mode | Coverage | Findings Reported |
-|------|----------|-------------------|
-| **Run all** | All rulesets, all severity levels | Everything |
+| Mode               | Coverage                             | Findings Reported                                  |
+| ------------------ | ------------------------------------ | -------------------------------------------------- |
+| **Run all**        | All rulesets, all severity levels    | Everything                                         |
 | **Important only** | All rulesets, pre- and post-filtered | Security vulns only, medium-high confidence/impact |
 
 **Important only** applies two filter layers:
+
 1. **Pre-filter**: `--severity MEDIUM --severity HIGH --severity CRITICAL` (CLI flag)
 2. **Post-filter**: JSON metadata — keeps only `category=security`, `confidence∈{MEDIUM,HIGH}`, `impact∈{MEDIUM,HIGH}`
 
@@ -140,13 +141,13 @@ See [scan-modes.md](references/scan-modes.md) for metadata criteria and jq filte
 
 **Follow the detailed workflow in [scan-workflow.md](workflows/scan-workflow.md).** Summary:
 
-| Step | Action | Gate | Key Reference |
-|------|--------|------|---------------|
-| 1 | Resolve output dir, detect languages + Pro availability | — | Use Glob, not Bash |
-| 2 | Select scan mode + rulesets | — | [rulesets.md](references/rulesets.md) |
-| 3 | Present plan, get explicit approval | ⛔ HARD | AskUserQuestion |
-| 4 | Spawn parallel scan Tasks | — | [scanner-task-prompt.md](references/scanner-task-prompt.md) |
-| 5 | Merge results and report | — | Merge script (below) |
+| Step | Action                                                  | Gate    | Key Reference                                               |
+| ---- | ------------------------------------------------------- | ------- | ----------------------------------------------------------- |
+| 1    | Resolve output dir, detect languages + Pro availability | —       | Use Glob, not Bash                                          |
+| 2    | Select scan mode + rulesets                             | —       | [rulesets.md](references/rulesets.md)                       |
+| 3    | Present plan, get explicit approval                     | ⛔ HARD | AskUserQuestion                                             |
+| 4    | Spawn parallel scan Tasks                               | —       | [scanner-task-prompt.md](references/scanner-task-prompt.md) |
+| 5    | Merge results and report                                | —       | Merge script (below)                                        |
 
 **Task enforcement:** On invocation, create 5 tasks with blockedBy dependencies (each step blocks the previous). Step 3 is a HARD GATE — mark complete ONLY after user explicitly approves.
 
@@ -158,40 +159,40 @@ uv run {baseDir}/scripts/merge_sarif.py $OUTPUT_DIR/raw $OUTPUT_DIR/results/resu
 
 ## Agents
 
-| Agent | Tools | Purpose |
-|-------|-------|---------|
-| `static-analysis:semgrep-scanner` | Bash | Executes parallel semgrep scans for a language category |
+| Agent                             | Tools | Purpose                                                 |
+| --------------------------------- | ----- | ------------------------------------------------------- |
+| `static-analysis:semgrep-scanner` | Bash  | Executes parallel semgrep scans for a language category |
 
 Use `subagent_type: static-analysis:semgrep-scanner` in Step 4 when spawning Task subagents.
 
 ## Rationalizations to Reject
 
-| Shortcut | Why It's Wrong |
-|----------|----------------|
-| "User asked for scan, that's approval" | Original request ≠ plan approval. Present plan, use AskUserQuestion, await explicit "yes" |
-| "Step 3 task is blocking, just mark complete" | Lying about task status defeats enforcement. Only mark complete after real approval |
-| "I already know what they want" | Assumptions cause scanning wrong directories/rulesets. Present plan for verification |
-| "Just use default rulesets" | User must see and approve exact rulesets before scan |
-| "Add extra rulesets without asking" | Modifying approved list without consent breaks trust |
-| "Third-party rulesets are optional" | Trail of Bits, 0xdea, Decurity catch vulnerabilities not in official registry — REQUIRED |
-| "Use --config auto" | Sends metrics; less control over rulesets |
-| "One Task at a time" | Defeats parallelism; spawn all Tasks together |
-| "Pro is too slow, skip --pro" | Cross-file analysis catches 250% more true positives; worth the time |
-| "Semgrep handles GitHub URLs natively" | URL handling fails on repos with non-standard YAML; always clone first |
-| "Cleanup is optional" | Cloned repos pollute the user's workspace and accumulate across runs |
-| "Use `.` or relative path as target" | Subagents need absolute paths to avoid ambiguity |
-| "Let the user pick an output dir later" | Output directory must be resolved at Step 1, before any files are created |
+| Shortcut                                      | Why It's Wrong                                                                            |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| "User asked for scan, that's approval"        | Original request ≠ plan approval. Present plan, use AskUserQuestion, await explicit "yes" |
+| "Step 3 task is blocking, just mark complete" | Lying about task status defeats enforcement. Only mark complete after real approval       |
+| "I already know what they want"               | Assumptions cause scanning wrong directories/rulesets. Present plan for verification      |
+| "Just use default rulesets"                   | User must see and approve exact rulesets before scan                                      |
+| "Add extra rulesets without asking"           | Modifying approved list without consent breaks trust                                      |
+| "Third-party rulesets are optional"           | Trail of Bits, 0xdea, Decurity catch vulnerabilities not in official registry — REQUIRED  |
+| "Use --config auto"                           | Sends metrics; less control over rulesets                                                 |
+| "One Task at a time"                          | Defeats parallelism; spawn all Tasks together                                             |
+| "Pro is too slow, skip --pro"                 | Cross-file analysis catches 250% more true positives; worth the time                      |
+| "Semgrep handles GitHub URLs natively"        | URL handling fails on repos with non-standard YAML; always clone first                    |
+| "Cleanup is optional"                         | Cloned repos pollute the user's workspace and accumulate across runs                      |
+| "Use `.` or relative path as target"          | Subagents need absolute paths to avoid ambiguity                                          |
+| "Let the user pick an output dir later"       | Output directory must be resolved at Step 1, before any files are created                 |
 
 ## Reference Index
 
-| File | Content |
-|------|---------|
-| [rulesets.md](references/rulesets.md) | Complete ruleset catalog and selection algorithm |
-| [scan-modes.md](references/scan-modes.md) | Pre/post-filter criteria and jq commands |
-| [scanner-task-prompt.md](references/scanner-task-prompt.md) | Template for spawning scanner subagents |
+| File                                                        | Content                                          |
+| ----------------------------------------------------------- | ------------------------------------------------ |
+| [rulesets.md](references/rulesets.md)                       | Complete ruleset catalog and selection algorithm |
+| [scan-modes.md](references/scan-modes.md)                   | Pre/post-filter criteria and jq commands         |
+| [scanner-task-prompt.md](references/scanner-task-prompt.md) | Template for spawning scanner subagents          |
 
-| Workflow | Purpose |
-|----------|---------|
+| Workflow                                       | Purpose                                |
+| ---------------------------------------------- | -------------------------------------- |
 | [scan-workflow.md](workflows/scan-workflow.md) | Complete 5-step scan execution process |
 
 ## Success Criteria

@@ -24,7 +24,7 @@ class ApiClient {
     const token = this.getToken();
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      ...(options.headers as Record<string, string> || {}),
+      ...((options.headers as Record<string, string>) || {}),
     };
 
     if (token) {
@@ -88,7 +88,14 @@ class ApiClient {
     return this.request<any[]>(`/customers${query}`);
   }
 
-  async getCustomersPaginated(params: { page?: number; limit?: number; sortBy?: string; sortOrder?: 'asc' | 'desc'; search?: string; gender?: string }) {
+  async getCustomersPaginated(params: {
+    page?: number;
+    limit?: number;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
+    search?: string;
+    gender?: string;
+  }) {
     const query = new URLSearchParams();
     query.set('page', String(params.page || 1));
     query.set('limit', String(params.limit || 20));
@@ -126,7 +133,18 @@ class ApiClient {
     return this.request<any[]>('/contracts');
   }
 
-  async getContractsPaginated(params: { page?: number; limit?: number; sortBy?: string; sortOrder?: 'asc' | 'desc'; search?: string; status?: string; motorModel?: string; batteryType?: string; dpScheme?: string; dpFullyPaid?: string }) {
+  async getContractsPaginated(params: {
+    page?: number;
+    limit?: number;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
+    search?: string;
+    status?: string;
+    motorModel?: string;
+    batteryType?: string;
+    dpScheme?: string;
+    dpFullyPaid?: string;
+  }) {
     const query = new URLSearchParams();
     query.set('page', String(params.page || 1));
     query.set('limit', String(params.limit || 20));
@@ -181,7 +199,18 @@ class ApiClient {
     });
   }
 
-  async editContract(id: string, data: { notes?: string; gracePeriodDays?: number; ownershipTargetDays?: number; color?: string; year?: number | null; vinNumber?: string; engineNumber?: string }) {
+  async editContract(
+    id: string,
+    data: {
+      notes?: string;
+      gracePeriodDays?: number;
+      ownershipTargetDays?: number;
+      color?: string;
+      year?: number | null;
+      vinNumber?: string;
+      engineNumber?: string;
+    },
+  ) {
     return this.request<any>(`/contracts/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
@@ -216,7 +245,18 @@ class ApiClient {
     return this.request<any[]>('/payments');
   }
 
-  async getPaymentsPaginated(params: { page?: number; limit?: number; sortBy?: string; sortOrder?: 'asc' | 'desc'; search?: string; status?: string; customerId?: string; invoiceType?: string; startDate?: string; endDate?: string }) {
+  async getPaymentsPaginated(params: {
+    page?: number;
+    limit?: number;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
+    search?: string;
+    status?: string;
+    customerId?: string;
+    invoiceType?: string;
+    startDate?: string;
+    endDate?: string;
+  }) {
     const query = new URLSearchParams();
     query.set('page', String(params.page || 1));
     query.set('limit', String(params.limit || 20));
@@ -269,10 +309,13 @@ class ApiClient {
   }
 
   async bulkMarkPaid(paymentIds: string[]) {
-    return this.request<{ success: string[]; failed: Array<{ id: string; error: string }> }>('/payments/bulk-pay', {
-      method: 'POST',
-      body: JSON.stringify({ paymentIds }),
-    });
+    return this.request<{ success: string[]; failed: Array<{ id: string; error: string }> }>(
+      '/payments/bulk-pay',
+      {
+        method: 'POST',
+        body: JSON.stringify({ paymentIds }),
+      },
+    );
   }
 
   async payPayment(id: string) {
@@ -291,14 +334,18 @@ class ApiClient {
 
   async getCalendarData(contractId: string, year: number, month: number) {
     return this.request<Array<{ date: string; status: string; amount?: number }>>(
-      `/payments/contract/${contractId}/calendar?year=${year}&month=${month}`
+      `/payments/contract/${contractId}/calendar?year=${year}&month=${month}`,
     );
   }
 
   async previewManualPayment(contractId: string, days: number) {
-    return this.request<{ amount: number; lateFee: number; total: number; daysCount: number; dailyRate: number }>(
-      `/payments/contract/${contractId}/manual-preview?days=${days}`
-    );
+    return this.request<{
+      amount: number;
+      lateFee: number;
+      total: number;
+      daysCount: number;
+      dailyRate: number;
+    }>(`/payments/contract/${contractId}/manual-preview?days=${days}`);
   }
 
   async createManualPayment(contractId: string, days: number) {
@@ -333,7 +380,13 @@ class ApiClient {
   }
 
   // Reports
-  async getReport(filters?: { startDate?: string; endDate?: string; status?: string; motorModel?: string; batteryType?: string }) {
+  async getReport(filters?: {
+    startDate?: string;
+    endDate?: string;
+    status?: string;
+    motorModel?: string;
+    batteryType?: string;
+  }) {
     const query = new URLSearchParams();
     if (filters?.startDate) query.set('startDate', filters.startDate);
     if (filters?.endDate) query.set('endDate', filters.endDate);
@@ -344,7 +397,13 @@ class ApiClient {
     return this.request<any>(`/reports${queryStr}`);
   }
 
-  async exportReportJSON(filters?: { startDate?: string; endDate?: string; status?: string; motorModel?: string; batteryType?: string }) {
+  async exportReportJSON(filters?: {
+    startDate?: string;
+    endDate?: string;
+    status?: string;
+    motorModel?: string;
+    batteryType?: string;
+  }) {
     const query = new URLSearchParams();
     if (filters?.startDate) query.set('startDate', filters.startDate);
     if (filters?.endDate) query.set('endDate', filters.endDate);
@@ -355,7 +414,13 @@ class ApiClient {
     return this.request<string>(`/reports/export/json${queryStr}`);
   }
 
-  async exportReportCSV(filters?: { startDate?: string; endDate?: string; status?: string; motorModel?: string; batteryType?: string }) {
+  async exportReportCSV(filters?: {
+    startDate?: string;
+    endDate?: string;
+    status?: string;
+    motorModel?: string;
+    batteryType?: string;
+  }) {
     const query = new URLSearchParams();
     if (filters?.startDate) query.set('startDate', filters.startDate);
     if (filters?.endDate) query.set('endDate', filters.endDate);
@@ -366,7 +431,13 @@ class ApiClient {
     return this.request<string>(`/reports/export/csv${queryStr}`);
   }
 
-  async exportReportXLSV(filters?: { startDate?: string; endDate?: string; status?: string; motorModel?: string; batteryType?: string }) {
+  async exportReportXLSV(filters?: {
+    startDate?: string;
+    endDate?: string;
+    status?: string;
+    motorModel?: string;
+    batteryType?: string;
+  }) {
     const query = new URLSearchParams();
     if (filters?.startDate) query.set('startDate', filters.startDate);
     if (filters?.endDate) query.set('endDate', filters.endDate);
@@ -386,7 +457,14 @@ class ApiClient {
     return this.request<any[]>(`/audit-logs${queryStr}`);
   }
 
-  async getAuditLogsPaginated(params: { page?: number; limit?: number; sortBy?: string; sortOrder?: 'asc' | 'desc'; search?: string; module?: string }) {
+  async getAuditLogsPaginated(params: {
+    page?: number;
+    limit?: number;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
+    search?: string;
+    module?: string;
+  }) {
     const query = new URLSearchParams();
     query.set('page', String(params.page || 1));
     query.set('limit', String(params.limit || 20));
@@ -419,21 +497,29 @@ class ApiClient {
 
   // Saving
   async getSavingByContract(contractId: string) {
-    return this.request<{ balance: number; transactions: any[] }>(`/savings/contract/${contractId}`);
+    return this.request<{ balance: number; transactions: any[] }>(
+      `/savings/contract/${contractId}`,
+    );
   }
 
   async getSavingBalance(contractId: string) {
     return this.request<{ balance: number }>(`/savings/contract/${contractId}/balance`);
   }
 
-  async debitSavingForService(contractId: string, data: { amount: number; description: string; photo?: string; notes?: string }) {
+  async debitSavingForService(
+    contractId: string,
+    data: { amount: number; description: string; photo?: string; notes?: string },
+  ) {
     return this.request<any>(`/savings/contract/${contractId}/debit/service`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async debitSavingForTransfer(contractId: string, data: { amount: number; description: string; photo?: string; notes?: string }) {
+  async debitSavingForTransfer(
+    contractId: string,
+    data: { amount: number; description: string; photo?: string; notes?: string },
+  ) {
     return this.request<any>(`/savings/contract/${contractId}/debit/transfer`, {
       method: 'POST',
       body: JSON.stringify(data),

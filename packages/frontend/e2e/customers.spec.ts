@@ -35,9 +35,7 @@ test.describe('Customers', () => {
     if (await addButton.isVisible()) {
       await addButton.click();
       // Should show form
-      await expect(
-        page.getByText(/nama|name/i).first(),
-      ).toBeVisible();
+      await expect(page.getByText(/nama|name/i).first()).toBeVisible();
     }
   });
 });

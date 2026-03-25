@@ -31,14 +31,14 @@ Evaluates whether APIs, configurations, and interfaces are resistant to develope
 
 ## Rationalizations to Reject
 
-| Rationalization | Why It's Wrong | Required Action |
-|-----------------|----------------|-----------------|
-| "It's documented" | Developers don't read docs under deadline pressure | Make the secure choice the default or only option |
-| "Advanced users need flexibility" | Flexibility creates footguns; most "advanced" usage is copy-paste | Provide safe high-level APIs; hide primitives |
-| "It's the developer's responsibility" | Blame-shifting; you designed the footgun | Remove the footgun or make it impossible to misuse |
-| "Nobody would actually do that" | Developers do everything imaginable under pressure | Assume maximum developer confusion |
-| "It's just a configuration option" | Config is code; wrong configs ship to production | Validate configs; reject dangerous combinations |
-| "We need backwards compatibility" | Insecure defaults can't be grandfather-claused | Deprecate loudly; force migration |
+| Rationalization                       | Why It's Wrong                                                    | Required Action                                    |
+| ------------------------------------- | ----------------------------------------------------------------- | -------------------------------------------------- |
+| "It's documented"                     | Developers don't read docs under deadline pressure                | Make the secure choice the default or only option  |
+| "Advanced users need flexibility"     | Flexibility creates footguns; most "advanced" usage is copy-paste | Provide safe high-level APIs; hide primitives      |
+| "It's the developer's responsibility" | Blame-shifting; you designed the footgun                          | Remove the footgun or make it impossible to misuse |
+| "Nobody would actually do that"       | Developers do everything imaginable under pressure                | Assume maximum developer confusion                 |
+| "It's just a configuration option"    | Config is code; wrong configs ship to production                  | Validate configs; reject dangerous combinations    |
+| "We need backwards compatibility"     | Insecure defaults can't be grandfather-claused                    | Deprecate loudly; force migration                  |
 
 ## Sharp Edge Categories
 
@@ -47,16 +47,19 @@ Evaluates whether APIs, configurations, and interfaces are resistant to develope
 APIs that let developers choose algorithms invite choosing wrong ones.
 
 **The JWT Pattern** (canonical example):
+
 - Header specifies algorithm: attacker can set `"alg": "none"` to bypass signatures
 - Algorithm confusion: RSA public key used as HMAC secret when switching RS256→HS256
 - Root cause: Letting untrusted input control security-critical decisions
 
 **Detection patterns:**
+
 - Function parameters like `algorithm`, `mode`, `cipher`, `hash_type`
 - Enums/strings selecting cryptographic primitives
 - Configuration options for security mechanisms
 
 **Example - PHP password_hash allowing weak algorithms:**
+
 ```php
 // DANGEROUS: allows crc32, md5, sha1
 password_hash($password, PASSWORD_DEFAULT); // Good - no choice
@@ -68,6 +71,7 @@ hash($algorithm, $password); // BAD: accepts "crc32"
 Defaults that are insecure, or zero/empty values that disable security.
 
 **The OTP Lifetime Pattern:**
+
 ```python
 # What happens when lifetime=0?
 def verify_otp(code, lifetime=300):  # 300 seconds default
@@ -77,6 +81,7 @@ def verify_otp(code, lifetime=300):  # 300 seconds default
 ```
 
 **Detection patterns:**
+
 - Timeouts/lifetimes that accept 0 (infinite? immediate expiry?)
 - Empty strings that bypass checks
 - Null values that skip validation
@@ -84,6 +89,7 @@ def verify_otp(code, lifetime=300):  # 300 seconds default
 - Negative values with undefined semantics
 
 **Questions to ask:**
+
 - What happens with `timeout=0`? `max_attempts=0`? `key=""`?
 - Is the default the most secure option?
 - Can any default value disable security entirely?
@@ -105,11 +111,13 @@ Crypto::seal($message, new EncryptionPublicKey($key));
 ```
 
 **Detection patterns:**
+
 - Functions taking `bytes`, `string`, `[]byte` for distinct security concepts
 - Parameters that could be swapped without type errors
 - Same type used for keys, nonces, ciphertexts, signatures
 
 **The comparison footgun:**
+
 ```go
 // Timing-safe comparison looks identical to unsafe
 if hmac == expected { }           // BAD: timing attack
@@ -122,6 +130,7 @@ if hmac.Equal(mac, expected) { }  // Good: constant-time
 One wrong setting creates catastrophic failure, with no warning.
 
 **Detection patterns:**
+
 - Boolean flags that disable security entirely
 - String configs that aren't validated
 - Combinations of settings that interact dangerously
@@ -129,17 +138,18 @@ One wrong setting creates catastrophic failure, with no warning.
 - Constructor parameters with sensible defaults but no validation (callers can override with insecure values)
 
 **Examples:**
+
 ```yaml
 # One typo = disaster
-verify_ssl: fasle  # Typo silently accepted as truthy?
+verify_ssl: fasle # Typo silently accepted as truthy?
 
 # Magic values
-session_timeout: -1  # Does this mean "never expire"?
+session_timeout: -1 # Does this mean "never expire"?
 
 # Dangerous combinations accepted silently
 auth_required: true
 bypass_auth_for_health_checks: true
-health_check_path: "/"  # Oops
+health_check_path: '/' # Oops
 ```
 
 ```php
@@ -157,12 +167,14 @@ See [config-patterns.md](references/config-patterns.md#unvalidated-constructor-p
 Errors that don't surface, or success that masks failure.
 
 **Detection patterns:**
+
 - Functions returning booleans instead of throwing on security failures
 - Empty catch blocks around security operations
 - Default values substituted on parse errors
 - Verification functions that "succeed" on malformed input
 
 **Examples:**
+
 ```python
 # Silent bypass
 def verify_signature(sig, data, key):
@@ -180,12 +192,14 @@ crypto.verify(data, sig)     # Returns False on failure
 Security-critical values as plain strings enable injection and confusion.
 
 **Detection patterns:**
+
 - SQL/commands built from string concatenation
 - Permissions as comma-separated strings
 - Roles/scopes as arbitrary strings instead of enums
 - URLs constructed by joining strings
 
 **The permission accumulation footgun:**
+
 ```python
 permissions = "read,write"
 permissions += ",admin"  # Too easy to escalate
@@ -206,6 +220,7 @@ permissions.add(Permission.ADMIN)  # At least it's explicit
 ### Phase 2: Edge Case Probing
 
 For each choice point, ask:
+
 - **Zero/empty/null**: What happens with `0`, `""`, `null`, `[]`?
 - **Negative values**: What does `-1` mean? Infinite? Error?
 - **Type confusion**: Can different security concepts be swapped?
@@ -244,12 +259,12 @@ If a finding seems questionable, return to Phase 2 and probe more edge cases.
 
 ## Severity Classification
 
-| Severity | Criteria | Examples |
-|----------|----------|----------|
-| Critical | Default or obvious usage is insecure | `verify: false` default; empty password allowed |
-| High | Easy misconfiguration breaks security | Algorithm parameter accepts "none" |
-| Medium | Unusual but possible misconfiguration | Negative timeout has unexpected meaning |
-| Low | Requires deliberate misuse | Obscure parameter combination |
+| Severity | Criteria                              | Examples                                        |
+| -------- | ------------------------------------- | ----------------------------------------------- |
+| Critical | Default or obvious usage is insecure  | `verify: false` default; empty password allowed |
+| High     | Easy misconfiguration breaks security | Algorithm parameter accepts "none"              |
+| Medium   | Unusual but possible misconfiguration | Negative timeout has unexpected meaning         |
+| Low      | Requires deliberate misuse            | Obscure parameter combination                   |
 
 ## References
 
@@ -262,19 +277,19 @@ If a finding seems questionable, return to Phase 2 and probe more edge cases.
 
 **By language** (general footguns, not crypto-specific):
 
-| Language | Guide |
-|----------|-------|
-| C/C++ | [references/lang-c.md](references/lang-c.md) |
-| Go | [references/lang-go.md](references/lang-go.md) |
-| Rust | [references/lang-rust.md](references/lang-rust.md) |
-| Swift | [references/lang-swift.md](references/lang-swift.md) |
-| Java | [references/lang-java.md](references/lang-java.md) |
-| Kotlin | [references/lang-kotlin.md](references/lang-kotlin.md) |
-| C# | [references/lang-csharp.md](references/lang-csharp.md) |
-| PHP | [references/lang-php.md](references/lang-php.md) |
+| Language              | Guide                                                          |
+| --------------------- | -------------------------------------------------------------- |
+| C/C++                 | [references/lang-c.md](references/lang-c.md)                   |
+| Go                    | [references/lang-go.md](references/lang-go.md)                 |
+| Rust                  | [references/lang-rust.md](references/lang-rust.md)             |
+| Swift                 | [references/lang-swift.md](references/lang-swift.md)           |
+| Java                  | [references/lang-java.md](references/lang-java.md)             |
+| Kotlin                | [references/lang-kotlin.md](references/lang-kotlin.md)         |
+| C#                    | [references/lang-csharp.md](references/lang-csharp.md)         |
+| PHP                   | [references/lang-php.md](references/lang-php.md)               |
 | JavaScript/TypeScript | [references/lang-javascript.md](references/lang-javascript.md) |
-| Python | [references/lang-python.md](references/lang-python.md) |
-| Ruby | [references/lang-ruby.md](references/lang-ruby.md) |
+| Python                | [references/lang-python.md](references/lang-python.md)         |
+| Ruby                  | [references/lang-ruby.md](references/lang-ruby.md)             |
 
 See also [references/language-specific.md](references/language-specific.md) for a combined quick reference.
 
