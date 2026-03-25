@@ -23,22 +23,25 @@ export class PrismaSavingTransactionRepository implements ISavingTransactionRepo
       where: { contractId },
       orderBy: { createdAt: 'desc' },
     });
-    return raws.map(r => this.toEntity(r));
+    return raws.map((r) => this.toEntity(r));
   }
 
   async findByPaymentId(paymentId: string): Promise<SavingTransaction[]> {
     const raws = await this.prisma.savingTransaction.findMany({
       where: { paymentId },
     });
-    return raws.map(r => this.toEntity(r));
+    return raws.map((r) => this.toEntity(r));
   }
 
-  async findByContractAndType(contractId: string, type: SavingTransactionType): Promise<SavingTransaction[]> {
+  async findByContractAndType(
+    contractId: string,
+    type: SavingTransactionType,
+  ): Promise<SavingTransaction[]> {
     const raws = await this.prisma.savingTransaction.findMany({
       where: { contractId, type: type as any },
       orderBy: { createdAt: 'desc' },
     });
-    return raws.map(r => this.toEntity(r));
+    return raws.map((r) => this.toEntity(r));
   }
 
   async create(tx: SavingTransaction): Promise<SavingTransaction> {

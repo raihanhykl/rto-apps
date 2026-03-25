@@ -1,14 +1,14 @@
-"use client";
+'use client';
 
-import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { useSettings, useInvalidate } from "@/hooks/useApi";
-import { api } from "@/lib/api";
-import { Setting } from "@/types";
-import { Settings, Save } from "lucide-react";
+import { useEffect, useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { useSettings, useInvalidate } from '@/hooks/useApi';
+import { api } from '@/lib/api';
+import { Setting } from '@/types';
+import { Settings, Save } from 'lucide-react';
 
 export default function SettingsPage() {
   const invalidate = useInvalidate();
@@ -37,9 +37,9 @@ export default function SettingsPage() {
         value: newValue,
         description: setting.description,
       });
-      invalidate("/settings");
+      invalidate('/settings');
     } catch (error) {
-      console.error("Failed to save setting:", error);
+      console.error('Failed to save setting:', error);
     } finally {
       setSaving(null);
     }
@@ -68,33 +68,31 @@ export default function SettingsPage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
-          {[...(settings as Setting[])].sort((a, b) => a.key.localeCompare(b.key)).map((setting) => (
-            <div key={setting.key} className="flex items-end gap-4">
-              <div className="flex-1 space-y-2">
-                <Label className="capitalize">
-                  {setting.key.replace(/_/g, " ")}
-                </Label>
-                <p className="text-xs text-muted-foreground">{setting.description}</p>
-                <Input
-                  value={editValues[setting.key] || ""}
-                  onChange={(e) =>
-                    setEditValues({ ...editValues, [setting.key]: e.target.value })
-                  }
-                />
+          {[...(settings as Setting[])]
+            .sort((a, b) => a.key.localeCompare(b.key))
+            .map((setting) => (
+              <div key={setting.key} className="flex items-end gap-4">
+                <div className="flex-1 space-y-2">
+                  <Label className="capitalize">{setting.key.replace(/_/g, ' ')}</Label>
+                  <p className="text-xs text-muted-foreground">{setting.description}</p>
+                  <Input
+                    value={editValues[setting.key] || ''}
+                    onChange={(e) =>
+                      setEditValues({ ...editValues, [setting.key]: e.target.value })
+                    }
+                  />
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={saving === setting.key || editValues[setting.key] === setting.value}
+                  onClick={() => handleSave(setting)}
+                >
+                  <Save className="h-4 w-4 mr-1" />
+                  {saving === setting.key ? '...' : 'Simpan'}
+                </Button>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={
-                  saving === setting.key || editValues[setting.key] === setting.value
-                }
-                onClick={() => handleSave(setting)}
-              >
-                <Save className="h-4 w-4 mr-1" />
-                {saving === setting.key ? "..." : "Simpan"}
-              </Button>
-            </div>
-          ))}
+            ))}
         </CardContent>
       </Card>
     </div>

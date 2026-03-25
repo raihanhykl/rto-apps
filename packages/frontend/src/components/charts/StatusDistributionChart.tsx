@@ -1,17 +1,17 @@
-"use client";
+'use client';
 
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 interface StatusDistributionChartProps {
   data: Record<string, number>;
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  ACTIVE: "#3b82f6",
-  COMPLETED: "#22c55e",
-  OVERDUE: "#ef4444",
-  CANCELLED: "#a1a1aa",
-  REPOSSESSED: "#6b7280",
+  ACTIVE: '#3b82f6',
+  COMPLETED: '#22c55e',
+  OVERDUE: '#ef4444',
+  CANCELLED: '#a1a1aa',
+  REPOSSESSED: '#6b7280',
 };
 
 export function StatusDistributionChart({ data }: StatusDistributionChartProps) {
@@ -38,14 +38,16 @@ export function StatusDistributionChart({ data }: StatusDistributionChartProps) 
           outerRadius={100}
           paddingAngle={2}
           dataKey="value"
-          label={({ name, percent }: { name?: string; percent?: number }) => `${name || ''} ${((percent || 0) * 100).toFixed(0)}%`}
+          label={({ name, percent }: { name?: string; percent?: number }) =>
+            `${name || ''} ${((percent || 0) * 100).toFixed(0)}%`
+          }
           labelLine={false}
         >
           {chartData.map((entry) => (
-            <Cell key={entry.name} fill={STATUS_COLORS[entry.name] || "#8884d8"} />
+            <Cell key={entry.name} fill={STATUS_COLORS[entry.name] || '#8884d8'} />
           ))}
         </Pie>
-        <Tooltip formatter={(value) => [value, "Kontrak"]} />
+        <Tooltip formatter={(value) => [value, 'Kontrak']} />
         <Legend />
       </PieChart>
     </ResponsiveContainer>

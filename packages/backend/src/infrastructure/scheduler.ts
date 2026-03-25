@@ -26,14 +26,18 @@ export class Scheduler {
     console.log('⏰ Scheduler started (cron: every day at 00:01 WIB)');
 
     // Run immediately on startup
-    this.runDailyTasks().catch(err => console.error('Scheduler initial run error:', err));
+    this.runDailyTasks().catch((err) => console.error('Scheduler initial run error:', err));
 
     // Schedule daily at 00:01 Asia/Jakarta
-    this.task = schedule('1 0 * * *', () => {
-      this.runDailyTasks().catch(err => console.error('Scheduler error:', err));
-    }, {
-      timezone: 'Asia/Jakarta',
-    });
+    this.task = schedule(
+      '1 0 * * *',
+      () => {
+        this.runDailyTasks().catch((err) => console.error('Scheduler error:', err));
+      },
+      {
+        timezone: 'Asia/Jakarta',
+      },
+    );
   }
 
   /**

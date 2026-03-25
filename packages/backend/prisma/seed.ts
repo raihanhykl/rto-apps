@@ -1,30 +1,28 @@
-import { PrismaClient } from "@prisma/client";
-import { v4 as uuidv4 } from "uuid";
-import { customers } from "./data/customers";
-import { contracts, DateTuple } from "./data/contracts";
+import { PrismaClient } from '@prisma/client';
+import { v4 as uuidv4 } from 'uuid';
+import { customers } from './data/customers';
+import { contracts, DateTuple } from './data/contracts';
 
 const prisma = new PrismaClient();
 
 // ====== CLI Flags ======
 const args = process.argv.slice(2);
-const RESET = args.includes("--reset");
-const FORCE = args.includes("--force");
+const RESET = args.includes('--reset');
+const FORCE = args.includes('--force');
 
 // ====== Environment Guard ======
 function checkEnvironment() {
-  const env = process.env.NODE_ENV || "development";
-  if (env === "production" && RESET && !FORCE) {
+  const env = process.env.NODE_ENV || 'development';
+  if (env === 'production' && RESET && !FORCE) {
     console.error(
-      "ERROR: --reset in production requires --force flag.\n" +
-        "  Usage: npx ts-node prisma/seed.ts --reset --force\n" +
-        "  This will DELETE ALL existing data before re-seeding.",
+      'ERROR: --reset in production requires --force flag.\n' +
+        '  Usage: npx ts-node prisma/seed.ts --reset --force\n' +
+        '  This will DELETE ALL existing data before re-seeding.',
     );
     process.exit(1);
   }
   if (RESET) {
-    console.warn(
-      `WARNING: Running with --reset in [${env}] — all data will be wiped.\n`,
-    );
+    console.warn(`WARNING: Running with --reset in [${env}] — all data will be wiped.\n`);
   }
 }
 
@@ -50,34 +48,31 @@ function startOfDay(d: Date): Date {
 
 function getWibToday(): Date {
   const now = new Date();
-  const wibStr = now.toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" });
-  const [y, m, d] = wibStr.split("-").map(Number);
+  const wibStr = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+  const [y, m, d] = wibStr.split('-').map(Number);
   return new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0));
 }
 
 function toDateKey(d: Date): string {
-  return d.toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" });
+  return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
 }
 
 function fmtDateCompact(d: Date): string {
   const wib = getWibParts(d);
-  return `${wib.year.toString().slice(-2)}${wib.month.toString().padStart(2, "0")}${wib.day.toString().padStart(2, "0")}`;
+  return `${wib.year.toString().slice(-2)}${wib.month.toString().padStart(2, '0')}${wib.day.toString().padStart(2, '0')}`;
 }
 
 // ====== Libur Bayar ======
 function getWibParts(date: Date): { year: number; month: number; day: number; dayOfWeek: number } {
-  const wibStr = date.toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" });
-  const [y, m, d] = wibStr.split("-").map(Number);
+  const wibStr = date.toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+  const [y, m, d] = wibStr.split('-').map(Number);
   const utcDate = new Date(Date.UTC(y, m - 1, d));
   return { year: y, month: m, day: d, dayOfWeek: utcDate.getUTCDay() };
 }
 
-function isLiburBayar(
-  d: Date,
-  scheme: "OLD_CONTRACT" | "NEW_CONTRACT",
-): boolean {
+function isLiburBayar(d: Date, scheme: 'OLD_CONTRACT' | 'NEW_CONTRACT'): boolean {
   const wib = getWibParts(d);
-  if (scheme === "OLD_CONTRACT") {
+  if (scheme === 'OLD_CONTRACT') {
     return wib.dayOfWeek === 0; // Semua Minggu = libur
   } else {
     return wib.day > 28; // Tanggal 29-31 = libur
@@ -88,7 +83,7 @@ function isLiburBayar(
 function countCalendarDays(
   billingStart: Date,
   workingDays: number,
-  scheme: "OLD_CONTRACT" | "NEW_CONTRACT",
+  scheme: 'OLD_CONTRACT' | 'NEW_CONTRACT',
 ) {
   let cursor = new Date(billingStart.getTime());
   let workingCount = 0;
@@ -133,29 +128,29 @@ const DPS: Record<string, number> = {
 
 const DEFAULT_SETTINGS = [
   {
-    key: "max_rental_days",
-    value: "7",
-    description: "Maksimum hari perpanjangan",
+    key: 'max_rental_days',
+    value: '7',
+    description: 'Maksimum hari perpanjangan',
   },
   {
-    key: "ownership_target_days",
-    value: "1278",
-    description: "Target hari kepemilikan penuh",
+    key: 'ownership_target_days',
+    value: '1278',
+    description: 'Target hari kepemilikan penuh',
   },
   {
-    key: "grace_period_days",
+    key: 'grace_period_days',
     value: String(GRACE_DAYS),
-    description: "Masa tenggang sebelum repossession",
+    description: 'Masa tenggang sebelum repossession',
   },
   {
-    key: "late_fee_per_day",
-    value: "10000",
-    description: "Denda keterlambatan per hari",
+    key: 'late_fee_per_day',
+    value: '10000',
+    description: 'Denda keterlambatan per hari',
   },
   {
-    key: "default_holiday_scheme",
-    value: "NEW_CONTRACT",
-    description: "Skema libur bayar default (OLD_CONTRACT / NEW_CONTRACT)",
+    key: 'default_holiday_scheme',
+    value: 'NEW_CONTRACT',
+    description: 'Skema libur bayar default (OLD_CONTRACT / NEW_CONTRACT)',
   },
 ];
 
@@ -163,14 +158,14 @@ const DEFAULT_SETTINGS = [
 
 async function seedAdminUser(): Promise<string> {
   const admin = await prisma.user.upsert({
-    where: { username: "admin" },
+    where: { username: 'admin' },
     update: {},
     create: {
       id: uuidv4(),
-      username: "admin",
-      password: "admin123",
-      fullName: "Administrator",
-      role: "ADMIN",
+      username: 'admin',
+      password: 'admin123',
+      fullName: 'Administrator',
+      role: 'ADMIN',
       isActive: true,
     },
   });
@@ -190,7 +185,7 @@ async function seedSettings() {
 }
 
 async function resetData() {
-  console.log("\n[RESET] Deleting existing data...");
+  console.log('\n[RESET] Deleting existing data...');
   const counts = {
     savingTransactions: await prisma.savingTransaction.deleteMany({}),
     paymentDays: await prisma.paymentDay.deleteMany({}),
@@ -206,9 +201,7 @@ async function resetData() {
 
 async function seedCustomers(): Promise<number> {
   const existingKtps = new Set(
-    (await prisma.customer.findMany({ select: { ktpNumber: true } })).map(
-      (c) => c.ktpNumber,
-    ),
+    (await prisma.customer.findMany({ select: { ktpNumber: true } })).map((c) => c.ktpNumber),
   );
 
   let created = 0;
@@ -241,9 +234,7 @@ async function seedCustomers(): Promise<number> {
     created++;
   }
 
-  console.log(
-    `  Customers: ${created} created, ${skipped} skipped (already exist)`,
-  );
+  console.log(`  Customers: ${created} created, ${skipped} skipped (already exist)`);
   return created;
 }
 
@@ -275,27 +266,19 @@ async function seedContracts(adminId: string): Promise<{
     const dpFullyPaid = dpPaidAmount >= dpAmount;
 
     const startDate = toDate(row.startDate);
-    const unitReceivedDate = row.unitReceivedDate
-      ? toDate(row.unitReceivedDate)
-      : null;
+    const unitReceivedDate = row.unitReceivedDate ? toDate(row.unitReceivedDate) : null;
     const repossessedAt = row.repossessedAt ? toDate(row.repossessedAt) : null;
     const cancelledAt = row.cancelledAt ? toDate(row.cancelledAt) : null;
     const workingDaysPaid = row.workingDaysPaid ?? 0;
 
-    const billingStartDate = unitReceivedDate
-      ? addDays(unitReceivedDate, 1)
-      : null;
+    const billingStartDate = unitReceivedDate ? addDays(unitReceivedDate, 1) : null;
 
     // Calculate totalDaysPaid (working + holidays), endDate, and workingDays
     let totalDaysPaid = 0;
     let workingDays = 0;
     let endDate: Date;
     if (billingStartDate && workingDaysPaid > 0) {
-      const calc = countCalendarDays(
-        billingStartDate,
-        workingDaysPaid,
-        row.holidayScheme,
-      );
+      const calc = countCalendarDays(billingStartDate, workingDaysPaid, row.holidayScheme);
       totalDaysPaid = calc.totalDaysPaid;
       workingDays = calc.workingCount;
       endDate = calc.lastDate;
@@ -304,16 +287,14 @@ async function seedContracts(adminId: string): Promise<{
     }
 
     const totalAmount = workingDays * dailyRate;
-    const ownershipProgress = parseFloat(
-      ((totalDaysPaid / OWN_TARGET) * 100).toFixed(2),
-    );
+    const ownershipProgress = parseFloat(((totalDaysPaid / OWN_TARGET) * 100).toFixed(2));
 
     // Auto-detect OVERDUE: jika ACTIVE tapi endDate + grace period sudah lewat
     let finalStatus: string = row.status;
-    if (row.status === "ACTIVE" && billingStartDate && workingDaysPaid > 0) {
+    if (row.status === 'ACTIVE' && billingStartDate && workingDaysPaid > 0) {
       const graceEnd = addDays(endDate, GRACE_DAYS);
       if (graceEnd < TODAY) {
-        finalStatus = "OVERDUE" as any;
+        finalStatus = 'OVERDUE' as any;
       }
     }
 
@@ -346,9 +327,7 @@ async function seedContracts(adminId: string): Promise<{
         dpFullyPaid,
         unitReceivedDate,
         billingStartDate,
-        bastPhoto: unitReceivedDate
-          ? "https://storage.example.com/bast/sample.jpg"
-          : null,
+        bastPhoto: unitReceivedDate ? 'https://storage.example.com/bast/sample.jpg' : null,
         bastNotes: row.bastNotes,
         holidayScheme: row.holidayScheme as any,
         ownershipTargetDays: OWN_TARGET,
@@ -364,8 +343,8 @@ async function seedContracts(adminId: string): Promise<{
     contractsCreated++;
 
     // ====== DP Payments ======
-    if (row.dpScheme === "FULL") {
-      const pmtNum = `PMT-${fmtDateCompact(startDate)}-${String(globalSeq++).padStart(4, "0")}`;
+    if (row.dpScheme === 'FULL') {
+      const pmtNum = `PMT-${fmtDateCompact(startDate)}-${String(globalSeq++).padStart(4, '0')}`;
       allPayments.push({
         id: uuidv4(),
         invoiceNumber: pmtNum,
@@ -373,8 +352,8 @@ async function seedContracts(adminId: string): Promise<{
         customerId: row.customerId,
         amount: dpAmount,
         lateFee: 0,
-        type: "DP",
-        status: dpFullyPaid ? "PAID" : "PENDING",
+        type: 'DP',
+        status: dpFullyPaid ? 'PAID' : 'PENDING',
         qrCodeData: `WEDISON-PAY-${pmtNum}-${dpAmount}`,
         dueDate: startDate,
         paidAt: dpFullyPaid ? startDate : null,
@@ -383,8 +362,8 @@ async function seedContracts(adminId: string): Promise<{
     } else {
       const half1 = Math.ceil(dpAmount / 2);
       const half2 = dpAmount - half1;
-      const pmtNum1 = `PMT-${fmtDateCompact(startDate)}-${String(globalSeq++).padStart(4, "0")}`;
-      const pmtNum2 = `PMT-${fmtDateCompact(startDate)}-${String(globalSeq++).padStart(4, "0")}`;
+      const pmtNum1 = `PMT-${fmtDateCompact(startDate)}-${String(globalSeq++).padStart(4, '0')}`;
+      const pmtNum2 = `PMT-${fmtDateCompact(startDate)}-${String(globalSeq++).padStart(4, '0')}`;
       allPayments.push({
         id: uuidv4(),
         invoiceNumber: pmtNum1,
@@ -392,8 +371,8 @@ async function seedContracts(adminId: string): Promise<{
         customerId: row.customerId,
         amount: half1,
         lateFee: 0,
-        type: "DP_INSTALLMENT",
-        status: dpPaidAmount >= half1 ? "PAID" : "PENDING",
+        type: 'DP_INSTALLMENT',
+        status: dpPaidAmount >= half1 ? 'PAID' : 'PENDING',
         qrCodeData: `WEDISON-PAY-${pmtNum1}-${half1}`,
         dueDate: startDate,
         paidAt: dpPaidAmount >= half1 ? startDate : null,
@@ -406,8 +385,8 @@ async function seedContracts(adminId: string): Promise<{
         customerId: row.customerId,
         amount: half2,
         lateFee: 0,
-        type: "DP_INSTALLMENT",
-        status: dpPaidAmount >= dpAmount ? "PAID" : "PENDING",
+        type: 'DP_INSTALLMENT',
+        status: dpPaidAmount >= dpAmount ? 'PAID' : 'PENDING',
         qrCodeData: `WEDISON-PAY-${pmtNum2}-${half2}`,
         dueDate: unitReceivedDate || addDays(startDate, 7),
         paidAt: dpPaidAmount >= dpAmount ? unitReceivedDate || startDate : null,
@@ -425,7 +404,7 @@ async function seedContracts(adminId: string): Promise<{
 
         if (isHoliday) {
           // Holiday payment: amount 0, auto-PAID, credits 1 day
-          const pmtNum = `PMT-${fmtDateCompact(currentDate)}-${String(globalSeq++).padStart(4, "0")}`;
+          const pmtNum = `PMT-${fmtDateCompact(currentDate)}-${String(globalSeq++).padStart(4, '0')}`;
           allPayments.push({
             id: uuidv4(),
             invoiceNumber: pmtNum,
@@ -433,8 +412,8 @@ async function seedContracts(adminId: string): Promise<{
             customerId: row.customerId,
             amount: 0,
             lateFee: 0,
-            type: "DAILY_BILLING",
-            status: "PAID",
+            type: 'DAILY_BILLING',
+            status: 'PAID',
             qrCodeData: `WEDISON-PAY-${pmtNum}-0`,
             dueDate: sd,
             paidAt: sd,
@@ -448,7 +427,7 @@ async function seedContracts(adminId: string): Promise<{
           });
         } else {
           // Normal daily payment: PAID
-          const pmtNum = `PMT-${fmtDateCompact(currentDate)}-${String(globalSeq++).padStart(4, "0")}`;
+          const pmtNum = `PMT-${fmtDateCompact(currentDate)}-${String(globalSeq++).padStart(4, '0')}`;
           allPayments.push({
             id: uuidv4(),
             invoiceNumber: pmtNum,
@@ -456,8 +435,8 @@ async function seedContracts(adminId: string): Promise<{
             customerId: row.customerId,
             amount: dailyRate,
             lateFee: 0,
-            type: "DAILY_BILLING",
-            status: "PAID",
+            type: 'DAILY_BILLING',
+            status: 'PAID',
             qrCodeData: `WEDISON-PAY-${pmtNum}-${dailyRate}`,
             dueDate: sd,
             paidAt: sd,
@@ -486,7 +465,7 @@ async function seedContracts(adminId: string): Promise<{
       const paymentDateMap = new Map<string, { id: string; status: string }>();
       for (const pmt of allPayments) {
         if (pmt.contractId !== row.id) continue;
-        if (pmt.type !== "DAILY_BILLING") continue;
+        if (pmt.type !== 'DAILY_BILLING') continue;
         if (!pmt.periodStart || !pmt.periodEnd) continue;
         let d = startOfDay(new Date(pmt.periodStart));
         const end = startOfDay(new Date(pmt.periodEnd));
@@ -498,7 +477,7 @@ async function seedContracts(adminId: string): Promise<{
 
       // Walk from billingStartDate to today+30 (or terminate date for cancelled/repossessed)
       const terminateDate =
-        finalStatus === "CANCELLED" || finalStatus === "REPOSSESSED"
+        finalStatus === 'CANCELLED' || finalStatus === 'REPOSSESSED'
           ? repossessedAt || cancelledAt || TODAY
           : null;
       const pdEnd = addDays(TODAY, 30);
@@ -515,21 +494,21 @@ async function seedContracts(adminId: string): Promise<{
         const amount = isHoliday ? 0 : dailyRate;
 
         if (isHoliday) {
-          status = "HOLIDAY";
+          status = 'HOLIDAY';
           if (pmt) paymentId = pmt.id;
-        } else if (pmt && pmt.status === "PAID") {
-          status = "PAID";
+        } else if (pmt && pmt.status === 'PAID') {
+          status = 'PAID';
           paymentId = pmt.id;
-        } else if (pmt && pmt.status === "PENDING") {
-          status = "PENDING";
+        } else if (pmt && pmt.status === 'PENDING') {
+          status = 'PENDING';
           paymentId = pmt.id;
         } else {
-          status = "UNPAID";
+          status = 'UNPAID';
         }
 
         // Cancelled/repossessed: VOID all UNPAID days after terminate date
-        if (terminateDate && d > terminateDate && status === "UNPAID") {
-          status = "VOIDED";
+        if (terminateDate && d > terminateDate && status === 'UNPAID') {
+          status = 'VOIDED';
         }
 
         allPaymentDays.push({
@@ -552,8 +531,8 @@ async function seedContracts(adminId: string): Promise<{
     allAuditLogs.push({
       id: uuidv4(),
       userId: adminId,
-      action: "CREATE",
-      module: "contract",
+      action: 'CREATE',
+      module: 'contract',
       entityId: row.id,
       description: `Created contract ${row.contractNumber} for ${row.customerName} - ${row.motorModel} ${row.batteryType} (DP: ${row.dpScheme})`,
       metadata: {
@@ -563,7 +542,7 @@ async function seedContracts(adminId: string): Promise<{
         dpScheme: row.dpScheme,
         dpAmount,
       },
-      ipAddress: "127.0.0.1",
+      ipAddress: '127.0.0.1',
       createdAt: startDate,
     });
   }
@@ -604,22 +583,20 @@ async function seedContracts(adminId: string): Promise<{
 async function main() {
   checkEnvironment();
 
-  console.log("=== WEDISON RTO Seed ===\n");
+  console.log('=== WEDISON RTO Seed ===\n');
 
   // Step 1: Always upsert reference data (idempotent)
-  console.log("[1/4] Reference data (idempotent):");
+  console.log('[1/4] Reference data (idempotent):');
   const adminId = await seedAdminUser();
   await seedSettings();
 
   // Step 2: Check if data already exists
   const existingContracts = await prisma.contract.count();
   if (existingContracts > 0 && !RESET) {
-    console.log(
-      `\n[SKIP] Database already has ${existingContracts} contracts.`,
-    );
-    console.log("  To re-seed, run with --reset flag:");
-    console.log("  npx ts-node prisma/seed.ts --reset");
-    console.log("\n  Reference data (admin + settings) was updated.");
+    console.log(`\n[SKIP] Database already has ${existingContracts} contracts.`);
+    console.log('  To re-seed, run with --reset flag:');
+    console.log('  npx ts-node prisma/seed.ts --reset');
+    console.log('\n  Reference data (admin + settings) was updated.');
     return;
   }
 
@@ -629,33 +606,29 @@ async function main() {
   }
 
   // Step 4: Seed master data + derived data
-  console.log("\n[2/4] Seeding customers:");
+  console.log('\n[2/4] Seeding customers:');
   await seedCustomers();
 
-  console.log("\n[3/4] Seeding contracts + payment history:");
+  console.log('\n[3/4] Seeding contracts + payment history:');
   const { paymentCount } = await seedContracts(adminId);
 
   // Summary
-  const activeCount = contracts.filter((c) => c.status === "ACTIVE").length;
-  const repossessedCount = contracts.filter(
-    (c) => c.status === "REPOSSESSED",
-  ).length;
-  const cancelledCount = contracts.filter(
-    (c) => c.status === "CANCELLED",
-  ).length;
+  const activeCount = contracts.filter((c) => c.status === 'ACTIVE').length;
+  const repossessedCount = contracts.filter((c) => c.status === 'REPOSSESSED').length;
+  const cancelledCount = contracts.filter((c) => c.status === 'CANCELLED').length;
 
-  console.log("\n[4/4] Summary:");
+  console.log('\n[4/4] Summary:');
   console.log(`  ${customers.length} customers in data file`);
   console.log(
     `  ${contracts.length} contracts (${activeCount} active, ${repossessedCount} repossessed, ${cancelledCount} cancelled)`,
   );
   console.log(`  ${paymentCount} payments`);
-  console.log("\nSeed complete!");
+  console.log('\nSeed complete!');
 }
 
 main()
   .catch((e) => {
-    console.error("\nSeed failed:", e.message || e);
+    console.error('\nSeed failed:', e.message || e);
     process.exit(1);
   })
   .finally(async () => {

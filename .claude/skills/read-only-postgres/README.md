@@ -5,11 +5,13 @@ Read-only PostgreSQL query skill. Query multiple databases safely with write pro
 ## Setup
 
 1. Copy the example config:
+
 ```bash
 cp connections.example.json connections.json
 ```
 
 2. Add your database credentials:
+
 ```json
 {
   "databases": [
@@ -28,11 +30,13 @@ cp connections.example.json connections.json
 ```
 
 3. Secure the config:
+
 ```bash
 chmod 600 connections.json
 ```
 
 4. Prompt to Update the `SKILL.md` file to be specific to your project.
+
 ```text
 Make the read-only-postgres skill examples specific to this project.
 
@@ -66,17 +70,17 @@ python3 scripts/query.py --db prod --query "SELECT * FROM users" --limit 100
 
 ## Config Fields
 
-| Field | Required | Default | Description |
-|-------|----------|---------|-------------|
-| name | Yes | - | Database identifier |
-| description | Yes | - | What data it contains (for auto-selection) |
-| host | Yes | - | Hostname |
-| port | No | 5432 | Port |
-| database | Yes | - | Database name |
-| user | Yes | - | Username |
-| password | Yes | - | Password |
-| sslmode | No | prefer | disable, allow, prefer, require, verify-ca, verify-full |
-| pii_masking | No | - | Map of table names to column arrays to mask (see below) |
+| Field       | Required | Default | Description                                             |
+| ----------- | -------- | ------- | ------------------------------------------------------- |
+| name        | Yes      | -       | Database identifier                                     |
+| description | Yes      | -       | What data it contains (for auto-selection)              |
+| host        | Yes      | -       | Hostname                                                |
+| port        | No       | 5432    | Port                                                    |
+| database    | Yes      | -       | Database name                                           |
+| user        | Yes      | -       | Username                                                |
+| password    | Yes      | -       | Password                                                |
+| sslmode     | No       | prefer  | disable, allow, prefer, require, verify-ca, verify-full |
+| pii_masking | No       | -       | Map of table names to column arrays to mask (see below) |
 
 ## PII Masking
 
@@ -98,11 +102,11 @@ Protect sensitive data by masking column values in query output. Add a `pii_mask
 
 Middle characters are replaced with `*`, keeping the first and last characters:
 
-| Original | Masked |
-|----------|--------|
+| Original       | Masked                     |
+| -------------- | -------------------------- |
 | john@email.com | j\*\*\*\*\*\*\*\*\*\*\*\*m |
-| 555-1234 | 5\*\*\*\*\*\*4 |
-| Jo | Jo |
+| 555-1234       | 5\*\*\*\*\*\*4             |
+| Jo             | Jo                         |
 
 Masking applies automatically when the query targets a configured table. Masked columns are noted in the output footer.
 

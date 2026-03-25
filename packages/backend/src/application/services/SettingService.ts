@@ -1,4 +1,8 @@
-import { ISettingRepository, IAuditLogRepository, IContractRepository } from '../../domain/interfaces';
+import {
+  ISettingRepository,
+  IAuditLogRepository,
+  IContractRepository,
+} from '../../domain/interfaces';
 import { Setting } from '../../domain/entities';
 import { AuditAction, ContractStatus } from '../../domain/enums';
 import { UpdateSettingDto } from '../dtos';
@@ -9,7 +13,7 @@ export class SettingService {
   constructor(
     private settingRepo: ISettingRepository,
     private auditRepo: IAuditLogRepository,
-    private contractRepo?: IContractRepository
+    private contractRepo?: IContractRepository,
   ) {}
 
   async getAll(): Promise<Setting[]> {
@@ -54,10 +58,10 @@ export class SettingService {
     if (dto.key === 'grace_period_days' && this.contractRepo) {
       const days = parseInt(dto.value, 10);
       if (!isNaN(days) && days > 0) {
-        const updatedCount = await this.contractRepo.updateGracePeriodByStatuses(
-          days,
-          [ContractStatus.ACTIVE, ContractStatus.OVERDUE]
-        );
+        const updatedCount = await this.contractRepo.updateGracePeriodByStatuses(days, [
+          ContractStatus.ACTIVE,
+          ContractStatus.OVERDUE,
+        ]);
 
         // Recalculate status: ACTIVE → OVERDUE atau OVERDUE → ACTIVE
         const today = getWibToday();
@@ -93,7 +97,12 @@ export class SettingService {
           module: 'contract',
           entityId: 'bulk',
           description: `Synced grace period to ${days} days for ${updatedCount} contracts (${newOverdueCount} → OVERDUE, ${reactivatedCount} → ACTIVE)`,
-          metadata: { gracePeriodDays: days, contractsUpdated: updatedCount, newOverdueCount, reactivatedCount },
+          metadata: {
+            gracePeriodDays: days,
+            contractsUpdated: updatedCount,
+            newOverdueCount,
+            reactivatedCount,
+          },
           ipAddress: '',
           createdAt: new Date(),
         });
@@ -110,10 +119,26 @@ export class SettingService {
       { key: 'company_phone', value: '+62-xxx-xxxx', description: 'Company phone' },
       { key: 'invoice_prefix', value: 'INV', description: 'Invoice number prefix' },
       { key: 'contract_prefix', value: 'RTO', description: 'Contract number prefix' },
-      { key: 'max_rental_days', value: '7', description: 'Maximum rental days per contract/extension' },
-      { key: 'ownership_target_days', value: '1278', description: 'Total days to own motor (default ~3.5 years)' },
-      { key: 'grace_period_days', value: '7', description: 'Masa tenggang (hari) setelah endDate sebelum status OVERDUE' },
-      { key: 'penalty_grace_days', value: '2', description: 'Toleransi (hari) sebelum denda keterlambatan berlaku' },
+      {
+        key: 'max_rental_days',
+        value: '7',
+        description: 'Maximum rental days per contract/extension',
+      },
+      {
+        key: 'ownership_target_days',
+        value: '1278',
+        description: 'Total days to own motor (default ~3.5 years)',
+      },
+      {
+        key: 'grace_period_days',
+        value: '7',
+        description: 'Masa tenggang (hari) setelah endDate sebelum status OVERDUE',
+      },
+      {
+        key: 'penalty_grace_days',
+        value: '2',
+        description: 'Toleransi (hari) sebelum denda keterlambatan berlaku',
+      },
       { key: 'late_fee_per_day', value: '20000', description: 'Denda keterlambatan per hari (Rp)' },
     ];
 
@@ -139,9 +164,24 @@ export class SettingService {
    * Hanya update jika nilai di DB masih sama dengan nilai lama (belum dikustomisasi admin).
    */
   private async migrateSettings(): Promise<void> {
-    const migrations: Array<{ key: string; fromValue: string; toValue: string; description: string }> = [
-      { key: 'late_fee_per_day', fromValue: '10000', toValue: '20000', description: 'Denda keterlambatan per hari (Rp)' },
-      { key: 'grace_period_days', fromValue: '2', toValue: '7', description: 'Masa tenggang (hari) setelah endDate sebelum status OVERDUE' },
+    const migrations: Array<{
+      key: string;
+      fromValue: string;
+      toValue: string;
+      description: string;
+    }> = [
+      {
+        key: 'late_fee_per_day',
+        fromValue: '10000',
+        toValue: '20000',
+        description: 'Denda keterlambatan per hari (Rp)',
+      },
+      {
+        key: 'grace_period_days',
+        fromValue: '2',
+        toValue: '7',
+        description: 'Masa tenggang (hari) setelah endDate sebelum status OVERDUE',
+      },
     ];
 
     for (const m of migrations) {

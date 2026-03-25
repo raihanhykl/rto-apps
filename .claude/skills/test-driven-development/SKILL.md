@@ -85,13 +85,13 @@ test('retries failed operations 3 times', async () => {
     return 'success';
   };
 
-  const result = await retryOperation(operation);
+const result = await retryOperation(operation);
 
-  expect(result).toBe('success');
-  expect(attempts).toBe(3);
+expect(result).toBe('success');
+expect(attempts).toBe(3);
 });
 
-```
+````
 Clear name, tests real behavior, one thing
 </Good>
 
@@ -105,7 +105,7 @@ test('retry works', async () => {
   await retryOperation(mock);
   expect(mock).toHaveBeenCalledTimes(3);
 });
-```
+````
 
 Vague name, tests mock not code
 </Bad>
@@ -206,11 +206,11 @@ Next failing test for next feature.
 
 ## Good Tests
 
-| Quality | Good | Bad |
-|---------|------|-----|
-| **Minimal** | One thing. "and" in name? Split it. | `test('validates email and domain and whitespace')` |
-| **Clear** | Name describes behavior | `test('test1')` |
-| **Shows intent** | Demonstrates desired API | Obscures what code should do |
+| Quality          | Good                                | Bad                                                 |
+| ---------------- | ----------------------------------- | --------------------------------------------------- |
+| **Minimal**      | One thing. "and" in name? Split it. | `test('validates email and domain and whitespace')` |
+| **Clear**        | Name describes behavior             | `test('test1')`                                     |
+| **Shows intent** | Demonstrates desired API            | Obscures what code should do                        |
 
 ## Why Order Matters
 
@@ -268,19 +268,19 @@ Tests-first force edge case discovery before implementing. Tests-after verify yo
 
 ## Common Rationalizations
 
-| Excuse | Reality |
-|--------|---------|
-| "Too simple to test" | Simple code breaks. Test takes 30 seconds. |
-| "I'll test after" | Tests passing immediately prove nothing. |
-| "Tests after achieve same goals" | Tests-after = "what does this do?" Tests-first = "what should this do?" |
-| "Already manually tested" | Ad-hoc ≠ systematic. No record, can't re-run. |
-| "Deleting X hours is wasteful" | Sunk cost fallacy. Keeping unverified code is technical debt. |
-| "Keep as reference, write tests first" | You'll adapt it. That's testing after. Delete means delete. |
-| "Need to explore first" | Fine. Throw away exploration, start with TDD. |
-| "Test hard = design unclear" | Listen to test. Hard to test = hard to use. |
-| "TDD will slow me down" | TDD faster than debugging. Pragmatic = test-first. |
-| "Manual test faster" | Manual doesn't prove edge cases. You'll re-test every change. |
-| "Existing code has no tests" | You're improving it. Add tests for existing code. |
+| Excuse                                 | Reality                                                                 |
+| -------------------------------------- | ----------------------------------------------------------------------- |
+| "Too simple to test"                   | Simple code breaks. Test takes 30 seconds.                              |
+| "I'll test after"                      | Tests passing immediately prove nothing.                                |
+| "Tests after achieve same goals"       | Tests-after = "what does this do?" Tests-first = "what should this do?" |
+| "Already manually tested"              | Ad-hoc ≠ systematic. No record, can't re-run.                           |
+| "Deleting X hours is wasteful"         | Sunk cost fallacy. Keeping unverified code is technical debt.           |
+| "Keep as reference, write tests first" | You'll adapt it. That's testing after. Delete means delete.             |
+| "Need to explore first"                | Fine. Throw away exploration, start with TDD.                           |
+| "Test hard = design unclear"           | Listen to test. Hard to test = hard to use.                             |
+| "TDD will slow me down"                | TDD faster than debugging. Pragmatic = test-first.                      |
+| "Manual test faster"                   | Manual doesn't prove edge cases. You'll re-test every change.           |
+| "Existing code has no tests"           | You're improving it. Add tests for existing code.                       |
 
 ## Red Flags - STOP and Start Over
 
@@ -358,12 +358,12 @@ Can't check all boxes? You skipped TDD. Start over.
 
 ## When Stuck
 
-| Problem | Solution |
-|---------|----------|
+| Problem                | Solution                                                             |
+| ---------------------- | -------------------------------------------------------------------- |
 | Don't know how to test | Write wished-for API. Write assertion first. Ask your human partner. |
-| Test too complicated | Design too complicated. Simplify interface. |
-| Must mock everything | Code too coupled. Use dependency injection. |
-| Test setup huge | Extract helpers. Still complex? Simplify design. |
+| Test too complicated   | Design too complicated. Simplify interface.                          |
+| Must mock everything   | Code too coupled. Use dependency injection.                          |
+| Test setup huge        | Extract helpers. Still complex? Simplify design.                     |
 
 ## Debugging Integration
 
@@ -452,7 +452,8 @@ BEFORE asserting on any mock element:
 ```typescript
 // ❌ BAD: destroy() only used in tests
 class Session {
-  async destroy() {  // Looks like production API!
+  async destroy() {
+    // Looks like production API!
     await this._workspaceManager?.destroyWorkspace(this.id);
     // ... cleanup
   }
@@ -512,11 +513,11 @@ BEFORE adding any method to production class:
 test('detects duplicate server', () => {
   // Mock prevents config write that test depends on!
   vi.mock('ToolCatalog', () => ({
-    discoverAndCacheTools: vi.fn().mockResolvedValue(undefined)
+    discoverAndCacheTools: vi.fn().mockResolvedValue(undefined),
   }));
 
   await addServer(config);
-  await addServer(config);  // Should throw - but won't!
+  await addServer(config); // Should throw - but won't!
 });
 ```
 
@@ -534,8 +535,8 @@ test('detects duplicate server', () => {
   // Mock the slow part, preserve behavior test needs
   vi.mock('MCPServerManager'); // Just mock slow server startup
 
-  await addServer(config);  // Config written
-  await addServer(config);  // Duplicate detected ✓
+  await addServer(config); // Config written
+  await addServer(config); // Duplicate detected ✓
 });
 ```
 
@@ -573,7 +574,7 @@ BEFORE mocking any method:
 // ❌ BAD: Partial mock - only fields you think you need
 const mockResponse = {
   status: 'success',
-  data: { userId: '123', name: 'Alice' }
+  data: { userId: '123', name: 'Alice' },
   // Missing: metadata that downstream code uses
 };
 
@@ -596,7 +597,7 @@ const mockResponse = {
 const mockResponse = {
   status: 'success',
   data: { userId: '123', name: 'Alice' },
-  metadata: { requestId: 'req-789', timestamp: 1234567890 }
+  metadata: { requestId: 'req-789', timestamp: 1234567890 },
   // All fields real API returns
 };
 ```
@@ -671,14 +672,14 @@ TDD cycle:
 
 ## Quick Reference
 
-| Anti-Pattern | Fix |
-|--------------|-----|
-| Assert on mock elements | Test real component or unmock it |
-| Test-only methods in production | Move to test utilities |
-| Mock without understanding | Understand dependencies first, mock minimally |
-| Incomplete mocks | Mirror real API completely |
-| Tests as afterthought | TDD - tests first |
-| Over-complex mocks | Consider integration tests |
+| Anti-Pattern                    | Fix                                           |
+| ------------------------------- | --------------------------------------------- |
+| Assert on mock elements         | Test real component or unmock it              |
+| Test-only methods in production | Move to test utilities                        |
+| Mock without understanding      | Understand dependencies first, mock minimally |
+| Incomplete mocks                | Mirror real API completely                    |
+| Tests as afterthought           | TDD - tests first                             |
+| Over-complex mocks              | Consider integration tests                    |
 
 ## Red Flags
 

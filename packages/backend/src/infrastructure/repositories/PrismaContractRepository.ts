@@ -16,7 +16,7 @@ export class PrismaContractRepository implements IContractRepository {
     const rows = await this.prisma.contract.findMany({
       orderBy: { createdAt: 'desc' },
     });
-    return rows.map(r => this.toEntity(r));
+    return rows.map((r) => this.toEntity(r));
   }
 
   async findAllPaginated(params: PaginationParams): Promise<PaginatedResult<Contract>> {
@@ -71,7 +71,7 @@ export class PrismaContractRepository implements IContractRepository {
     ]);
 
     return {
-      data: rows.map(r => this.toEntity(r)),
+      data: rows.map((r) => this.toEntity(r)),
       total,
       page,
       limit,
@@ -88,14 +88,14 @@ export class PrismaContractRepository implements IContractRepository {
     const rows = await this.prisma.contract.findMany({
       where: { customerId, isDeleted: false },
     });
-    return rows.map(r => this.toEntity(r));
+    return rows.map((r) => this.toEntity(r));
   }
 
   async findByStatus(status: ContractStatus): Promise<Contract[]> {
     const rows = await this.prisma.contract.findMany({
       where: { status: status as any, isDeleted: false },
     });
-    return rows.map(r => this.toEntity(r));
+    return rows.map((r) => this.toEntity(r));
   }
 
   async create(contract: Contract): Promise<Contract> {
@@ -194,7 +194,10 @@ export class PrismaContractRepository implements IContractRepository {
     return max;
   }
 
-  async updateGracePeriodByStatuses(gracePeriodDays: number, statuses: ContractStatus[]): Promise<number> {
+  async updateGracePeriodByStatuses(
+    gracePeriodDays: number,
+    statuses: ContractStatus[],
+  ): Promise<number> {
     const result = await this.prisma.contract.updateMany({
       where: {
         status: { in: statuses as any },

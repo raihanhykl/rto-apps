@@ -17,31 +17,37 @@ Perform a comprehensive review using multiple specialized agents with explicit T
 Execute parallel reviews using Task tool with specialized agents:
 
 ## 1. Code Quality Review
+
 - Use Task tool with subagent_type="code-reviewer"
 - Prompt: "Review code quality and maintainability for: $ARGUMENTS. Check for code smells, readability, documentation, and adherence to best practices."
 - Focus: Clean code principles, SOLID, DRY, naming conventions
 
 ## 2. Security Audit
+
 - Use Task tool with subagent_type="security-auditor"
 - Prompt: "Perform security audit on: $ARGUMENTS. Check for vulnerabilities, OWASP compliance, authentication issues, and data protection."
 - Focus: Injection risks, authentication, authorization, data encryption
 
 ## 3. Architecture Review
+
 - Use Task tool with subagent_type="architect-reviewer"
 - Prompt: "Review architectural design and patterns in: $ARGUMENTS. Evaluate scalability, maintainability, and adherence to architectural principles."
 - Focus: Service boundaries, coupling, cohesion, design patterns
 
 ## 4. Performance Analysis
+
 - Use Task tool with subagent_type="performance-engineer"
 - Prompt: "Analyze performance characteristics of: $ARGUMENTS. Identify bottlenecks, resource usage, and optimization opportunities."
 - Focus: Response times, memory usage, database queries, caching
 
 ## 5. Test Coverage Assessment
+
 - Use Task tool with subagent_type="test-automator"
 - Prompt: "Evaluate test coverage and quality for: $ARGUMENTS. Assess unit tests, integration tests, and identify gaps in test coverage."
 - Focus: Coverage metrics, test quality, edge cases, test maintainability
 
 ## 6. TDD Compliance Review (When --tdd-review is enabled)
+
 - Use Task tool with subagent_type="tdd-orchestrator"
 - Prompt: "Verify TDD compliance for: $ARGUMENTS. Check for test-first development patterns, red-green-refactor cycles, and test-driven design."
 - Focus on TDD metrics:
@@ -53,14 +59,18 @@ Execute parallel reviews using Task tool with specialized agents:
   - **Test Quality**: Tests that drive design, not just verify behavior
 
 ## Consolidated Report Structure
+
 Compile all feedback into a unified report:
+
 - **Critical Issues** (must fix): Security vulnerabilities, broken functionality, architectural flaws
 - **Recommendations** (should fix): Performance bottlenecks, code quality issues, missing tests
 - **Suggestions** (nice to have): Refactoring opportunities, documentation improvements
 - **Positive Feedback** (what's done well): Good practices to maintain and replicate
 
 ### TDD-Specific Metrics (When --tdd-review is enabled)
+
 Additional TDD compliance report section:
+
 - **TDD Adherence Score**: Percentage of code developed using TDD methodology
 - **Test-First Evidence**: Commits showing tests before implementation
 - **Cycle Completeness**: Percentage of complete red-green-refactor cycles

@@ -44,9 +44,9 @@ describe('CustomerService', () => {
 
     it('should reject duplicate KTP number', async () => {
       await customerService.create(sampleCustomer, adminId);
-      await expect(
-        customerService.create(sampleCustomer, adminId)
-      ).rejects.toThrow('Customer with this KTP already exists');
+      await expect(customerService.create(sampleCustomer, adminId)).rejects.toThrow(
+        'Customer with this KTP already exists',
+      );
     });
 
     it('should create audit log on create', async () => {
@@ -62,8 +62,13 @@ describe('CustomerService', () => {
     it('should return all customers', async () => {
       await customerService.create(sampleCustomer, adminId);
       await customerService.create(
-        { ...sampleCustomer, fullName: 'Siti Rahayu', ktpNumber: '3201019876543210', phone: '081299999999' },
-        adminId
+        {
+          ...sampleCustomer,
+          fullName: 'Siti Rahayu',
+          ktpNumber: '3201019876543210',
+          phone: '081299999999',
+        },
+        adminId,
       );
       const all = await customerService.getAll();
       expect(all.length).toBe(2);
@@ -85,24 +90,33 @@ describe('CustomerService', () => {
   describe('update', () => {
     it('should update customer fields', async () => {
       const created = await customerService.create(sampleCustomer, adminId);
-      const updated = await customerService.update(created.id, { fullName: 'Budi Updated' }, adminId);
+      const updated = await customerService.update(
+        created.id,
+        { fullName: 'Budi Updated' },
+        adminId,
+      );
       expect(updated.fullName).toBe('Budi Updated');
     });
 
     it('should reject duplicate KTP on update', async () => {
       const c1 = await customerService.create(sampleCustomer, adminId);
       await customerService.create(
-        { ...sampleCustomer, fullName: 'Siti', ktpNumber: '9999999999999999', phone: '081200000000' },
-        adminId
+        {
+          ...sampleCustomer,
+          fullName: 'Siti',
+          ktpNumber: '9999999999999999',
+          phone: '081200000000',
+        },
+        adminId,
       );
       await expect(
-        customerService.update(c1.id, { ktpNumber: '9999999999999999' }, adminId)
+        customerService.update(c1.id, { ktpNumber: '9999999999999999' }, adminId),
       ).rejects.toThrow('Customer with this KTP already exists');
     });
 
     it('should throw if customer not found', async () => {
       await expect(
-        customerService.update('non-existent', { fullName: 'Test' }, adminId)
+        customerService.update('non-existent', { fullName: 'Test' }, adminId),
       ).rejects.toThrow('Customer not found');
     });
   });
@@ -116,7 +130,9 @@ describe('CustomerService', () => {
     });
 
     it('should throw if customer not found', async () => {
-      await expect(customerService.delete('non-existent', adminId)).rejects.toThrow('Customer not found');
+      await expect(customerService.delete('non-existent', adminId)).rejects.toThrow(
+        'Customer not found',
+      );
     });
   });
 

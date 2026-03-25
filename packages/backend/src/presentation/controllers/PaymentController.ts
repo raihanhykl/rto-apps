@@ -21,7 +21,18 @@ export class PaymentController {
 
   getAll = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { page, limit, sortBy, sortOrder, search, status, customerId, invoiceType, startDate, endDate } = req.query;
+      const {
+        page,
+        limit,
+        sortBy,
+        sortOrder,
+        search,
+        status,
+        customerId,
+        invoiceType,
+        startDate,
+        endDate,
+      } = req.query;
       if (page) {
         const result = await this.paymentService.getAllPaginated({
           page: parseInt(page as string) || 1,
@@ -97,7 +108,7 @@ export class PaymentController {
       const payment = await this.paymentService.simulatePayment(
         req.params.id,
         status,
-        req.user!.id
+        req.user!.id,
       );
       res.json(payment);
     } catch (error) {
@@ -206,7 +217,11 @@ export class PaymentController {
       if (!days || days < 1 || days > 7) {
         return res.status(400).json({ error: 'days must be between 1 and 7' });
       }
-      const payment = await this.paymentService.createManualPayment(req.params.contractId, days, req.user!.id);
+      const payment = await this.paymentService.createManualPayment(
+        req.params.contractId,
+        days,
+        req.user!.id,
+      );
       res.json(payment);
     } catch (error) {
       next(error);
@@ -278,10 +293,18 @@ export class PaymentController {
         // Skip QR if generation fails
       }
 
-      const pdfBuffer = await this.pdfService.generateInvoicePdf(payment, contract, customer, qrCodeDataUrl);
+      const pdfBuffer = await this.pdfService.generateInvoicePdf(
+        payment,
+        contract,
+        customer,
+        qrCodeDataUrl,
+      );
 
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename=payment-${payment.invoiceNumber}.pdf`);
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename=payment-${payment.invoiceNumber}.pdf`,
+      );
       res.send(pdfBuffer);
     } catch (error) {
       next(error);

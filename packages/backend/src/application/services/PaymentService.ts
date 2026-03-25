@@ -17,7 +17,13 @@ import {
   DEFAULT_LATE_FEE_PER_DAY,
 } from '../../domain/enums';
 import { IPaymentDayRepository } from '../../domain/interfaces';
-import { getWibToday, getWibDateParts, toDateKey, getWibParts, toLocalMidnightWib } from '../../domain/utils/dateUtils';
+import {
+  getWibToday,
+  getWibDateParts,
+  toDateKey,
+  getWibParts,
+  toLocalMidnightWib,
+} from '../../domain/utils/dateUtils';
 import { computeLateFee } from '../../domain/utils/lateFeeCalculator';
 import { SettingService } from './SettingService';
 import { SavingService } from './SavingService';
@@ -56,11 +62,18 @@ export class PaymentService {
    * Hitung total late fee berdasarkan umur setiap hari yang belum dibayar.
    * Delegasi ke pure function computeLateFee() di domain layer.
    */
-  async calculateLateFee(unpaidDays: PaymentDay[], today: Date, holidayScheme?: HolidayScheme): Promise<number> {
+  async calculateLateFee(
+    unpaidDays: PaymentDay[],
+    today: Date,
+    holidayScheme?: HolidayScheme,
+  ): Promise<number> {
     // Kontrak lama (OLD_CONTRACT) tidak dikenakan denda
     if (holidayScheme === HolidayScheme.OLD_CONTRACT) return 0;
 
-    const penaltyGraceDays = await this.getSetting('penalty_grace_days', DEFAULT_PENALTY_GRACE_DAYS);
+    const penaltyGraceDays = await this.getSetting(
+      'penalty_grace_days',
+      DEFAULT_PENALTY_GRACE_DAYS,
+    );
     const feePerDay = await this.getSetting('late_fee_per_day', DEFAULT_LATE_FEE_PER_DAY);
     return computeLateFee(unpaidDays, today, penaltyGraceDays, feePerDay);
   }
@@ -108,7 +121,7 @@ export class PaymentService {
   async generatePaymentDaysForPeriod(
     contract: Contract,
     startDate: Date,
-    daysAhead: number
+    daysAhead: number,
   ): Promise<void> {
     const records: PaymentDay[] = [];
     const current = toLocalMidnightWib(new Date(startDate));
@@ -198,9 +211,10 @@ export class PaymentService {
     }
 
     const totalPaid = paidCount + holidayCount;
-    const progress = contract.ownershipTargetDays > 0
-      ? parseFloat(((totalPaid / contract.ownershipTargetDays) * 100).toFixed(2))
-      : 0;
+    const progress =
+      contract.ownershipTargetDays > 0
+        ? parseFloat(((totalPaid / contract.ownershipTargetDays) * 100).toFixed(2))
+        : 0;
 
     const updates: Partial<Contract> = {
       totalDaysPaid: totalPaid,
@@ -261,9 +275,12 @@ export class PaymentService {
         if (todayPd && todayPd.status === PaymentDayStatus.HOLIDAY) {
           // Check if holiday invoice already created for today
           const existingPayments = await this.invoiceRepo.findByContractId(contract.id);
-          const alreadyHasHoliday = existingPayments.some(p =>
-            p.isHoliday && p.status === PaymentStatus.PAID && p.periodStart &&
-            toDateKey(new Date(p.periodStart)) === toDateKey(now)
+          const alreadyHasHoliday = existingPayments.some(
+            (p) =>
+              p.isHoliday &&
+              p.status === PaymentStatus.PAID &&
+              p.periodStart &&
+              toDateKey(new Date(p.periodStart)) === toDateKey(now),
           );
           if (!alreadyHasHoliday) {
             const holidayPayment = await this.createHolidayPayment(contract, now);
@@ -283,8 +300,11 @@ export class PaymentService {
 
       // Opsi B: Query ALL UNPAID PaymentDays where date <= today
       const todayKey = toDateKey(now);
-      const allUnpaid = await this.paymentDayRepo.findByContractAndStatus(contract.id, PaymentDayStatus.UNPAID);
-      const unpaidDays = allUnpaid.filter(pd => toDateKey(pd.date) <= todayKey);
+      const allUnpaid = await this.paymentDayRepo.findByContractAndStatus(
+        contract.id,
+        PaymentDayStatus.UNPAID,
+      );
+      const unpaidDays = allUnpaid.filter((pd) => toDateKey(pd.date) <= todayKey);
 
       if (unpaidDays.length === 0) continue;
 
@@ -383,13 +403,15 @@ export class PaymentService {
     let rolledOver = 0;
 
     for (const payment of pendingPayments) {
-      if (payment.type !== InvoiceType.DAILY_BILLING && payment.type !== InvoiceType.MANUAL_PAYMENT) continue;
+      if (payment.type !== InvoiceType.DAILY_BILLING && payment.type !== InvoiceType.MANUAL_PAYMENT)
+        continue;
       if (!payment.periodEnd) continue;
 
       if (toDateKey(now) > toDateKey(new Date(payment.periodEnd))) {
         const contract = await this.contractRepo.findById(payment.contractId);
         if (!contract) continue;
-        if (contract.status !== ContractStatus.ACTIVE && contract.status !== ContractStatus.OVERDUE) continue;
+        if (contract.status !== ContractStatus.ACTIVE && contract.status !== ContractStatus.OVERDUE)
+          continue;
 
         await this.rolloverPayment(payment, contract, now);
         rolledOver++;
@@ -399,10 +421,18 @@ export class PaymentService {
     return rolledOver;
   }
 
-  private async rolloverPayment(expiredPayment: Invoice, contract: Contract, today: Date): Promise<Invoice> {
+  private async rolloverPayment(
+    expiredPayment: Invoice,
+    contract: Contract,
+    today: Date,
+  ): Promise<Invoice> {
     // 1. SNAPSHOT: simpan state PaymentDays lama untuk recovery jika gagal
     const oldPaymentDays = await this.paymentDayRepo.findByPaymentId(expiredPayment.id);
-    const oldPdSnapshot = oldPaymentDays.map(pd => ({ id: pd.id, status: pd.status, paymentId: pd.paymentId }));
+    const oldPdSnapshot = oldPaymentDays.map((pd) => ({
+      id: pd.id,
+      status: pd.status,
+      paymentId: pd.paymentId,
+    }));
 
     // 2. DESTRUKTIF: expire invoice lama + unlink PaymentDays
     await this.invoiceRepo.update(expiredPayment.id, {
@@ -429,8 +459,11 @@ export class PaymentService {
 
       // Link ALL UNPAID days (including gap) to new payment
       const todayKeyRollover = toDateKey(today);
-      const allUnpaid = await this.paymentDayRepo.findByContractAndStatus(contract.id, PaymentDayStatus.UNPAID);
-      const unpaidDays = allUnpaid.filter(pd => toDateKey(pd.date) <= todayKeyRollover);
+      const allUnpaid = await this.paymentDayRepo.findByContractAndStatus(
+        contract.id,
+        PaymentDayStatus.UNPAID,
+      );
+      const unpaidDays = allUnpaid.filter((pd) => toDateKey(pd.date) <= todayKeyRollover);
 
       if (unpaidDays.length === 0) {
         // Edge case: no unpaid days (all holidays?), create minimal rollover
@@ -612,7 +645,10 @@ export class PaymentService {
 
   // ============ Manual Payment ============
 
-  async previewManualPayment(contractId: string, days: number): Promise<{
+  async previewManualPayment(
+    contractId: string,
+    days: number,
+  ): Promise<{
     amount: number;
     lateFee: number;
     total: number;
@@ -631,20 +667,24 @@ export class PaymentService {
     const billingStartPreview = toLocalMidnightWib(new Date(contract.billingStartDate));
     const futureEnd = new Date(today);
     futureEnd.setDate(futureEnd.getDate() + 7);
-    const totalDaysToGenerate = Math.floor((futureEnd.getTime() - billingStartPreview.getTime()) / 86400000) + 1;
+    const totalDaysToGenerate =
+      Math.floor((futureEnd.getTime() - billingStartPreview.getTime()) / 86400000) + 1;
     await this.generatePaymentDaysForPeriod(contract, billingStartPreview, totalDaysToGenerate);
 
     // Check existing active payment (same logic as createManualPayment)
     const existingActive = await this.invoiceRepo.findActiveByContractId(contractId);
-    const existingDaysCount = existingActive ? (existingActive.daysCount || 0) : 0;
+    const existingDaysCount = existingActive ? existingActive.daysCount || 0 : 0;
 
     // FIFO: query ALL UNPAID + PENDING working days
-    const allUnpaid = await this.paymentDayRepo.findByContractAndStatus(contract.id, PaymentDayStatus.UNPAID);
+    const allUnpaid = await this.paymentDayRepo.findByContractAndStatus(
+      contract.id,
+      PaymentDayStatus.UNPAID,
+    );
     const pendingDays = existingActive
       ? await this.paymentDayRepo.findByContractAndStatus(contract.id, PaymentDayStatus.PENDING)
       : [];
     const combinedDays = [...allUnpaid, ...pendingDays]
-      .filter(pd => pd.amount > 0)
+      .filter((pd) => pd.amount > 0)
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
     const totalDaysNeeded = existingDaysCount + days;
@@ -680,7 +720,8 @@ export class PaymentService {
     const billingStartManual = toLocalMidnightWib(new Date(contract.billingStartDate));
     const futureEndManual = new Date(today);
     futureEndManual.setDate(futureEndManual.getDate() + 7);
-    const totalDaysToGenerate = Math.floor((futureEndManual.getTime() - billingStartManual.getTime()) / 86400000) + 1;
+    const totalDaysToGenerate =
+      Math.floor((futureEndManual.getTime() - billingStartManual.getTime()) / 86400000) + 1;
     await this.generatePaymentDaysForPeriod(contract, billingStartManual, totalDaysToGenerate);
 
     // Check for existing active payment
@@ -704,8 +745,11 @@ export class PaymentService {
     }
 
     // FIFO: query ALL UNPAID working days, sorted by date ASC (oldest first)
-    const allUnpaid = await this.paymentDayRepo.findByContractAndStatus(contract.id, PaymentDayStatus.UNPAID);
-    const unpaidWorkingDays = allUnpaid.filter(pd => pd.amount > 0); // exclude holidays (amount=0)
+    const allUnpaid = await this.paymentDayRepo.findByContractAndStatus(
+      contract.id,
+      PaymentDayStatus.UNPAID,
+    );
+    const unpaidWorkingDays = allUnpaid.filter((pd) => pd.amount > 0); // exclude holidays (amount=0)
 
     const totalDaysNeeded = existingDaysCount + days;
     const selectedDays = unpaidWorkingDays.slice(0, totalDaysNeeded);
@@ -779,7 +823,8 @@ export class PaymentService {
   async cancelPayment(paymentId: string, adminId: string): Promise<Invoice> {
     const payment = await this.invoiceRepo.findById(paymentId);
     if (!payment) throw new Error('Payment not found');
-    if (payment.status !== PaymentStatus.PENDING) throw new Error('Only PENDING payments can be cancelled');
+    if (payment.status !== PaymentStatus.PENDING)
+      throw new Error('Only PENDING payments can be cancelled');
 
     const cancelled = await this.invoiceRepo.update(paymentId, {
       status: PaymentStatus.VOID,
@@ -850,17 +895,24 @@ export class PaymentService {
     const todayMidnight = toLocalMidnightWib(today);
 
     // Read penalty grace days for UNPAID coloring (1x, bukan per-hari)
-    const penaltyGraceDays = await this.getSetting('penalty_grace_days', DEFAULT_PENALTY_GRACE_DAYS);
+    const penaltyGraceDays = await this.getSetting(
+      'penalty_grace_days',
+      DEFAULT_PENALTY_GRACE_DAYS,
+    );
 
     // Pad query range ±1 day using UTC to handle any timezone offset in stored dates.
     // toDateKey()-based matching below correctly filters to the target month only.
     const queryStart = new Date(Date.UTC(year, month - 1, 0, 0, 0, 0, 0));
     const queryEnd = new Date(Date.UTC(year, month, 2, 0, 0, 0, 0));
 
-    const paymentDays = await this.paymentDayRepo.findByContractAndDateRange(contractId, queryStart, queryEnd);
+    const paymentDays = await this.paymentDayRepo.findByContractAndDateRange(
+      contractId,
+      queryStart,
+      queryEnd,
+    );
 
     const dayMap = new Map<string, PaymentDay>();
-    paymentDays.forEach(pd => {
+    paymentDays.forEach((pd) => {
       dayMap.set(toDateKey(pd.date), pd);
     });
 
@@ -899,7 +951,9 @@ export class PaymentService {
           } else {
             // Sudah lewat atau hari ini — cek grace period
             const dayMidnight = toLocalMidnightWib(date);
-            const diffDays = Math.floor((todayMidnight.getTime() - dayMidnight.getTime()) / 86400000);
+            const diffDays = Math.floor(
+              (todayMidnight.getTime() - dayMidnight.getTime()) / 86400000,
+            );
             const calStatus = diffDays >= penaltyGraceDays ? 'overdue' : 'pending';
             result.push({ date: dateKeyStr, status: calStatus, amount: pd.amount });
           }
@@ -967,7 +1021,7 @@ export class PaymentService {
   async simulatePayment(
     paymentId: string,
     status: PaymentStatus.PAID | PaymentStatus.FAILED,
-    adminId: string
+    adminId: string,
   ): Promise<Invoice> {
     const payment = await this.invoiceRepo.findById(paymentId);
     if (!payment) throw new Error('Payment not found');
@@ -986,7 +1040,10 @@ export class PaymentService {
 
     if (status === PaymentStatus.PAID) {
       // Update PaymentDay records → PAID
-      if (payment.type === InvoiceType.DAILY_BILLING || payment.type === InvoiceType.MANUAL_PAYMENT) {
+      if (
+        payment.type === InvoiceType.DAILY_BILLING ||
+        payment.type === InvoiceType.MANUAL_PAYMENT
+      ) {
         await this.paymentDayRepo.updateManyByPaymentId(payment.id, {
           status: PaymentDayStatus.PAID,
         });
@@ -1054,7 +1111,11 @@ export class PaymentService {
       module: 'payment',
       entityId: paymentId,
       description: `Voided payment ${payment.invoiceNumber} - Rp ${payment.amount.toLocaleString('id-ID')}`,
-      metadata: { paymentNumber: payment.invoiceNumber, amount: payment.amount, previousStatus: payment.status },
+      metadata: {
+        paymentNumber: payment.invoiceNumber,
+        amount: payment.amount,
+        previousStatus: payment.status,
+      },
       ipAddress: '',
       createdAt: new Date(),
     });
@@ -1080,9 +1141,10 @@ export class PaymentService {
     if (!invoice.extensionDays || invoice.extensionDays <= 0) return;
 
     const newTotalDaysPaid = Math.max(0, contract.totalDaysPaid - invoice.extensionDays);
-    const newProgress = contract.ownershipTargetDays > 0
-      ? parseFloat(((newTotalDaysPaid / contract.ownershipTargetDays) * 100).toFixed(2))
-      : 0;
+    const newProgress =
+      contract.ownershipTargetDays > 0
+        ? parseFloat(((newTotalDaysPaid / contract.ownershipTargetDays) * 100).toFixed(2))
+        : 0;
 
     const updateData: Partial<Contract> = {
       totalDaysPaid: newTotalDaysPaid,
@@ -1135,15 +1197,19 @@ export class PaymentService {
       }
     } else if (previousStatus === PaymentStatus.VOID || previousStatus === PaymentStatus.EXPIRED) {
       // Revert VOID/EXPIRED → PENDING: re-link UNPAID days in the payment's period range
-      if (payment.periodStart && payment.periodEnd &&
-          (payment.type === InvoiceType.DAILY_BILLING || payment.type === InvoiceType.MANUAL_PAYMENT)) {
+      if (
+        payment.periodStart &&
+        payment.periodEnd &&
+        (payment.type === InvoiceType.DAILY_BILLING || payment.type === InvoiceType.MANUAL_PAYMENT)
+      ) {
         const unpaidDays = await this.paymentDayRepo.findByContractAndDateRange(
           payment.contractId,
           new Date(payment.periodStart),
           new Date(payment.periodEnd),
         );
-        const daysToRelink = unpaidDays
-          .filter(pd => pd.status === PaymentDayStatus.UNPAID && pd.amount > 0);
+        const daysToRelink = unpaidDays.filter(
+          (pd) => pd.status === PaymentDayStatus.UNPAID && pd.amount > 0,
+        );
 
         for (const pd of daysToRelink) {
           await this.paymentDayRepo.update(pd.id, {
@@ -1263,7 +1329,7 @@ export class PaymentService {
     );
     const todayKeyReduce = toDateKey(getWibToday());
     const eligibleDays = allUnpaid
-      .filter(pd => toDateKey(pd.date) <= todayKeyReduce)
+      .filter((pd) => toDateKey(pd.date) <= todayKeyReduce)
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
       .slice(0, newDaysCount);
 
@@ -1351,7 +1417,7 @@ export class PaymentService {
       const targetEnd = new Date(today);
       targetEnd.setDate(targetEnd.getDate() + 30);
 
-      let current = new Date(billingStart);
+      const current = new Date(billingStart);
       while (current <= targetEnd) {
         const d = toLocalMidnightWib(new Date(current));
         const dKey = toDateKey(d);
@@ -1399,8 +1465,14 @@ export class PaymentService {
       }
 
       // Void future days for cancelled/repossessed contracts
-      if (contract.status === ContractStatus.CANCELLED || contract.status === ContractStatus.REPOSSESSED) {
-        const unpaidDays = await this.paymentDayRepo.findByContractAndStatus(contract.id, PaymentDayStatus.UNPAID);
+      if (
+        contract.status === ContractStatus.CANCELLED ||
+        contract.status === ContractStatus.REPOSSESSED
+      ) {
+        const unpaidDays = await this.paymentDayRepo.findByContractAndStatus(
+          contract.id,
+          PaymentDayStatus.UNPAID,
+        );
         for (const day of unpaidDays) {
           await this.paymentDayRepo.update(day.id, { status: PaymentDayStatus.VOIDED });
         }
@@ -1432,7 +1504,10 @@ export class PaymentService {
 
   // ============ Bulk ============
 
-  async bulkMarkPaid(paymentIds: string[], adminId: string): Promise<{ success: string[]; failed: Array<{ id: string; error: string }> }> {
+  async bulkMarkPaid(
+    paymentIds: string[],
+    adminId: string,
+  ): Promise<{ success: string[]; failed: Array<{ id: string; error: string }> }> {
     const success: string[] = [];
     const failed: Array<{ id: string; error: string }> = [];
 

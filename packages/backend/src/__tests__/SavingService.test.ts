@@ -71,10 +71,17 @@ describe('SavingService', () => {
   }
 
   // Helper: buat invoice daily billing PAID
-  async function createPaidDailyInvoice(contractId: string, customerId: string, daysCount: number, overrides?: Partial<Invoice>): Promise<Invoice> {
+  async function createPaidDailyInvoice(
+    contractId: string,
+    customerId: string,
+    daysCount: number,
+    overrides?: Partial<Invoice>,
+  ): Promise<Invoice> {
     const invoice: Invoice = {
       id: uuidv4(),
-      invoiceNumber: `PMT-260310-${Math.floor(Math.random() * 9999).toString().padStart(4, '0')}`,
+      invoiceNumber: `PMT-260310-${Math.floor(Math.random() * 9999)
+        .toString()
+        .padStart(4, '0')}`,
       contractId,
       customerId,
       amount: 58000 * daysCount,
@@ -118,7 +125,7 @@ describe('SavingService', () => {
       const tx = await savingService.creditFromPayment(invoice.id, 'admin');
 
       expect(tx.type).toBe(SavingTransactionType.CREDIT);
-      expect(tx.amount).toBe(SAVING_PER_DAY * 5);  // 5000 × 5 = 25000
+      expect(tx.amount).toBe(SAVING_PER_DAY * 5); // 5000 × 5 = 25000
       expect(tx.daysCount).toBe(5);
       expect(tx.balanceBefore).toBe(0);
       expect(tx.balanceAfter).toBe(25000);
@@ -136,7 +143,7 @@ describe('SavingService', () => {
       });
 
       const tx = await savingService.creditFromPayment(invoice.id, 'admin');
-      expect(tx.amount).toBe(SAVING_PER_DAY * 3);  // 5000 × 3 = 15000
+      expect(tx.amount).toBe(SAVING_PER_DAY * 3); // 5000 × 3 = 15000
     });
 
     it('should accumulate saving balance across multiple credits', async () => {
@@ -150,8 +157,8 @@ describe('SavingService', () => {
       const inv2 = await createPaidDailyInvoice(contract.id, contract.customerId, 3);
       const tx2 = await savingService.creditFromPayment(inv2.id, 'admin');
 
-      expect(tx2.balanceBefore).toBe(25000);  // dari credit pertama
-      expect(tx2.balanceAfter).toBe(40000);   // 25000 + 15000
+      expect(tx2.balanceBefore).toBe(25000); // dari credit pertama
+      expect(tx2.balanceAfter).toBe(40000); // 25000 + 15000
 
       const updated = await contractRepo.findById(contract.id);
       expect(updated!.savingBalance).toBe(40000);
@@ -181,12 +188,16 @@ describe('SavingService', () => {
     it('should debit saving for motor service', async () => {
       const contract = await createContract({ savingBalance: 500000 });
 
-      const tx = await savingService.debitForService(contract.id, {
-        amount: 300000,
-        description: 'Service rem depan + ganti kampas',
-        photo: 'https://example.com/nota.jpg',
-        notes: null,
-      }, 'admin');
+      const tx = await savingService.debitForService(
+        contract.id,
+        {
+          amount: 300000,
+          description: 'Service rem depan + ganti kampas',
+          photo: 'https://example.com/nota.jpg',
+          notes: null,
+        },
+        'admin',
+      );
 
       expect(tx.type).toBe(SavingTransactionType.DEBIT_SERVICE);
       expect(tx.amount).toBe(300000);
@@ -201,87 +212,162 @@ describe('SavingService', () => {
     it('should throw error if amount exceeds saving balance', async () => {
       const contract = await createContract({ savingBalance: 100000 });
 
-      await expect(savingService.debitForService(contract.id, {
-        amount: 200000,
-        description: 'Servis besar',
-      }, 'admin')).rejects.toThrow('Saldo saving tidak cukup');
+      await expect(
+        savingService.debitForService(
+          contract.id,
+          {
+            amount: 200000,
+            description: 'Servis besar',
+          },
+          'admin',
+        ),
+      ).rejects.toThrow('Saldo saving tidak cukup');
     });
 
     it('should throw error for contract not found', async () => {
-      await expect(savingService.debitForService('nonexistent', {
-        amount: 50000,
-        description: 'Test',
-      }, 'admin')).rejects.toThrow('Contract not found');
+      await expect(
+        savingService.debitForService(
+          'nonexistent',
+          {
+            amount: 50000,
+            description: 'Test',
+          },
+          'admin',
+        ),
+      ).rejects.toThrow('Contract not found');
     });
 
     it('should allow debit on ACTIVE contract', async () => {
-      const contract = await createContract({ status: ContractStatus.ACTIVE, savingBalance: 100000 });
-      const tx = await savingService.debitForService(contract.id, { amount: 50000, description: 'Test' }, 'admin');
+      const contract = await createContract({
+        status: ContractStatus.ACTIVE,
+        savingBalance: 100000,
+      });
+      const tx = await savingService.debitForService(
+        contract.id,
+        { amount: 50000, description: 'Test' },
+        'admin',
+      );
       expect(tx.balanceAfter).toBe(50000);
     });
 
     it('should allow debit on OVERDUE contract', async () => {
-      const contract = await createContract({ status: ContractStatus.OVERDUE, savingBalance: 100000 });
-      const tx = await savingService.debitForService(contract.id, { amount: 50000, description: 'Test' }, 'admin');
+      const contract = await createContract({
+        status: ContractStatus.OVERDUE,
+        savingBalance: 100000,
+      });
+      const tx = await savingService.debitForService(
+        contract.id,
+        { amount: 50000, description: 'Test' },
+        'admin',
+      );
       expect(tx.balanceAfter).toBe(50000);
     });
 
     it('should allow debit on COMPLETED contract', async () => {
-      const contract = await createContract({ status: ContractStatus.COMPLETED, savingBalance: 100000 });
-      const tx = await savingService.debitForService(contract.id, { amount: 50000, description: 'Test' }, 'admin');
+      const contract = await createContract({
+        status: ContractStatus.COMPLETED,
+        savingBalance: 100000,
+      });
+      const tx = await savingService.debitForService(
+        contract.id,
+        { amount: 50000, description: 'Test' },
+        'admin',
+      );
       expect(tx.balanceAfter).toBe(50000);
     });
 
     it('should throw error on CANCELLED contract', async () => {
-      const contract = await createContract({ status: ContractStatus.CANCELLED, savingBalance: 100000 });
-      await expect(savingService.debitForService(contract.id, { amount: 50000, description: 'Test' }, 'admin'))
-        .rejects.toThrow();
+      const contract = await createContract({
+        status: ContractStatus.CANCELLED,
+        savingBalance: 100000,
+      });
+      await expect(
+        savingService.debitForService(contract.id, { amount: 50000, description: 'Test' }, 'admin'),
+      ).rejects.toThrow();
     });
 
     it('should throw error on REPOSSESSED contract', async () => {
-      const contract = await createContract({ status: ContractStatus.REPOSSESSED, savingBalance: 100000 });
-      await expect(savingService.debitForService(contract.id, { amount: 50000, description: 'Test' }, 'admin'))
-        .rejects.toThrow();
+      const contract = await createContract({
+        status: ContractStatus.REPOSSESSED,
+        savingBalance: 100000,
+      });
+      await expect(
+        savingService.debitForService(contract.id, { amount: 50000, description: 'Test' }, 'admin'),
+      ).rejects.toThrow();
     });
   });
 
   // ============ DEBIT TRANSFER ============
   describe('debitForTransfer', () => {
     it('should debit saving for STNK/BPKB transfer on COMPLETED contract', async () => {
-      const contract = await createContract({ status: ContractStatus.COMPLETED, savingBalance: 600000 });
+      const contract = await createContract({
+        status: ContractStatus.COMPLETED,
+        savingBalance: 600000,
+      });
 
-      const tx = await savingService.debitForTransfer(contract.id, {
-        amount: 400000,
-        description: 'Biaya balik nama STNK + BPKB',
-      }, 'admin');
+      const tx = await savingService.debitForTransfer(
+        contract.id,
+        {
+          amount: 400000,
+          description: 'Biaya balik nama STNK + BPKB',
+        },
+        'admin',
+      );
 
       expect(tx.type).toBe(SavingTransactionType.DEBIT_TRANSFER);
       expect(tx.balanceAfter).toBe(200000);
     });
 
     it('should throw error on ACTIVE contract', async () => {
-      const contract = await createContract({ status: ContractStatus.ACTIVE, savingBalance: 600000 });
-      await expect(savingService.debitForTransfer(contract.id, { amount: 400000, description: 'Test' }, 'admin'))
-        .rejects.toThrow('hanya tersedia pada kontrak yang sudah COMPLETED');
+      const contract = await createContract({
+        status: ContractStatus.ACTIVE,
+        savingBalance: 600000,
+      });
+      await expect(
+        savingService.debitForTransfer(
+          contract.id,
+          { amount: 400000, description: 'Test' },
+          'admin',
+        ),
+      ).rejects.toThrow('hanya tersedia pada kontrak yang sudah COMPLETED');
     });
 
     it('should throw error on OVERDUE contract', async () => {
-      const contract = await createContract({ status: ContractStatus.OVERDUE, savingBalance: 600000 });
-      await expect(savingService.debitForTransfer(contract.id, { amount: 400000, description: 'Test' }, 'admin'))
-        .rejects.toThrow();
+      const contract = await createContract({
+        status: ContractStatus.OVERDUE,
+        savingBalance: 600000,
+      });
+      await expect(
+        savingService.debitForTransfer(
+          contract.id,
+          { amount: 400000, description: 'Test' },
+          'admin',
+        ),
+      ).rejects.toThrow();
     });
 
     it('should throw error if amount exceeds balance', async () => {
-      const contract = await createContract({ status: ContractStatus.COMPLETED, savingBalance: 100000 });
-      await expect(savingService.debitForTransfer(contract.id, { amount: 200000, description: 'Test' }, 'admin'))
-        .rejects.toThrow('Saldo saving tidak cukup');
+      const contract = await createContract({
+        status: ContractStatus.COMPLETED,
+        savingBalance: 100000,
+      });
+      await expect(
+        savingService.debitForTransfer(
+          contract.id,
+          { amount: 200000, description: 'Test' },
+          'admin',
+        ),
+      ).rejects.toThrow('Saldo saving tidak cukup');
     });
   });
 
   // ============ CLAIM ============
   describe('claimSaving', () => {
     it('should claim full saving on COMPLETED contract', async () => {
-      const contract = await createContract({ status: ContractStatus.COMPLETED, savingBalance: 300000 });
+      const contract = await createContract({
+        status: ContractStatus.COMPLETED,
+        savingBalance: 300000,
+      });
 
       const tx = await savingService.claimSaving(contract.id, {}, 'admin');
 
@@ -294,7 +380,10 @@ describe('SavingService', () => {
     });
 
     it('should claim partial amount', async () => {
-      const contract = await createContract({ status: ContractStatus.COMPLETED, savingBalance: 300000 });
+      const contract = await createContract({
+        status: ContractStatus.COMPLETED,
+        savingBalance: 300000,
+      });
 
       const tx = await savingService.claimSaving(contract.id, { amount: 100000 }, 'admin');
 
@@ -303,33 +392,50 @@ describe('SavingService', () => {
     });
 
     it('should throw error on CANCELLED contract', async () => {
-      const contract = await createContract({ status: ContractStatus.CANCELLED, savingBalance: 300000 });
-      await expect(savingService.claimSaving(contract.id, {}, 'admin'))
-        .rejects.toThrow('CANCELLED atau REPOSSESSED');
+      const contract = await createContract({
+        status: ContractStatus.CANCELLED,
+        savingBalance: 300000,
+      });
+      await expect(savingService.claimSaving(contract.id, {}, 'admin')).rejects.toThrow(
+        'CANCELLED atau REPOSSESSED',
+      );
     });
 
     it('should throw error on REPOSSESSED contract', async () => {
-      const contract = await createContract({ status: ContractStatus.REPOSSESSED, savingBalance: 300000 });
-      await expect(savingService.claimSaving(contract.id, {}, 'admin'))
-        .rejects.toThrow('CANCELLED atau REPOSSESSED');
+      const contract = await createContract({
+        status: ContractStatus.REPOSSESSED,
+        savingBalance: 300000,
+      });
+      await expect(savingService.claimSaving(contract.id, {}, 'admin')).rejects.toThrow(
+        'CANCELLED atau REPOSSESSED',
+      );
     });
 
     it('should throw error on ACTIVE contract', async () => {
-      const contract = await createContract({ status: ContractStatus.ACTIVE, savingBalance: 300000 });
-      await expect(savingService.claimSaving(contract.id, {}, 'admin'))
-        .rejects.toThrow('COMPLETED');
+      const contract = await createContract({
+        status: ContractStatus.ACTIVE,
+        savingBalance: 300000,
+      });
+      await expect(savingService.claimSaving(contract.id, {}, 'admin')).rejects.toThrow(
+        'COMPLETED',
+      );
     });
 
     it('should throw error if saving balance is 0', async () => {
       const contract = await createContract({ status: ContractStatus.COMPLETED, savingBalance: 0 });
-      await expect(savingService.claimSaving(contract.id, {}, 'admin'))
-        .rejects.toThrow('Saldo saving sudah habis');
+      await expect(savingService.claimSaving(contract.id, {}, 'admin')).rejects.toThrow(
+        'Saldo saving sudah habis',
+      );
     });
 
     it('should throw error if claim amount exceeds balance', async () => {
-      const contract = await createContract({ status: ContractStatus.COMPLETED, savingBalance: 100000 });
-      await expect(savingService.claimSaving(contract.id, { amount: 200000 }, 'admin'))
-        .rejects.toThrow('Saldo saving tidak cukup');
+      const contract = await createContract({
+        status: ContractStatus.COMPLETED,
+        savingBalance: 100000,
+      });
+      await expect(
+        savingService.claimSaving(contract.id, { amount: 200000 }, 'admin'),
+      ).rejects.toThrow('Saldo saving tidak cukup');
     });
   });
 
@@ -369,14 +475,19 @@ describe('SavingService', () => {
       await savingService.creditFromPayment(invoice.id, 'admin');
 
       // Debit some: 30000
-      await savingService.debitForService(contract.id, {
-        amount: 30000,
-        description: 'Service',
-      }, 'admin');
+      await savingService.debitForService(
+        contract.id,
+        {
+          amount: 30000,
+          description: 'Service',
+        },
+        'admin',
+      );
 
       // savingBalance = 20000, tapi reversal = 50000 → negatif!
-      await expect(savingService.reverseCreditFromPayment(invoice.id, 'admin'))
-        .rejects.toThrow('Insufficient saving balance');
+      await expect(savingService.reverseCreditFromPayment(invoice.id, 'admin')).rejects.toThrow(
+        'Insufficient saving balance',
+      );
     });
   });
 
@@ -389,7 +500,11 @@ describe('SavingService', () => {
       const inv1 = await createPaidDailyInvoice(contract.id, contract.customerId, 2);
       await savingService.creditFromPayment(inv1.id, 'admin');
 
-      await savingService.debitForService(contract.id, { amount: 5000, description: 'Service 1' }, 'admin');
+      await savingService.debitForService(
+        contract.id,
+        { amount: 5000, description: 'Service 1' },
+        'admin',
+      );
 
       const history = await savingService.getTransactionHistory(contract.id);
 
@@ -460,10 +575,14 @@ describe('SavingService', () => {
       expect(c!.savingBalance).toBe(50000);
 
       // 3. Service motor → saving = 20000
-      await savingService.debitForService(contract.id, {
-        amount: 30000,
-        description: 'Ganti ban depan',
-      }, 'admin');
+      await savingService.debitForService(
+        contract.id,
+        {
+          amount: 30000,
+          description: 'Ganti ban depan',
+        },
+        'admin',
+      );
 
       c = await contractRepo.findById(contract.id);
       expect(c!.savingBalance).toBe(20000);
@@ -479,10 +598,14 @@ describe('SavingService', () => {
       await contractRepo.update(contract.id, { status: ContractStatus.COMPLETED });
 
       // 6. Balik nama → saving = 25000
-      await savingService.debitForTransfer(contract.id, {
-        amount: 20000,
-        description: 'Biaya balik nama STNK',
-      }, 'admin');
+      await savingService.debitForTransfer(
+        contract.id,
+        {
+          amount: 20000,
+          description: 'Biaya balik nama STNK',
+        },
+        'admin',
+      );
 
       c = await contractRepo.findById(contract.id);
       expect(c!.savingBalance).toBe(25000);

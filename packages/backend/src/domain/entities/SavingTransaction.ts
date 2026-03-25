@@ -4,7 +4,7 @@ export interface SavingTransaction {
   id: string;
   contractId: string;
   type: SavingTransactionType;
-  amount: number;           // Selalu positif
+  amount: number; // Selalu positif
   balanceBefore: number;
   balanceAfter: number;
   paymentId: string | null;

@@ -6,7 +6,7 @@ export class PdfService {
     invoice: Invoice,
     contract: Contract,
     customer: Customer,
-    qrCodeDataUrl?: string
+    qrCodeDataUrl?: string,
   ): Promise<Buffer> {
     return new Promise((resolve, reject) => {
       const doc = new PDFDocument({ size: 'A4', margin: 50 });
@@ -61,7 +61,8 @@ export class PdfService {
       ry += 13;
       doc.text(`No. Kontrak: ${contract.contractNumber}`, rightX, ry);
       ry += 13;
-      const statusText = invoice.status === 'PAID' ? 'LUNAS' : invoice.status === 'VOID' ? 'VOID' : 'BELUM BAYAR';
+      const statusText =
+        invoice.status === 'PAID' ? 'LUNAS' : invoice.status === 'VOID' ? 'VOID' : 'BELUM BAYAR';
       doc.font('Helvetica-Bold').text(`Status: ${statusText}`, rightX, ry);
 
       doc.y = Math.max(doc.y, ry + 25);
@@ -103,7 +104,10 @@ export class PdfService {
       doc.moveDown(0.3);
       doc.font('Helvetica-Bold');
       doc.text('Total:', 350, doc.y);
-      doc.text(formatRp(invoice.amount + invoice.lateFee), 430, doc.y - 12, { align: 'right', width: 115 });
+      doc.text(formatRp(invoice.amount + invoice.lateFee), 430, doc.y - 12, {
+        align: 'right',
+        width: 115,
+      });
       doc.moveDown(1.5);
 
       // Payment info
@@ -111,7 +115,10 @@ export class PdfService {
         doc.moveTo(50, doc.y).lineTo(545, doc.y).stroke();
         doc.moveDown(0.5);
         doc.fontSize(11).font('Helvetica-Bold').text('LUNAS', { align: 'center' });
-        doc.fontSize(9).font('Helvetica').text(`Dibayar pada: ${formatDate(invoice.paidAt)}`, { align: 'center' });
+        doc
+          .fontSize(9)
+          .font('Helvetica')
+          .text(`Dibayar pada: ${formatDate(invoice.paidAt)}`, { align: 'center' });
         doc.moveDown(1);
       }
 
@@ -122,7 +129,9 @@ export class PdfService {
       doc.moveDown(0.2);
       doc.font('Helvetica');
       doc.text(`Motor: ${contract.motorModel} | Rate: ${formatRp(contract.dailyRate)}/hari`);
-      doc.text(`Total hari dibayar: ${contract.totalDaysPaid} / ${contract.ownershipTargetDays} hari (${contract.ownershipProgress}%)`);
+      doc.text(
+        `Total hari dibayar: ${contract.totalDaysPaid} / ${contract.ownershipTargetDays} hari (${contract.ownershipProgress}%)`,
+      );
 
       // QR code if provided
       if (qrCodeDataUrl) {

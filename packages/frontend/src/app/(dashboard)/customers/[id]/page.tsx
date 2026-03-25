@@ -1,32 +1,37 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import { useParams, useRouter } from "next/navigation";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from '@/components/ui/select';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogFooter,
-} from "@/components/ui/dialog";
-import { useCustomer, useContractsByCustomer, usePaymentsPaginated, useInvalidate } from "@/hooks/useApi";
-import { api } from "@/lib/api";
-import { Customer, Contract, Invoice } from "@/types";
-import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils";
-import { toastSuccess, toastError } from "@/stores/toastStore";
+} from '@/components/ui/dialog';
+import {
+  useCustomer,
+  useContractsByCustomer,
+  usePaymentsPaginated,
+  useInvalidate,
+} from '@/hooks/useApi';
+import { api } from '@/lib/api';
+import { Customer, Contract, Invoice } from '@/types';
+import { formatCurrency, formatDate, formatDateTime } from '@/lib/utils';
+import { toastSuccess, toastError } from '@/stores/toastStore';
 import {
   ArrowLeft,
   User,
@@ -43,35 +48,46 @@ import {
   Pencil,
   Plus,
   X,
-} from "lucide-react";
+} from 'lucide-react';
 
-const RIDE_HAILING_OPTIONS = ["Grab", "Gojek", "Maxim", "Indrive", "Shopee", "Lalamove"];
+const RIDE_HAILING_OPTIONS = ['Grab', 'Gojek', 'Maxim', 'Indrive', 'Shopee', 'Lalamove'];
 
 const statusBadgeVariant = (status: string) => {
   switch (status) {
-    case "ACTIVE": return "default" as const;
-    case "COMPLETED": return "success" as const;
-    case "OVERDUE": return "destructive" as const;
-    case "CANCELLED": return "secondary" as const;
-    case "REPOSSESSED": return "destructive" as const;
-    default: return "outline" as const;
+    case 'ACTIVE':
+      return 'default' as const;
+    case 'COMPLETED':
+      return 'success' as const;
+    case 'OVERDUE':
+      return 'destructive' as const;
+    case 'CANCELLED':
+      return 'secondary' as const;
+    case 'REPOSSESSED':
+      return 'destructive' as const;
+    default:
+      return 'outline' as const;
   }
 };
 
 const paymentBadgeVariant = (status: string) => {
   switch (status) {
-    case "PENDING": return "warning" as const;
-    case "PAID": return "success" as const;
-    case "FAILED": return "destructive" as const;
-    case "VOID": return "secondary" as const;
-    default: return "outline" as const;
+    case 'PENDING':
+      return 'warning' as const;
+    case 'PAID':
+      return 'success' as const;
+    case 'FAILED':
+      return 'destructive' as const;
+    case 'VOID':
+      return 'secondary' as const;
+    default:
+      return 'outline' as const;
   }
 };
 
 const genderLabel = (g: string | null) => {
-  if (g === "MALE") return "Laki-laki";
-  if (g === "FEMALE") return "Perempuan";
-  return "-";
+  if (g === 'MALE') return 'Laki-laki';
+  if (g === 'FEMALE') return 'Perempuan';
+  return '-';
 };
 
 export default function CustomerDetailPage() {
@@ -79,30 +95,36 @@ export default function CustomerDetailPage() {
   const router = useRouter();
   const invalidate = useInvalidate();
   const { data: customer, isLoading: customerLoading } = useCustomer(id);
-  const { data: contracts = [] as Contract[], isLoading: contractsLoading } = useContractsByCustomer(id);
-  const { data: invoicesData, isLoading: invoicesLoading } = usePaymentsPaginated({ customerId: id, limit: 100, sortBy: "createdAt", sortOrder: "desc" });
+  const { data: contracts = [] as Contract[], isLoading: contractsLoading } =
+    useContractsByCustomer(id);
+  const { data: invoicesData, isLoading: invoicesLoading } = usePaymentsPaginated({
+    customerId: id,
+    limit: 100,
+    sortBy: 'createdAt',
+    sortOrder: 'desc',
+  });
   const invoices = (invoicesData?.data as Invoice[]) || [];
   const loading = customerLoading || contractsLoading || invoicesLoading;
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [editForm, setEditForm] = useState({
-    fullName: "",
-    phone: "",
-    email: "",
-    address: "",
-    birthDate: "",
-    gender: "" as string,
-    ktpNumber: "",
-    guarantorName: "",
-    guarantorPhone: "",
-    spouseName: "",
-    notes: "",
+    fullName: '',
+    phone: '',
+    email: '',
+    address: '',
+    birthDate: '',
+    gender: '' as string,
+    ktpNumber: '',
+    guarantorName: '',
+    guarantorPhone: '',
+    spouseName: '',
+    notes: '',
     rideHailingApps: [] as string[],
   });
 
-  const [otherAppInput, setOtherAppInput] = useState("");
+  const [otherAppInput, setOtherAppInput] = useState('');
   const [showOtherInput, setShowOtherInput] = useState(false);
-  const customApps = editForm.rideHailingApps.filter(a => !RIDE_HAILING_OPTIONS.includes(a));
+  const customApps = editForm.rideHailingApps.filter((a) => !RIDE_HAILING_OPTIONS.includes(a));
 
   const openEditDialog = () => {
     if (!customer) return;
@@ -110,18 +132,18 @@ export default function CustomerDetailPage() {
     setEditForm({
       fullName: customer.fullName,
       phone: customer.phone,
-      email: customer.email || "",
+      email: customer.email || '',
       address: customer.address,
-      birthDate: customer.birthDate || "",
-      gender: customer.gender || "",
+      birthDate: customer.birthDate || '',
+      gender: customer.gender || '',
       ktpNumber: customer.ktpNumber,
-      guarantorName: customer.guarantorName || "",
-      guarantorPhone: customer.guarantorPhone || "",
-      spouseName: customer.spouseName || "",
-      notes: customer.notes || "",
+      guarantorName: customer.guarantorName || '',
+      guarantorPhone: customer.guarantorPhone || '',
+      spouseName: customer.spouseName || '',
+      notes: customer.notes || '',
       rideHailingApps: apps,
     });
-    setOtherAppInput("");
+    setOtherAppInput('');
     setShowOtherInput(apps.some((a: string) => !RIDE_HAILING_OPTIONS.includes(a)));
     setEditDialogOpen(true);
   };
@@ -134,21 +156,21 @@ export default function CustomerDetailPage() {
         gender: editForm.gender || null,
         birthDate: editForm.birthDate || null,
       });
-      toastSuccess("Berhasil", "Data customer berhasil diperbarui.");
+      toastSuccess('Berhasil', 'Data customer berhasil diperbarui.');
       setEditDialogOpen(false);
-      invalidate("/customers");
+      invalidate('/customers');
     } catch (error: any) {
-      toastError("Gagal", error.message);
+      toastError('Gagal', error.message);
     } finally {
       setProcessing(false);
     }
   };
 
   const toggleRideApp = (app: string) => {
-    setEditForm(prev => ({
+    setEditForm((prev) => ({
       ...prev,
       rideHailingApps: prev.rideHailingApps.includes(app)
-        ? prev.rideHailingApps.filter(a => a !== app)
+        ? prev.rideHailingApps.filter((a) => a !== app)
         : [...prev.rideHailingApps, app],
     }));
   };
@@ -157,13 +179,16 @@ export default function CustomerDetailPage() {
     const name = otherAppInput.trim();
     if (!name) return;
     if (!editForm.rideHailingApps.includes(name)) {
-      setEditForm(prev => ({ ...prev, rideHailingApps: [...prev.rideHailingApps, name] }));
+      setEditForm((prev) => ({ ...prev, rideHailingApps: [...prev.rideHailingApps, name] }));
     }
-    setOtherAppInput("");
+    setOtherAppInput('');
   };
 
   const removeOtherApp = (app: string) => {
-    setEditForm(prev => ({ ...prev, rideHailingApps: prev.rideHailingApps.filter(a => a !== app) }));
+    setEditForm((prev) => ({
+      ...prev,
+      rideHailingApps: prev.rideHailingApps.filter((a) => a !== app),
+    }));
   };
 
   if (loading) {
@@ -178,22 +203,26 @@ export default function CustomerDetailPage() {
     return (
       <div className="text-center py-12">
         <p className="text-muted-foreground">Customer tidak ditemukan.</p>
-        <Button variant="outline" className="mt-4" onClick={() => router.push("/customers")}>
+        <Button variant="outline" className="mt-4" onClick={() => router.push('/customers')}>
           <ArrowLeft className="h-4 w-4 mr-2" /> Kembali
         </Button>
       </div>
     );
   }
 
-  const totalSpent = invoices.filter(i => i.status === "PAID").reduce((s, i) => s + i.amount + (i.lateFee || 0), 0);
-  const pendingAmount = invoices.filter(i => i.status === "PENDING").reduce((s, i) => s + i.amount + (i.lateFee || 0), 0);
+  const totalSpent = invoices
+    .filter((i) => i.status === 'PAID')
+    .reduce((s, i) => s + i.amount + (i.lateFee || 0), 0);
+  const pendingAmount = invoices
+    .filter((i) => i.status === 'PENDING')
+    .reduce((s, i) => s + i.amount + (i.lateFee || 0), 0);
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => router.push("/customers")}>
+          <Button variant="ghost" size="icon" onClick={() => router.push('/customers')}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
@@ -228,14 +257,14 @@ export default function CustomerDetailPage() {
                 <Mail className="h-4 w-4 text-muted-foreground mt-0.5" />
                 <div>
                   <p className="text-xs text-muted-foreground">Email</p>
-                  <p className="font-medium">{customer.email || "-"}</p>
+                  <p className="font-medium">{customer.email || '-'}</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
                 <Calendar className="h-4 w-4 text-muted-foreground mt-0.5" />
                 <div>
                   <p className="text-xs text-muted-foreground">Tanggal Lahir</p>
-                  <p className="font-medium">{customer.birthDate || "-"}</p>
+                  <p className="font-medium">{customer.birthDate || '-'}</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
@@ -259,7 +288,9 @@ export default function CustomerDetailPage() {
                   <div className="flex flex-wrap gap-1 mt-0.5">
                     {(customer.rideHailingApps || []).length > 0 ? (
                       customer.rideHailingApps.map((app: string) => (
-                        <Badge key={app} variant="outline" className="text-xs">{app}</Badge>
+                        <Badge key={app} variant="outline" className="text-xs">
+                          {app}
+                        </Badge>
                       ))
                     ) : (
                       <span className="text-sm">-</span>
@@ -281,16 +312,18 @@ export default function CustomerDetailPage() {
               <div className="mt-4 pt-4 border-t">
                 <div className="flex items-center gap-2 mb-2">
                   <Users className="h-4 w-4 text-muted-foreground" />
-                  <p className="text-xs text-muted-foreground font-semibold uppercase">Penjamin (Guarantor)</p>
+                  <p className="text-xs text-muted-foreground font-semibold uppercase">
+                    Penjamin (Guarantor)
+                  </p>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pl-6">
                   <div>
                     <p className="text-xs text-muted-foreground">Nama</p>
-                    <p className="font-medium">{customer.guarantorName || "-"}</p>
+                    <p className="font-medium">{customer.guarantorName || '-'}</p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Telepon</p>
-                    <p className="font-medium">{customer.guarantorPhone || "-"}</p>
+                    <p className="font-medium">{customer.guarantorPhone || '-'}</p>
                   </div>
                 </div>
               </div>
@@ -301,7 +334,9 @@ export default function CustomerDetailPage() {
               <div className="mt-4 pt-4 border-t">
                 <div className="flex items-center gap-2 mb-2">
                   <Heart className="h-4 w-4 text-muted-foreground" />
-                  <p className="text-xs text-muted-foreground font-semibold uppercase">Pasangan (Spouse)</p>
+                  <p className="text-xs text-muted-foreground font-semibold uppercase">
+                    Pasangan (Spouse)
+                  </p>
                 </div>
                 <div className="pl-6">
                   <p className="text-xs text-muted-foreground">Nama</p>
@@ -339,7 +374,9 @@ export default function CustomerDetailPage() {
           <Card>
             <CardContent className="p-4">
               <p className="text-xs text-muted-foreground">Pending</p>
-              <p className="text-xl font-bold text-yellow-600 mt-1">{formatCurrency(pendingAmount)}</p>
+              <p className="text-xl font-bold text-yellow-600 mt-1">
+                {formatCurrency(pendingAmount)}
+              </p>
             </CardContent>
           </Card>
         </div>
@@ -372,7 +409,11 @@ export default function CustomerDetailPage() {
                 </thead>
                 <tbody>
                   {contracts.map((c) => (
-                    <tr key={c.id} className="border-b last:border-0 hover:bg-muted/30 cursor-pointer" onClick={() => router.push(`/contracts/${c.id}`)}>
+                    <tr
+                      key={c.id}
+                      className="border-b last:border-0 hover:bg-muted/30 cursor-pointer"
+                      onClick={() => router.push(`/contracts/${c.id}`)}
+                    >
                       <td className="p-3 font-mono text-sm text-primary">{c.contractNumber}</td>
                       <td className="p-3 text-sm">{c.motorModel}</td>
                       <td className="p-3 text-sm">{c.durationDays} hari</td>
@@ -401,9 +442,7 @@ export default function CustomerDetailPage() {
         </CardHeader>
         <CardContent>
           {invoices.length === 0 ? (
-            <p className="text-muted-foreground text-sm text-center py-6">
-              Belum ada tagihan.
-            </p>
+            <p className="text-muted-foreground text-sm text-center py-6">Belum ada tagihan.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full">
@@ -420,12 +459,18 @@ export default function CustomerDetailPage() {
                   {invoices.map((inv) => (
                     <tr key={inv.id} className="border-b last:border-0 hover:bg-muted/30">
                       <td className="p-3 font-mono text-sm">{inv.invoiceNumber}</td>
-                      <td className="p-3 text-sm font-medium">{formatCurrency(inv.amount + (inv.lateFee || 0))}</td>
+                      <td className="p-3 text-sm font-medium">
+                        {formatCurrency(inv.amount + (inv.lateFee || 0))}
+                      </td>
                       <td className="p-3">
                         <Badge variant={paymentBadgeVariant(inv.status)}>{inv.status}</Badge>
                       </td>
-                      <td className="p-3 text-sm text-muted-foreground">{formatDate(inv.dueDate)}</td>
-                      <td className="p-3 text-sm text-muted-foreground">{inv.paidAt ? formatDate(inv.paidAt) : "-"}</td>
+                      <td className="p-3 text-sm text-muted-foreground">
+                        {formatDate(inv.dueDate)}
+                      </td>
+                      <td className="p-3 text-sm text-muted-foreground">
+                        {inv.paidAt ? formatDate(inv.paidAt) : '-'}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -446,32 +491,60 @@ export default function CustomerDetailPage() {
           <div className="space-y-6">
             {/* Data Pribadi */}
             <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-muted-foreground uppercase">Data Pribadi</h3>
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase">
+                Data Pribadi
+              </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label>Nama Lengkap *</Label>
-                  <Input value={editForm.fullName} onChange={(e) => setEditForm(p => ({ ...p, fullName: e.target.value }))} className="mt-1" />
+                  <Input
+                    value={editForm.fullName}
+                    onChange={(e) => setEditForm((p) => ({ ...p, fullName: e.target.value }))}
+                    className="mt-1"
+                  />
                 </div>
                 <div>
                   <Label>No. KTP *</Label>
-                  <Input value={editForm.ktpNumber} onChange={(e) => setEditForm(p => ({ ...p, ktpNumber: e.target.value }))} className="mt-1" />
+                  <Input
+                    value={editForm.ktpNumber}
+                    onChange={(e) => setEditForm((p) => ({ ...p, ktpNumber: e.target.value }))}
+                    className="mt-1"
+                  />
                 </div>
                 <div>
                   <Label>Telepon *</Label>
-                  <Input value={editForm.phone} onChange={(e) => setEditForm(p => ({ ...p, phone: e.target.value }))} className="mt-1" />
+                  <Input
+                    value={editForm.phone}
+                    onChange={(e) => setEditForm((p) => ({ ...p, phone: e.target.value }))}
+                    className="mt-1"
+                  />
                 </div>
                 <div>
                   <Label>Email</Label>
-                  <Input value={editForm.email} onChange={(e) => setEditForm(p => ({ ...p, email: e.target.value }))} className="mt-1" />
+                  <Input
+                    value={editForm.email}
+                    onChange={(e) => setEditForm((p) => ({ ...p, email: e.target.value }))}
+                    className="mt-1"
+                  />
                 </div>
                 <div>
                   <Label>Tanggal Lahir</Label>
-                  <Input type="date" value={editForm.birthDate} onChange={(e) => setEditForm(p => ({ ...p, birthDate: e.target.value }))} className="mt-1" />
+                  <Input
+                    type="date"
+                    value={editForm.birthDate}
+                    onChange={(e) => setEditForm((p) => ({ ...p, birthDate: e.target.value }))}
+                    className="mt-1"
+                  />
                 </div>
                 <div>
                   <Label>Jenis Kelamin</Label>
-                  <Select value={editForm.gender} onValueChange={(v) => setEditForm(p => ({ ...p, gender: v }))}>
-                    <SelectTrigger className="mt-1"><SelectValue placeholder="Pilih..." /></SelectTrigger>
+                  <Select
+                    value={editForm.gender}
+                    onValueChange={(v) => setEditForm((p) => ({ ...p, gender: v }))}
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder="Pilih..." />
+                    </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="MALE">Laki-laki</SelectItem>
                       <SelectItem value="FEMALE">Perempuan</SelectItem>
@@ -480,21 +553,28 @@ export default function CustomerDetailPage() {
                 </div>
                 <div className="md:col-span-2">
                   <Label>Alamat *</Label>
-                  <Textarea value={editForm.address} onChange={(e) => setEditForm(p => ({ ...p, address: e.target.value }))} className="mt-1" rows={2} />
+                  <Textarea
+                    value={editForm.address}
+                    onChange={(e) => setEditForm((p) => ({ ...p, address: e.target.value }))}
+                    className="mt-1"
+                    rows={2}
+                  />
                 </div>
               </div>
             </div>
 
             {/* Aplikasi Ojol */}
             <div className="space-y-2">
-              <h3 className="text-sm font-semibold text-muted-foreground uppercase">Aplikasi Ojol</h3>
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase">
+                Aplikasi Ojol
+              </h3>
               <div className="flex flex-wrap gap-2">
-                {RIDE_HAILING_OPTIONS.map(app => (
+                {RIDE_HAILING_OPTIONS.map((app) => (
                   <Button
                     key={app}
                     type="button"
                     size="sm"
-                    variant={editForm.rideHailingApps.includes(app) ? "default" : "outline"}
+                    variant={editForm.rideHailingApps.includes(app) ? 'default' : 'outline'}
                     onClick={() => toggleRideApp(app)}
                   >
                     {app}
@@ -503,7 +583,7 @@ export default function CustomerDetailPage() {
                 <Button
                   type="button"
                   size="sm"
-                  variant={showOtherInput || customApps.length > 0 ? "default" : "outline"}
+                  variant={showOtherInput || customApps.length > 0 ? 'default' : 'outline'}
                   onClick={() => setShowOtherInput(!showOtherInput)}
                 >
                   Lainnya
@@ -517,26 +597,36 @@ export default function CustomerDetailPage() {
                       value={otherAppInput}
                       onChange={(e) => setOtherAppInput(e.target.value)}
                       onKeyDown={(e) => {
-                        if (e.key === "Enter") {
+                        if (e.key === 'Enter') {
                           e.preventDefault();
                           addOtherApp();
                         }
                       }}
                       className="flex-1"
                     />
-                    <Button type="button" variant="outline" size="sm" onClick={addOtherApp} disabled={!otherAppInput.trim()}>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={addOtherApp}
+                      disabled={!otherAppInput.trim()}
+                    >
                       <Plus className="h-4 w-4" />
                     </Button>
                   </div>
                   {customApps.length > 0 && (
                     <div className="flex flex-wrap gap-1.5">
-                      {customApps.map(app => (
+                      {customApps.map((app) => (
                         <span
                           key={app}
                           className="inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full bg-secondary text-secondary-foreground"
                         >
                           {app}
-                          <button type="button" onClick={() => removeOtherApp(app)} className="hover:text-destructive">
+                          <button
+                            type="button"
+                            onClick={() => removeOtherApp(app)}
+                            className="hover:text-destructive"
+                          >
                             <X className="h-3 w-3" />
                           </button>
                         </span>
@@ -549,38 +639,70 @@ export default function CustomerDetailPage() {
 
             {/* Penjamin */}
             <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-muted-foreground uppercase">Penjamin (Guarantor)</h3>
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase">
+                Penjamin (Guarantor)
+              </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label>Nama Penjamin</Label>
-                  <Input value={editForm.guarantorName} onChange={(e) => setEditForm(p => ({ ...p, guarantorName: e.target.value }))} className="mt-1" />
+                  <Input
+                    value={editForm.guarantorName}
+                    onChange={(e) => setEditForm((p) => ({ ...p, guarantorName: e.target.value }))}
+                    className="mt-1"
+                  />
                 </div>
                 <div>
                   <Label>Telepon Penjamin</Label>
-                  <Input value={editForm.guarantorPhone} onChange={(e) => setEditForm(p => ({ ...p, guarantorPhone: e.target.value }))} className="mt-1" />
+                  <Input
+                    value={editForm.guarantorPhone}
+                    onChange={(e) => setEditForm((p) => ({ ...p, guarantorPhone: e.target.value }))}
+                    className="mt-1"
+                  />
                 </div>
               </div>
             </div>
 
             {/* Pasangan */}
             <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-muted-foreground uppercase">Pasangan (Spouse)</h3>
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase">
+                Pasangan (Spouse)
+              </h3>
               <div>
                 <Label>Nama Pasangan</Label>
-                <Input value={editForm.spouseName} onChange={(e) => setEditForm(p => ({ ...p, spouseName: e.target.value }))} className="mt-1" />
+                <Input
+                  value={editForm.spouseName}
+                  onChange={(e) => setEditForm((p) => ({ ...p, spouseName: e.target.value }))}
+                  className="mt-1"
+                />
               </div>
             </div>
 
             {/* Catatan */}
             <div>
               <Label>Catatan</Label>
-              <Textarea value={editForm.notes} onChange={(e) => setEditForm(p => ({ ...p, notes: e.target.value }))} className="mt-1" rows={3} />
+              <Textarea
+                value={editForm.notes}
+                onChange={(e) => setEditForm((p) => ({ ...p, notes: e.target.value }))}
+                className="mt-1"
+                rows={3}
+              />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>Batal</Button>
-            <Button onClick={handleEditSubmit} disabled={processing || !editForm.fullName || !editForm.phone || !editForm.ktpNumber || !editForm.address}>
-              {processing ? "Menyimpan..." : "Simpan"}
+            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
+              Batal
+            </Button>
+            <Button
+              onClick={handleEditSubmit}
+              disabled={
+                processing ||
+                !editForm.fullName ||
+                !editForm.phone ||
+                !editForm.ktpNumber ||
+                !editForm.address
+              }
+            >
+              {processing ? 'Menyimpan...' : 'Simpan'}
             </Button>
           </DialogFooter>
         </DialogContent>

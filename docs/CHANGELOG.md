@@ -35,6 +35,7 @@
 - [Saving Feature: Dana Sisihan Per Kontrak (2026-03-10)](#2026-03-10---saving-feature-dana-sisihan-per-kontrak)
 - [Late Payment Penalty & Penalty Grace Days (2026-03-10)](#2026-03-10---late-payment-penalty--grace-period-2-hari)
 - [Remove Penalty for Old Contracts (2026-03-24)](#2026-03-24---remove-penalty-for-old-contracts)
+- [Developer Tooling Setup (2026-03-24)](#2026-03-24---developer-tooling-setup)
 - [Development Roadmap](#development-roadmap)
 
 ---
@@ -44,6 +45,7 @@
 ### What was built
 
 **Monorepo Structure:**
+
 - Root `package.json` with npm workspaces (`packages/backend`, `packages/frontend`)
 - Shared TypeScript base config (`tsconfig.base.json`)
 - Concurrent dev script for running both apps
@@ -117,6 +119,7 @@
 ### Affected Modules
 
 All modules created from scratch:
+
 - `packages/backend/` - Full backend
 - `packages/frontend/` - Full frontend
 - `package.json` - Root monorepo config
@@ -278,6 +281,7 @@ The system was transformed from a simple daily rental model to a true Rent-To-Ow
 ### Phase 3 Bugfixes (2026-02-28)
 
 **Extension payment-gated logic:**
+
 - Invoice entity now has `extensionDays: number | null` field
 - `ContractService.extend()` no longer updates contract fields immediately — it only creates an invoice with `extensionDays` set
 - `InvoiceService.simulatePayment()` now applies extension to contract only when the extension invoice is successfully PAID
@@ -285,14 +289,17 @@ The system was transformed from a simple daily rental model to a true Rent-To-Ow
 - `durationDays` now accumulates (initial + extensions) instead of being overwritten
 
 **QR button receipt view:**
+
 - Paid invoices: QR button shows "Bukti" (receipt) instead of "QR"
 - Receipt dialog shows: payment success banner, invoice details, extension days info, small reference QR
 
 **Contracts list - Sisa Hari column:**
+
 - New "Sisa Hari" column shows remaining days before endDate
 - Color-coded: red for overdue, yellow for ≤2 days
 
 **Invoices list - No. Kontrak column:**
+
 - New "No. Kontrak" column maps invoice to contract number
 
 **Tests:** 67 tests passing (4 suites)
@@ -336,6 +343,7 @@ The system was transformed from a simple daily rental model to a true Rent-To-Ow
    - Returns `{ success: string[], failed: Array<{ id, error }> }`
 
 **Frontend:**
+
 - Edit dialog (notes, grace period, ownership target + live progress preview)
 - Cancel dialog (required reason, orange warning UI)
 - Invoice actions (void, mark paid, confirmation dialogs)
@@ -378,6 +386,7 @@ The system was transformed from a simple daily rental model to a true Rent-To-Ow
 3. **PDF Download** buttons on invoices
 
 ### New Files
+
 - `packages/backend/src/application/services/PdfService.ts`
 
 ### Tests: 86 tests (unchanged)
@@ -411,6 +420,7 @@ Comprehensive audit of Phase 1-5 logic to fix MVP/dummy behaviors. ~20 issues id
 8. **Repository filtering**: `findByCustomerId()`, `findByStatus()`, `countByStatus()`, `count()` filter `isDeleted`.
 
 **Frontend Fixes:**
+
 - Late fee display, timeline labels, motor rates from backend, error toasts, invoices page actions
 
 ### Tests: 88 tests (up from 86)
@@ -458,23 +468,24 @@ Comprehensive audit of Phase 1-5 logic to fix MVP/dummy behaviors. ~20 issues id
 
 ### New Files
 
-| File | Description |
-|------|-------------|
-| `backend/src/domain/interfaces/Pagination.ts` | PaginationParams, PaginatedResult types |
-| `frontend/src/components/ui/pagination.tsx` | Pagination navigation |
-| `frontend/src/components/ui/skeleton.tsx` | Base skeleton |
-| `frontend/src/components/SortableHeader.tsx` | Sortable table header |
-| `frontend/src/components/EmptyState.tsx` | Reusable empty state |
-| `frontend/src/components/CommandPalette.tsx` | Ctrl+K command palette |
-| `frontend/src/components/charts/RevenueChart.tsx` | Revenue bar chart |
-| `frontend/src/components/charts/StatusDistributionChart.tsx` | Status pie chart |
-| `frontend/src/components/skeletons/DashboardSkeleton.tsx` | Dashboard skeleton |
-| `frontend/src/components/skeletons/TableSkeleton.tsx` | Table skeleton |
-| `frontend/src/hooks/usePagination.ts` | Pagination state hook |
-| `frontend/src/hooks/useKeyboardShortcut.ts` | Keyboard shortcut hook |
-| `frontend/src/lib/schemas.ts` | Zod validation schemas |
+| File                                                         | Description                             |
+| ------------------------------------------------------------ | --------------------------------------- |
+| `backend/src/domain/interfaces/Pagination.ts`                | PaginationParams, PaginatedResult types |
+| `frontend/src/components/ui/pagination.tsx`                  | Pagination navigation                   |
+| `frontend/src/components/ui/skeleton.tsx`                    | Base skeleton                           |
+| `frontend/src/components/SortableHeader.tsx`                 | Sortable table header                   |
+| `frontend/src/components/EmptyState.tsx`                     | Reusable empty state                    |
+| `frontend/src/components/CommandPalette.tsx`                 | Ctrl+K command palette                  |
+| `frontend/src/components/charts/RevenueChart.tsx`            | Revenue bar chart                       |
+| `frontend/src/components/charts/StatusDistributionChart.tsx` | Status pie chart                        |
+| `frontend/src/components/skeletons/DashboardSkeleton.tsx`    | Dashboard skeleton                      |
+| `frontend/src/components/skeletons/TableSkeleton.tsx`        | Table skeleton                          |
+| `frontend/src/hooks/usePagination.ts`                        | Pagination state hook                   |
+| `frontend/src/hooks/useKeyboardShortcut.ts`                  | Keyboard shortcut hook                  |
+| `frontend/src/lib/schemas.ts`                                | Zod validation schemas                  |
 
 ### Dependencies Added
+
 - `recharts` (frontend)
 
 ### Tests: 88 tests (unchanged)
@@ -586,6 +597,7 @@ Update data model agar sesuai dengan kebutuhan operasional RTO yang sebenarnya.
 ### What was changed
 
 **Customer Entity** - Added fields:
+
 - `birthDate: string | null`, `gender: Gender | null`
 - `rideHailingApps: string[]` (Grab, Gojek, Maxim, Indrive, Shopee, dll)
 - `ktpPhoto`, `simPhoto`, `kkPhoto` (string | null)
@@ -594,12 +606,14 @@ Update data model agar sesuai dengan kebutuhan operasional RTO yang sebenarnya.
 - `spouseName` (string), `spouseKtpPhoto` (string | null)
 
 **Contract Entity** - Added fields:
+
 - `color` (string), `year` (number | null)
 - `vinNumber` (string), `engineNumber` (string)
 
 **New Enum**: `Gender` (MALE, FEMALE)
 
 **Frontend:**
+
 - Customer form: widened dialog with sections (Data Pribadi, Aplikasi Ojol toggles, Penjamin, Pasangan)
 - Customer list: Aplikasi badges + Penjamin columns
 - Customer detail: all new fields displayed
@@ -615,10 +629,12 @@ Update data model agar sesuai dengan kebutuhan operasional RTO yang sebenarnya.
 ### What was changed
 
 **Bug Fixes:**
+
 1. **DP status not updating** — `applyPaymentToContract()` rewritten for DP/DP_INSTALLMENT types
 2. **Late fee always applied** — Now only when `status === OVERDUE && billingStartDate exists`
 
 **New Features:**
+
 1. **BAST (Berita Acara Serah Terima)** — `bastPhoto` (mandatory) + `bastNotes` on Contract. Required for receiveUnit.
 2. **Invoice Revert** (`PATCH /api/invoices/:id/revert`) — Revert PAID/VOID → PENDING. Auto-undoes contract changes.
 3. **Terminology** — All "Invoice" → "Tagihan" in frontend
@@ -634,14 +650,17 @@ Update data model agar sesuai dengan kebutuhan operasional RTO yang sebenarnya.
 ### What was changed
 
 **Bug 1: Billing Overdue Tidak Terakumulasi**
+
 - `generateDailyBilling()` now processes ACTIVE and OVERDUE contracts
 - Calculates accumulated unpaid working days
 - Removed rollover logic from generateDailyBilling (only rolloverExpiredBillings handles it)
 
 **Bug 2: Kalender Pembayaran Highlight Tanggal Salah**
+
 - Added today check in getCalendarData() for active billing
 
 **Bug 3: Frontend State Tidak Update**
+
 - Added `refreshKey` prop on PaymentCalendar
 - Added `calendarKey` state + `refreshAll()` helper in contract detail
 
@@ -653,15 +672,16 @@ Update data model agar sesuai dengan kebutuhan operasional RTO yang sebenarnya.
 
 ### Aturan Warna Kalender
 
-| Warna | Status | Keterangan |
-|-------|--------|------------|
-| Hijau | `paid` | Sudah dibayar |
-| Kuning | `pending` | Tagihan aktif, belum bayar (hari ini/mendatang) |
-| Merah | `overdue` | Tanggal lewat dalam billing aktif |
-| Biru | `holiday` | Libur bayar (Minggu) |
-| Abu-abu | `not_issued` | Tagihan belum keluar |
+| Warna   | Status       | Keterangan                                      |
+| ------- | ------------ | ----------------------------------------------- |
+| Hijau   | `paid`       | Sudah dibayar                                   |
+| Kuning  | `pending`    | Tagihan aktif, belum bayar (hari ini/mendatang) |
+| Merah   | `overdue`    | Tanggal lewat dalam billing aktif               |
+| Biru    | `holiday`    | Libur bayar (Minggu)                            |
+| Abu-abu | `not_issued` | Tagihan belum keluar                            |
 
 ### What was changed
+
 - `getCalendarData()`: date < today → overdue, date >= today → pending, Sunday → holiday
 
 ### Tests: 114 tests (unchanged)
@@ -685,6 +705,7 @@ Update data model agar sesuai dengan kebutuhan operasional RTO yang sebenarnya.
 ### What was changed
 
 **Bug 1 — Libur Bayar:**
+
 1. `getSundayHolidays(year, month, holidayDaysPerMonth)` — Picks evenly distributed Sundays
 2. `isLiburBayar(contract, date)` — Only designated Sundays are Libur Bayar
 3. Replaced all `isHoliday()` calls with `isLiburBayar()` throughout BillingService
@@ -692,12 +713,14 @@ Update data model agar sesuai dengan kebutuhan operasional RTO yang sebenarnya.
 5. Seed data updated with matching Libur Bayar algorithm
 
 **Bug 2 — Manual Billing:**
+
 1. `Billing.previousBillingId` — New field for merge/cancel tracking
 2. `createManualBilling(contractId, days, adminId)` — Creates ACTIVE billing, merges if active exists
 3. `cancelBilling(billingId, adminId)` — Cancels billing, reactivates previous if merged
 4. Frontend: "Bayar Tagihan" creates billing instead of invoice, cancel button on merged billings
 
 ### Tests: 129 tests (up from 114)
+
 - New: getSundayHolidays (3), isLiburBayar (3), createManualBilling (6), cancelBilling (5)
 
 ---
@@ -711,23 +734,28 @@ Migrated from in-memory Map-based repositories to PostgreSQL with Prisma ORM. Cl
 ### What was built
 
 **Prisma Schema** (`packages/backend/prisma/schema.prisma`):
+
 - 7 models, 10 enums, all relations, indexes, unique constraints
 - Snake_case columns/tables via `@map`/`@@map`
 - `String[]` for rideHailingApps (native PG array), `Json` for metadata
 
 **Prisma Client Singleton** (`packages/backend/src/infrastructure/prisma/client.ts`):
+
 - Global singleton, conditional logging
 
 **7 Prisma Repository Implementations**:
+
 - PrismaSettingRepository, PrismaUserRepository, PrismaAuditLogRepository
 - PrismaCustomerRepository, PrismaContractRepository, PrismaInvoiceRepository, PrismaBillingRepository
 - Each: implements interface, `toEntity()` for type casting, parallel count+query for pagination
 
 **Conditional Repo Initialization** (`packages/backend/src/index.ts`):
+
 - `DATABASE_URL` → Prisma repos, no `DATABASE_URL` → InMemory repos
 - Graceful shutdown with `prisma.$disconnect()`
 
 **NOT Modified** (Clean Architecture preserved):
+
 - All domain entities, interfaces, enums
 - All application services, DTOs
 - All presentation controllers, routes
@@ -736,12 +764,12 @@ Migrated from in-memory Map-based repositories to PostgreSQL with Prisma ORM. Cl
 
 ### New Files
 
-| File | Description |
-|------|-------------|
-| `packages/backend/prisma/schema.prisma` | Database schema |
-| `packages/backend/prisma/seed.ts` | Production seed script |
-| `packages/backend/src/infrastructure/prisma/client.ts` | Prisma singleton |
-| `packages/backend/src/infrastructure/repositories/Prisma*.ts` | 7 Prisma repos |
+| File                                                          | Description            |
+| ------------------------------------------------------------- | ---------------------- |
+| `packages/backend/prisma/schema.prisma`                       | Database schema        |
+| `packages/backend/prisma/seed.ts`                             | Production seed script |
+| `packages/backend/src/infrastructure/prisma/client.ts`        | Prisma singleton       |
+| `packages/backend/src/infrastructure/repositories/Prisma*.ts` | 7 Prisma repos         |
 
 ### Tests: 129 tests (unchanged)
 
@@ -752,6 +780,7 @@ Migrated from in-memory Map-based repositories to PostgreSQL with Prisma ORM. Cl
 Replaced `setInterval` (24-hour interval, imprecise) with `node-cron`. Daily tasks now run at 00:01 WIB consistently. Still runs immediately on startup for catch-up.
 
 ### Dependencies Added
+
 - `node-cron`, `@types/node-cron`
 
 ---
@@ -774,10 +803,10 @@ chore/*   ──PR──> staging atau main
 
 ### New Files
 
-| File | Description |
-|------|-------------|
-| `.github/workflows/ci.yml` | CI workflow |
-| `packages/backend/.env.example` | Backend env vars |
+| File                             | Description       |
+| -------------------------------- | ----------------- |
+| `.github/workflows/ci.yml`       | CI workflow       |
+| `packages/backend/.env.example`  | Backend env vars  |
 | `packages/frontend/.env.example` | Frontend env vars |
 
 ---
@@ -787,14 +816,17 @@ chore/*   ──PR──> staging atau main
 ### What was built
 
 **SWR Provider** (`packages/frontend/src/components/SWRProvider.tsx`):
+
 - Global config: revalidateOnFocus, dedupingInterval 2000ms, errorRetryCount 1
 
 **Custom SWR Hooks** (`packages/frontend/src/hooks/useApi.ts`):
+
 - TTL tiers: LONG (10min), MEDIUM (5min), DEFAULT (1min), SHORT (15sec)
 - 17 hooks for all data types
 - `useInvalidate()` — prefix-based cache invalidation
 
 **Page Conversions** (11 pages):
+
 - Replaced `useState + useEffect + loadData` with SWR hooks
 - Mutations use `invalidate("/prefix")` instead of manual reload
 
@@ -804,22 +836,23 @@ chore/*   ──PR──> staging atau main
 
 ### Caching Behavior
 
-| Scenario | Behavior |
-|----------|----------|
-| Navigate away & back | Cached data shown instantly, background revalidation |
-| Mutation | `invalidate("/prefix")` force-refetches |
-| Tab focus | Auto-refresh stale data |
-| Page refresh | Cache cleared (in-memory) |
-| Same data from 2 components | Single request (deduplication) |
+| Scenario                    | Behavior                                             |
+| --------------------------- | ---------------------------------------------------- |
+| Navigate away & back        | Cached data shown instantly, background revalidation |
+| Mutation                    | `invalidate("/prefix")` force-refetches              |
+| Tab focus                   | Auto-refresh stale data                              |
+| Page refresh                | Cache cleared (in-memory)                            |
+| Same data from 2 components | Single request (deduplication)                       |
 
 ### New Files
 
-| File | Description |
-|------|-------------|
-| `frontend/src/components/SWRProvider.tsx` | Global SWR config |
-| `frontend/src/hooks/useApi.ts` | All SWR hooks + invalidation |
+| File                                      | Description                  |
+| ----------------------------------------- | ---------------------------- |
+| `frontend/src/components/SWRProvider.tsx` | Global SWR config            |
+| `frontend/src/hooks/useApi.ts`            | All SWR hooks + invalidation |
 
 ### Dependencies Added
+
 - `swr` (frontend)
 
 ### Tests: 129 tests (unchanged)
@@ -839,27 +872,30 @@ chore/*   ──PR──> staging atau main
 5. **Removed `csv-parse` dependency**
 
 **Data files:**
+
 - `prisma/data/customers.ts` — 80 customers as typed array (`CustomerSeed` interface)
 - `prisma/data/contracts.ts` — 79 contracts as typed array (`ContractSeed` interface, `DateTuple` type)
 
 **"Lainnya" Ride-Hailing Apps (Frontend):**
+
 1. Customer create form: "Lainnya" toggle → text input → removable chips
 2. Customer edit dialog: same feature, existing custom values auto-populate
 3. Predefined: Grab, Gojek, Maxim, Indrive, Shopee, Lalamove + "Lainnya"
 4. No schema change — `rideHailingApps` is `String[]`
 
 **Railway Auto-Seeding:**
+
 - Updated `railway.json` startCommand: `prisma db push → prisma db seed → node dist/index.js`
 
 ### Seed Behavior per Environment
 
-| Environment | Command | Behavior |
-|-------------|---------|----------|
-| Development | `npx prisma db seed` | Insert jika belum ada, skip jika sudah |
-| Development | `npx prisma db seed -- --reset` | Hapus semua, insert ulang |
-| Staging/Production | Auto-run setiap deploy | Idempotent skip |
-| Production | `--reset` tanpa `--force` | DITOLAK |
-| Production | `--reset --force` | Hapus semua, insert ulang |
+| Environment        | Command                         | Behavior                               |
+| ------------------ | ------------------------------- | -------------------------------------- |
+| Development        | `npx prisma db seed`            | Insert jika belum ada, skip jika sudah |
+| Development        | `npx prisma db seed -- --reset` | Hapus semua, insert ulang              |
+| Staging/Production | Auto-run setiap deploy          | Idempotent skip                        |
+| Production         | `--reset` tanpa `--force`       | DITOLAK                                |
+| Production         | `--reset --force`               | Hapus semua, insert ulang              |
 
 ### Menambah Data Seeding
 
@@ -870,20 +906,20 @@ chore/*   ──PR──> staging atau main
 
 ### New Files
 
-| File | Description |
-|------|-------------|
+| File                                        | Description              |
+| ------------------------------------------- | ------------------------ |
 | `packages/backend/prisma/data/customers.ts` | 80 customers typed array |
 | `packages/backend/prisma/data/contracts.ts` | 79 contracts typed array |
 
 ### Modified Files
 
-| File | Change |
-|------|--------|
-| `packages/backend/prisma/seed.ts` | Complete rewrite |
-| `packages/backend/package.json` | Removed csv-parse |
-| `packages/frontend/src/app/(dashboard)/customers/page.tsx` | "Lainnya" in create form |
-| `packages/frontend/src/app/(dashboard)/customers/[id]/page.tsx` | "Lainnya" in edit dialog |
-| `railway.json` | Added prisma db seed to startCommand |
+| File                                                            | Change                               |
+| --------------------------------------------------------------- | ------------------------------------ |
+| `packages/backend/prisma/seed.ts`                               | Complete rewrite                     |
+| `packages/backend/package.json`                                 | Removed csv-parse                    |
+| `packages/frontend/src/app/(dashboard)/customers/page.tsx`      | "Lainnya" in create form             |
+| `packages/frontend/src/app/(dashboard)/customers/[id]/page.tsx` | "Lainnya" in edit dialog             |
+| `railway.json`                                                  | Added prisma db seed to startCommand |
 
 ### Tests: 129 tests (unchanged)
 
@@ -895,13 +931,14 @@ chore/*   ──PR──> staging atau main
 
 Restructured documentation from single monolithic `CLAUDE.md` (1.965 lines) into 3 purpose-specific files:
 
-| File | Purpose | Size |
-|------|---------|------|
-| `CLAUDE.md` | Prescriptive instructions for Claude AI | ~180 lines |
-| `README.md` | Project documentation (tech stack, API, setup) | ~280 lines |
-| `docs/CHANGELOG.md` | Development history per phase (this file) | ~800 lines |
+| File                | Purpose                                        | Size       |
+| ------------------- | ---------------------------------------------- | ---------- |
+| `CLAUDE.md`         | Prescriptive instructions for Claude AI        | ~180 lines |
+| `README.md`         | Project documentation (tech stack, API, setup) | ~280 lines |
+| `docs/CHANGELOG.md` | Development history per phase (this file)      | ~800 lines |
 
 **Rationale:**
+
 - CLAUDE.md was consuming ~5.000 tokens of context window every session
 - Most content (changelog) was rarely relevant to active tasks
 - Separated concerns: instructions vs documentation vs history
@@ -917,6 +954,7 @@ Sistem sebelumnya punya 2 entitas terpisah: **Billing** (BIL-xxx, transient life
 ### What was changed
 
 **Prisma Schema:**
+
 - Hapus model `Billing` dan enum `BillingStatus`
 - Tambah kolom ke `Invoice`: `dailyRate`, `daysCount`, `periodStart`, `periodEnd`, `expiredAt`, `previousPaymentId`, `isHoliday`
 - Hapus kolom lama: `billingPeriodStart`, `billingPeriodEnd`, `billingId`
@@ -924,15 +962,18 @@ Sistem sebelumnya punya 2 entitas terpisah: **Billing** (BIL-xxx, transient life
 - 7 models → 6 models, 10 enums → 9 enums
 
 **Backend — Domain Layer:**
+
 - Hapus: `Billing.ts` entity, `IBillingRepository.ts` interface, `BillingStatus` enum
 - Update: `Invoice.ts` entity dengan field baru (dailyRate, daysCount, periodStart, periodEnd, expiredAt, previousPaymentId, isHoliday)
 
 **Backend — Infrastructure:**
+
 - Hapus: `InMemoryBillingRepository.ts`, `PrismaBillingRepository.ts`
 - Update: `InMemoryInvoiceRepository.ts`, `PrismaInvoiceRepository.ts` — tambah `findActiveByContractId()`, `search()`, field mapping baru
 - Update: `scheduler.ts` — dependency dari BillingService → PaymentService
 
 **Backend — Application Layer:**
+
 - Hapus: `BillingService.ts`, `InvoiceService.ts`
 - Buat: `PaymentService.ts` — merge semua logic dari kedua service:
   - `generateDailyPayments()` — buat PMT-xxx PENDING (bukan Billing)
@@ -946,64 +987,71 @@ Sistem sebelumnya punya 2 entitas terpisah: **Billing** (BIL-xxx, transient life
 - Update: `ContractService.ts`, `DashboardService.ts`, `ReportService.ts` — hapus dependency billing
 
 **Backend — Presentation:**
+
 - Hapus: `BillingController.ts`, `InvoiceController.ts`
 - Buat: `PaymentController.ts` — unified routes `/api/payments/*`
 - Update: `routes/index.ts`
 
 **Backend — Entry Point:**
+
 - `index.ts` — hapus billing imports, buat PaymentService + PaymentController
 
 **Frontend — Types:**
+
 - Hapus: `BillingStatus` enum, `Billing` interface
 - Update: `Invoice` interface — tambah field baru, hapus `billingPeriodStart/End/billingId`
 
 **Frontend — API & Hooks:**
+
 - `api.ts` — semua `/invoices/*` dan `/billings/*` → `/payments/*`
 - `useApi.ts` — rename hooks: `usePaymentsPaginated`, `usePaymentsByContract`, `useActivePayment`
 
 **Frontend — Pages:**
+
 - `invoices/page.tsx` — gunakan `usePaymentsPaginated`, API calls ke `/payments`
 - `contracts/[id]/page.tsx` — semua billing references → payment (variables, API calls, UI text)
 - `customers/[id]/page.tsx` — `usePaymentsPaginated` ganti `useInvoicesByCustomer`
 - `CommandPalette.tsx` — tambah pencarian PMT-xxx di global search (Ctrl+K)
 
 **Seed Data:**
+
 - `prisma/seed.ts` — hapus Billing references, buat Payment records langsung
 - `infrastructure/seed.ts` — update field mapping
 
 **Tests:**
+
 - Hapus: `BillingService.test.ts`, `InvoiceService.test.ts`
 - Buat: `PaymentService.test.ts` — merge semua test cases
 - 5 suites → 4 suites, 129 tests → 127 tests (consolidation, not lost coverage)
 
 ### Files Deleted (8)
 
-| File | Was |
-|------|-----|
-| `domain/entities/Billing.ts` | Billing entity |
-| `domain/interfaces/IBillingRepository.ts` | Billing repo interface |
-| `infrastructure/repositories/InMemoryBillingRepository.ts` | InMemory billing repo |
-| `infrastructure/repositories/PrismaBillingRepository.ts` | Prisma billing repo |
-| `application/services/BillingService.ts` | Billing service |
-| `application/services/InvoiceService.ts` | Invoice service |
-| `presentation/controllers/BillingController.ts` | Billing controller |
-| `presentation/controllers/InvoiceController.ts` | Invoice controller |
+| File                                                       | Was                    |
+| ---------------------------------------------------------- | ---------------------- |
+| `domain/entities/Billing.ts`                               | Billing entity         |
+| `domain/interfaces/IBillingRepository.ts`                  | Billing repo interface |
+| `infrastructure/repositories/InMemoryBillingRepository.ts` | InMemory billing repo  |
+| `infrastructure/repositories/PrismaBillingRepository.ts`   | Prisma billing repo    |
+| `application/services/BillingService.ts`                   | Billing service        |
+| `application/services/InvoiceService.ts`                   | Invoice service        |
+| `presentation/controllers/BillingController.ts`            | Billing controller     |
+| `presentation/controllers/InvoiceController.ts`            | Invoice controller     |
 
 ### Files Created (2)
 
-| File | Description |
-|------|-------------|
-| `application/services/PaymentService.ts` | Unified payment service (merge Billing + Invoice) |
-| `presentation/controllers/PaymentController.ts` | Unified payment controller |
+| File                                            | Description                                       |
+| ----------------------------------------------- | ------------------------------------------------- |
+| `application/services/PaymentService.ts`        | Unified payment service (merge Billing + Invoice) |
+| `presentation/controllers/PaymentController.ts` | Unified payment controller                        |
 
 ### Status Mapping
 
 | Old (BillingStatus) | New (PaymentStatus) |
-|---------------------|---------------------|
-| ACTIVE | PENDING |
-| PAID | PAID |
-| EXPIRED | EXPIRED |
-| CANCELLED | VOID |
+| ------------------- | ------------------- |
+| ACTIVE              | PENDING             |
+| PAID                | PAID                |
+| EXPIRED             | EXPIRED             |
+| CANCELLED           | VOID                |
 
 ### Tests: 127 tests, 4 suites (AuthService, CustomerService, ContractService, PaymentService)
 
@@ -1012,7 +1060,9 @@ Sistem sebelumnya punya 2 entitas terpisah: **Billing** (BIL-xxx, transient life
 ## 2026-03-06 - Holiday Scheme Overhaul (HolidayScheme Enum)
 
 ### Context
+
 Perubahan model bisnis Libur Bayar dari sistem "pilih N Minggu per bulan" (`holidayDaysPerMonth`) menjadi 2 tipe kontrak berbasis enum `HolidayScheme`:
+
 - **OLD_CONTRACT**: Semua hari Minggu = Libur Bayar
 - **NEW_CONTRACT**: Tanggal 29-31 = Libur Bayar (bayar hanya 1-28)
 
@@ -1021,33 +1071,39 @@ Perubahan interpretasi `ownershipTargetDays=1278`: sekarang SUDAH TERMASUK hari 
 ### What was changed
 
 **Domain Layer:**
+
 - Tambah enum `HolidayScheme { OLD_CONTRACT, NEW_CONTRACT }` + constant `DEFAULT_HOLIDAY_SCHEME`
 - Hapus constants: `DEFAULT_HOLIDAY_DAYS_PER_MONTH`, `MIN_HOLIDAY_DAYS_PER_MONTH`, `MAX_HOLIDAY_DAYS_PER_MONTH`
 - Entity `Contract`: ganti field `holidayDaysPerMonth: number` → `holidayScheme: HolidayScheme`
 
 **Application Layer:**
+
 - `PaymentService`: hapus `getSundayHolidays()`, rewrite `isLiburBayar()` dengan logic berbasis scheme
 - `ContractService`: update `create()` untuk menerima `holidayScheme` dari DTO
 - DTOs: tambah `holidayScheme` ke `CreateContractDto` dan `UpdateContractDto`
 
 **Infrastructure Layer:**
+
 - Prisma schema: tambah enum `HolidayScheme`, ganti field di model Contract
 - `PrismaContractRepository`: update field mapping
 - Seed data + scripts: semua helper functions dan data diupdate ke scheme baru
 
 **Frontend:**
+
 - Types: tambah enum `HolidayScheme`, update interface `Contract`
 - Form create contract: tambah dropdown "Tipe Kontrak"
 - Contract detail: tampilkan label scheme yang sesuai
 - Schema: tambah validasi `holidayScheme`
 
 **Tests:**
+
 - Hapus test `getSundayHolidays`, rewrite test `isLiburBayar` untuk kedua scheme
 - Tambah test holiday payment generation untuk NEW_CONTRACT
 - Update semua test helpers dari `holidayDaysPerMonth` ke `holidayScheme`
 - 129 tests passing
 
 ### Files modified
+
 - `packages/backend/src/domain/enums/index.ts`
 - `packages/backend/src/domain/entities/Contract.ts`
 - `packages/backend/prisma/schema.prisma`
@@ -1071,14 +1127,17 @@ Perubahan interpretasi `ownershipTargetDays=1278`: sekarang SUDAH TERMASUK hari 
 ## 2026-03-06 - Fix: totalDaysPaid Seed Calculation (Include Holidays)
 
 ### Context
+
 Setelah migrasi HolidayScheme, ditemukan bahwa `totalDaysPaid` di seed data hanya menghitung hari kerja (working days), padahal model baru mensyaratkan `ownershipTargetDays=1278` sudah termasuk hari libur. Contoh: customer dengan 50 hari kerja + 9 hari Minggu libur seharusnya punya `totalDaysPaid=59`.
 
 ### What was changed
+
 - **Seed data interface**: Rename `totalDaysPaid` → `workingDaysPaid` di `ContractSeed` untuk kejelasan (data = working days only)
 - **Prisma seed script**: Tambah `countCalendarDays()` helper yang walk kalender dari billingStartDate, hitung working + holiday days. Fix perhitungan `totalDaysPaid` (now includes holidays), `endDate`, `totalAmount` (working days only × rate), `ownershipProgress`. Fix daily payment loop: walk calendar days instead of linear count.
 - **InMemory seed script**: Sama — tambah `countCalendarDays()`, fix semua perhitungan contract fields.
 
 ### Files modified
+
 - `packages/backend/prisma/data/contracts.ts` — rename field di interface + 79 entries
 - `packages/backend/prisma/seed.ts` — `countCalendarDays()`, fix `seedContracts()`
 - `packages/backend/src/infrastructure/seed.ts` — `countCalendarDays()`, fix contract calculation
@@ -1088,9 +1147,11 @@ Setelah migrasi HolidayScheme, ditemukan bahwa `totalDaysPaid` di seed data hany
 ## 2026-03-06 - Separate workingDaysPaid & holidayDaysPaid Fields
 
 ### Context
+
 `totalDaysPaid` menggabungkan hari kerja + hari libur jadi satu angka, membingungkan admin karena tidak bisa lihat breakdown berapa hari customer benar-benar bayar vs berapa hari gratis (libur). Ditambahkan 2 field baru agar informasi terpisah jelas.
 
 ### What was changed
+
 - **Prisma schema**: Tambah kolom `working_days_paid` dan `holiday_days_paid` (default 0)
 - **Domain entity**: Tambah `workingDaysPaid` dan `holidayDaysPaid` di Contract interface
 - **PaymentService**: `creditDayToContract()` sekarang update field yang sesuai berdasarkan `isHoliday`. `revertPaymentFromContract()` kurangi `workingDaysPaid` saat revert.
@@ -1103,6 +1164,7 @@ Setelah migrasi HolidayScheme, ditemukan bahwa `totalDaysPaid` di seed data hany
 - **Tests**: Update test helpers dengan field baru, 129 tests passing
 
 ### Files modified
+
 - `packages/backend/prisma/schema.prisma`
 - `packages/backend/src/domain/entities/Contract.ts`
 - `packages/backend/src/application/services/PaymentService.ts`
@@ -1120,9 +1182,11 @@ Setelah migrasi HolidayScheme, ditemukan bahwa `totalDaysPaid` di seed data hany
 ## 2026-03-09 - PaymentDay: Static Per-Date Records
 
 ### Context
+
 Sistem kalender pembayaran sebelumnya menghitung status per-tanggal secara **dinamis** di `getCalendarData()`. Ini punya kelemahan: gap hari tidak terekam, holiday dihitung ulang tiap request (retroaktif), admin tidak bisa koreksi tanggal tertentu, dan tidak ada jejak audit per-tanggal.
 
 ### What was built
+
 - **PaymentDay model**: Record eksplisit per-tanggal per-kontrak dengan status UNPAID, PENDING, PAID, HOLIDAY, VOIDED
 - **Gap Billing (Opsi B)**: Akumulasi semua hari UNPAID dari `billingStartDate` sampai hari ini ke satu invoice
 - **Partial Payment**: Admin bisa reduce jumlah hari dalam invoice aktif; sisa hari kembali ke UNPAID
@@ -1133,6 +1197,7 @@ Sistem kalender pembayaran sebelumnya menghitung status per-tanggal secara **din
 - **Data Migration**: `migrateExistingContracts()` untuk backfill kontrak yang sudah berjalan
 
 ### Architecture
+
 - Domain layer: `PaymentDayStatus` enum, `PaymentDay` entity, `IPaymentDayRepository` interface (13 methods)
 - Infrastructure: `InMemoryPaymentDayRepository` (Map-based) + `PrismaPaymentDayRepository` (Prisma)
 - Application: 14 sub-changes di PaymentService, 4 sub-changes di ContractService
@@ -1141,12 +1206,14 @@ Sistem kalender pembayaran sebelumnya menghitung status per-tanggal secara **din
 - Shared utility: `toDateKey()` dipindah ke `domain/utils/dateUtils.ts`
 
 ### API Endpoints (New)
-| Method | Route | Description |
-|--------|-------|-------------|
-| PATCH | `/payments/contract/:contractId/day/:date` | Admin correction — ubah status PaymentDay |
-| POST | `/payments/:id/reduce` | Partial payment — kurangi hari dalam invoice |
+
+| Method | Route                                      | Description                                  |
+| ------ | ------------------------------------------ | -------------------------------------------- |
+| PATCH  | `/payments/contract/:contractId/day/:date` | Admin correction — ubah status PaymentDay    |
+| POST   | `/payments/:id/reduce`                     | Partial payment — kurangi hari dalam invoice |
 
 ### Files modified
+
 - `packages/backend/prisma/schema.prisma` — PaymentDayStatus enum + PaymentDay model + relasi
 - `packages/backend/src/domain/enums/index.ts` — PaymentDayStatus enum
 - `packages/backend/src/domain/entities/PaymentDay.ts` — **Baru** (interface)
@@ -1176,33 +1243,39 @@ Sistem kalender pembayaran sebelumnya menghitung status per-tanggal secara **din
 ## 2026-03-10 - Saving Feature: Dana Sisihan Per Kontrak
 
 ### Context
+
 Fitur saving otomatis menyisihkan Rp 5.000 per hari kerja dari setiap pembayaran harian customer. Dana saving disimpan per kontrak dan bisa digunakan untuk servis motor, balik nama STNK/BPKB, atau di-claim customer setelah kontrak selesai (COMPLETED).
 
 ### What was built
 
 **Prisma Schema:**
+
 - Enum `SavingTransactionType` (CREDIT, DEBIT_SERVICE, DEBIT_TRANSFER, DEBIT_CLAIM, REVERSAL)
 - Model `SavingTransaction` (15 fields, 3 indexes: contractId, paymentId, type)
 - Field `savingBalance Int @default(0)` di Contract
 - Relasi `savingTransactions` di Contract dan Invoice
 
 **Domain Layer:**
+
 - Entity `SavingTransaction` (immutable — no update/delete)
 - Interface `ISavingTransactionRepository` (6 methods: findById, findByContractId, findByPaymentId, findByContractAndType, create, count)
 - Enum `SavingTransactionType` + constant `SAVING_PER_DAY = 5000`
 - Field `savingBalance` di Contract entity
 
 **Infrastructure Layer:**
+
 - `InMemorySavingTransactionRepository` (Map-based, untuk dev/test)
 - `PrismaSavingTransactionRepository` (PostgreSQL, untuk production)
 
 **Application Layer:**
+
 - `SavingService` (8 methods): creditFromPayment, reverseCreditFromPayment, debitForService, debitForTransfer, claimSaving, getBalance, getTransactionHistory, recalculateBalance
 - DTOs: `DebitSavingDto`, `ClaimSavingDto` (Zod schemas)
 - Integrasi PaymentService: auto-credit saving saat payment PAID, auto-reverse saat payment revert (try-catch — saving error tidak gagalkan payment)
 - Setter injection `setSavingService()` di PaymentService untuk hindari circular dependency
 
 **Presentation Layer:**
+
 - `SavingController` (6 endpoint handlers)
 - 6 API routes:
   - `GET /api/savings/contract/:contractId` — Data saving (balance + transactions)
@@ -1213,6 +1286,7 @@ Fitur saving otomatis menyisihkan Rp 5.000 per hari kerja dari setiap pembayaran
   - `POST /api/savings/contract/:contractId/recalculate` — Recalculate balance
 
 **Frontend:**
+
 - Types: `SavingTransactionType` enum, `SavingTransaction` & `SavingData` interfaces
 - API client: 6 methods di `api.ts`
 - SWR hooks: `useSavingByContract`, `useSavingBalance` (TTL.SHORT)
@@ -1220,9 +1294,11 @@ Fitur saving otomatis menyisihkan Rp 5.000 per hari kerja dari setiap pembayaran
 - Contract detail page: kartu saldo saving, tombol aksi (Servis/Balik Nama/Claim), riwayat transaksi dengan pagination, 3 dialog forms
 
 **Tests:**
+
 - `SavingService.test.ts`: 31 test cases (credit, debit service, debit transfer, claim, reversal, history, recalculate, full flow)
 
 ### Business rules
+
 - CREDIT hanya dari hari kerja (bukan holiday, bukan DP)
 - DEBIT_SERVICE: contract ACTIVE/OVERDUE/COMPLETED, amount ≤ savingBalance
 - DEBIT_TRANSFER: contract HARUS COMPLETED
@@ -1231,6 +1307,7 @@ Fitur saving otomatis menyisihkan Rp 5.000 per hari kerja dari setiap pembayaran
 - `savingBalance` di Contract = denormalized (source of truth = SavingTransaction records)
 
 ### Files modified
+
 - `packages/backend/prisma/schema.prisma`
 - `packages/backend/src/domain/enums/index.ts`
 - `packages/backend/src/domain/entities/SavingTransaction.ts` (NEW)
@@ -1271,6 +1348,7 @@ Kebijakan perusahaan baru: denda keterlambatan Rp 20.000/hari (naik dari Rp 10.0
 ### What was changed
 
 **Business Logic:**
+
 - Setting baru: `penalty_grace_days` (default 2) — toleransi sebelum denda berlaku
 - `grace_period_days` tetap 7 — hanya untuk status OVERDUE (konsep berbeda dari penalty)
 - Denda per hari: Rp 10.000 → Rp 20.000 (`DEFAULT_LATE_FEE_PER_DAY`, setting `late_fee_per_day`)
@@ -1279,12 +1357,14 @@ Kebijakan perusahaan baru: denda keterlambatan Rp 20.000/hari (naik dari Rp 10.0
 - `amount` tetap hanya berisi tarif harian, `lateFee` terpisah. Total bayar = `amount + lateFee`
 
 **Architecture Improvement:**
+
 - Pure function `computeLateFee()` di `domain/utils/lateFeeCalculator.ts` — shared antara PaymentService & ContractService (DRY, no duplication)
 - `PaymentService.calculateLateFee()` adalah async wrapper yang baca setting lalu delegasi ke `computeLateFee()`
 - Dead code `createDailyPayment()` dihapus dari PaymentService
 - `SettingService.migrateSettings()` — otomatis update setting lama yang belum dikustomisasi admin ke nilai baru saat deploy
 
 **Methods diubah di PaymentService:**
+
 - Baru: `getSetting()`, `calculateLateFee()` — wrapper ke `computeLateFee()`
 - `generateDailyPayments()` — hitung late fee saat buat gap billing
 - `rolloverPayment()` — hitung late fee saat rollover
@@ -1292,18 +1372,19 @@ Kebijakan perusahaan baru: denda keterlambatan Rp 20.000/hari (naik dari Rp 10.0
 - `reducePayment()` — hitung late fee saat reduce payment
 
 **ContractService.extend():**
+
 - Duplikasi logika dihapus, diganti `computeLateFee()` shared utility
 
 ### Files modified
 
-| File | Perubahan |
-|------|-----------|
-| `src/domain/enums/index.ts` | `DEFAULT_GRACE_PERIOD_DAYS=7` (tetap), tambah `DEFAULT_PENALTY_GRACE_DAYS=2`, `DEFAULT_LATE_FEE_PER_DAY=20000` |
-| `src/domain/utils/lateFeeCalculator.ts` | **Baru** — pure function `computeLateFee()` |
-| `src/application/services/PaymentService.ts` | Refactor `calculateLateFee()` → delegasi ke `computeLateFee()`, hapus dead code `createDailyPayment()` |
-| `src/application/services/ContractService.ts` | Hapus duplikasi, import `computeLateFee()` |
-| `src/application/services/SettingService.ts` | Tambah `penalty_grace_days` setting, tambah `migrateSettings()` |
-| `src/__tests__/PaymentService.test.ts` | Tambah 15 tests untuk late fee/penalty |
+| File                                          | Perubahan                                                                                                      |
+| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `src/domain/enums/index.ts`                   | `DEFAULT_GRACE_PERIOD_DAYS=7` (tetap), tambah `DEFAULT_PENALTY_GRACE_DAYS=2`, `DEFAULT_LATE_FEE_PER_DAY=20000` |
+| `src/domain/utils/lateFeeCalculator.ts`       | **Baru** — pure function `computeLateFee()`                                                                    |
+| `src/application/services/PaymentService.ts`  | Refactor `calculateLateFee()` → delegasi ke `computeLateFee()`, hapus dead code `createDailyPayment()`         |
+| `src/application/services/ContractService.ts` | Hapus duplikasi, import `computeLateFee()`                                                                     |
+| `src/application/services/SettingService.ts`  | Tambah `penalty_grace_days` setting, tambah `migrateSettings()`                                                |
+| `src/__tests__/PaymentService.test.ts`        | Tambah 15 tests untuk late fee/penalty                                                                         |
 
 ### Test count
 
@@ -1316,6 +1397,7 @@ Kebijakan perusahaan baru: denda keterlambatan Rp 20.000/hari (naik dari Rp 10.0
 ### Context
 
 Dua bug kritis ditemukan setelah implementasi late payment penalty:
+
 1. `endDate` kontrak loncat ke akhir bulan (misal 31 Maret) setelah pembayaran — progress dan sisa hari menjadi tidak akurat
 2. Banner status di detail kontrak salah: (a) hijau "Pembayaran Lancar" padahal masih ada tunggakan, (b) OVERDUE tidak pernah revert ke ACTIVE setelah pembayaran
 
@@ -1330,6 +1412,7 @@ Dua bug kritis ditemukan setelah implementasi late payment penalty:
 ### What was changed
 
 **Backend — `syncContractFromPaymentDays()` rewrite (PaymentService.ts):**
+
 - **Contiguous walk algorithm**: Fetch semua PaymentDay records sorted ASC, walk dari billingStartDate. Hitung PAID + HOLIDAY yang berturut-turut. Berhenti di gap pertama (UNPAID/PENDING/VOIDED). Trailing contiguous holidays setelah PAID terakhir tetap dihitung (konsisten dengan seed `countCalendarDays()`).
 - **Bidirectional status transition**: Setelah hitung endDate baru, cek apakah status perlu berubah:
   - OVERDUE → ACTIVE jika `(endDate + gracePeriodDays) >= today`
@@ -1337,21 +1420,23 @@ Dua bug kritis ditemukan setelah implementasi late payment penalty:
   - Terminal statuses (COMPLETED, CANCELLED, REPOSSESSED) tidak diubah
 
 **Backend — `createHolidayPayment()` consistency:**
+
 - Ganti `creditDayToContract(contract, 1, true)` (aritmatika incremental) dengan `syncContractFromPaymentDays(contract.id)` (contiguous walk) untuk konsistensi
 - Hapus dead code `creditDayToContract()` (tidak dipanggil dari manapun lagi)
 
 **Frontend — Banner "Ada Tunggakan" (orange):**
+
 - Tambah state intermediate di banner logic: jika contract ACTIVE, tidak ada activePayment, tapi `endDate < today` → orange "Ada Tunggakan" dengan info "Terakhir bayar: {date}"
 - Tambah helper `getWibToday()` di `lib/utils.ts` (mirror backend `getWibToday()` untuk konsistensi timezone WIB)
 
 ### Files modified
 
-| File | Perubahan |
-|------|-----------|
-| `src/application/services/PaymentService.ts` | Rewrite `syncContractFromPaymentDays()` (contiguous walk + bidirectional status), ganti `creditDayToContract()` di `createHolidayPayment()`, hapus dead code |
-| `src/__tests__/PaymentService.test.ts` | Fix holiday test setup, tambah 6 tests baru (contiguous walk, status transitions) |
-| `frontend/src/app/(dashboard)/contracts/[id]/page.tsx` | Tambah banner "Ada Tunggakan" (orange) |
-| `frontend/src/lib/utils.ts` | Tambah `getWibToday()` helper |
+| File                                                   | Perubahan                                                                                                                                                    |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `src/application/services/PaymentService.ts`           | Rewrite `syncContractFromPaymentDays()` (contiguous walk + bidirectional status), ganti `creditDayToContract()` di `createHolidayPayment()`, hapus dead code |
+| `src/__tests__/PaymentService.test.ts`                 | Fix holiday test setup, tambah 6 tests baru (contiguous walk, status transitions)                                                                            |
+| `frontend/src/app/(dashboard)/contracts/[id]/page.tsx` | Tambah banner "Ada Tunggakan" (orange)                                                                                                                       |
+| `frontend/src/lib/utils.ts`                            | Tambah `getWibToday()` helper                                                                                                                                |
 
 ### Test count
 
@@ -1362,15 +1447,18 @@ Dua bug kritis ditemukan setelah implementasi late payment penalty:
 ## 2026-03-24 - Remove Penalty for Old Contracts
 
 ### Context
+
 Perubahan kebijakan bisnis: kontrak-kontrak lama (`OLD_CONTRACT` / holiday setiap Minggu) tidak dikenakan denda keterlambatan. Penalty hanya berlaku untuk kontrak baru (`NEW_CONTRACT`) dan kontrak yang dibuat ke depannya.
 
 ### What was changed
+
 - `PaymentService.calculateLateFee()` — tambah parameter `holidayScheme?`, return 0 jika `OLD_CONTRACT`
 - Semua 5 pemanggilan `calculateLateFee()` di PaymentService di-update untuk pass `contract.holidayScheme`
 - `ContractService.extendContract()` — tambah pengecekan `holidayScheme !== OLD_CONTRACT` sebelum hitung denda
 - Dokumentasi `CLAUDE.md` section Late Payment Penalty di-update
 
 ### Files modified
+
 - `packages/backend/src/application/services/PaymentService.ts` — calculateLateFee + 5 call sites
 - `packages/backend/src/application/services/ContractService.ts` — extendContract late fee check
 - `packages/backend/src/__tests__/PaymentService.test.ts` — +2 tests (OLD_CONTRACT no penalty, NEW_CONTRACT penalty)
@@ -1378,7 +1466,109 @@ Perubahan kebijakan bisnis: kontrak-kontrak lama (`OLD_CONTRACT` / holiday setia
 - `docs/CHANGELOG.md` — entry ini
 
 ### Tests
+
 200 tests (5 suites) — naik dari 198 (tambah 2 tests penalty per holiday scheme)
+
+---
+
+## 2026-03-24 - Developer Tooling Setup
+
+### Context
+
+Setup tooling lengkap untuk meningkatkan developer experience, code quality, dan monitoring. Sebelumnya project tidak memiliki linting (backend), formatting, pre-commit hooks, API docs, error monitoring, atau E2E testing.
+
+### What was added
+
+**1. ESLint (Backend)**
+
+- ESLint v9 flat config di root (`eslint.config.mjs`)
+- Backend-specific rules: `no-console` (warn), `no-explicit-any` (warn), `no-unused-vars` (warn with `_` prefix ignore)
+- Test files lebih relaxed (no-explicit-any off)
+- Frontend tetap menggunakan `eslint-config-next` sendiri
+
+**2. Prettier**
+
+- Shared config `.prettierrc` di root (semi, singleQuote, trailingComma, 100 printWidth)
+- `.prettierignore` untuk exclude node_modules, dist, build, migrations
+- Semua backend files sudah di-format
+
+**3. Husky + lint-staged**
+
+- Pre-commit hook: `npx lint-staged`
+- Backend `.ts` files: prettier --write + eslint --fix
+- Frontend `.ts/.tsx` files: prettier --write
+- JSON/MD/YAML files: prettier --write
+
+**4. Prisma Migrate (mengganti db push)**
+
+- Baseline migration `0_init` dibuat dari schema yang ada
+- `railway.json` updated: `prisma migrate deploy` (bukan `db push --accept-data-loss`)
+- Workflow baru: `prisma migrate dev --name deskripsi` untuk perubahan schema
+
+**5. Swagger/OpenAPI**
+
+- `swagger-jsdoc` + `swagger-ui-express`
+- Full API documentation inline di `infrastructure/swagger.ts`
+- Semua 50+ endpoint terdokumentasi dengan tags, parameters, schemas
+- Akses: `http://localhost:3001/api-docs`
+
+**6. Sentry Error Monitoring**
+
+- Backend: `@sentry/node` dengan Express error handler integration
+- Frontend: `@sentry/nextjs` dengan client/server/edge configs + global-error page
+- Conditional: hanya aktif jika `SENTRY_DSN` env var di-set
+- Production trace sample rate: 20%
+
+**7. Playwright E2E Testing**
+
+- `@playwright/test` di frontend
+- 3 test specs: auth (login/logout), dashboard (navigation), customers (list/search/create)
+- Config auto-starts backend + frontend via `webServer`
+- Playwright MCP (`.mcp.json`) untuk browser interaction dari Claude Code
+
+**8. CI Pipeline Upgrade**
+
+- 3 jobs terpisah: lint → test → e2e
+- Lint job: Prettier check + ESLint (backend + frontend)
+- Test job: tsc + Jest + build
+- E2E job: Playwright (hanya pada PR ke main)
+
+### Files created
+
+- `eslint.config.mjs` — ESLint v9 flat config
+- `.prettierrc` / `.prettierignore` — Prettier config
+- `.husky/pre-commit` — Git pre-commit hook
+- `packages/backend/prisma/migrations/0_init/migration.sql` — Baseline migration
+- `packages/backend/src/infrastructure/swagger.ts` — Swagger/OpenAPI config
+- `packages/backend/src/infrastructure/sentry.ts` — Sentry backend init
+- `packages/frontend/sentry.client.config.ts` — Sentry frontend client
+- `packages/frontend/sentry.server.config.ts` — Sentry frontend server
+- `packages/frontend/sentry.edge.config.ts` — Sentry frontend edge
+- `packages/frontend/src/app/global-error.tsx` — Error boundary with Sentry
+- `packages/frontend/playwright.config.ts` — Playwright config
+- `packages/frontend/e2e/auth.spec.ts` — Auth E2E tests
+- `packages/frontend/e2e/dashboard.spec.ts` — Dashboard E2E tests
+- `packages/frontend/e2e/customers.spec.ts` — Customers E2E tests
+- `.mcp.json` — Playwright MCP for Claude Code
+
+### Files modified
+
+- `package.json` — lint-staged config, new scripts (format, lint:backend, lint:frontend)
+- `packages/backend/package.json` — lint script, swagger/sentry deps
+- `packages/frontend/package.json` — e2e scripts, playwright/sentry deps
+- `packages/backend/src/index.ts` — Sentry init + Swagger setup
+- `packages/backend/src/presentation/routes/index.ts` — Fix require() to ES import
+- `packages/backend/src/infrastructure/middleware/authMiddleware.ts` — ESLint disable for namespace
+- `packages/backend/src/application/services/PaymentService.ts` — let→const fix
+- `packages/frontend/next.config.ts` — withSentryConfig wrapper
+- `.github/workflows/ci.yml` — 3-job pipeline
+- `railway.json` — prisma migrate deploy
+- `CLAUDE.md` — Updated commands, testing, CI docs
+- `README.md` — Updated tech stack table
+
+### Tests
+
+200 unit tests passing (no changes). 3 E2E spec files added (Playwright).
 
 ---
 
@@ -1388,30 +1578,30 @@ Perubahan kebijakan bisnis: kontrak-kontrak lama (`OLD_CONTRACT` / holiday setia
 
 ### Completed Phases
 
-| Phase | Status | Description |
-|-------|--------|-------------|
-| 1 | COMPLETE | Full Stack Foundation (Express + Next.js + Clean Architecture) |
-| 2 | COMPLETE | Enhancements & Testing (52 tests, detail pages, search/filter) |
-| 3 | COMPLETE | Core RTO Mechanics (ownership, extension, repossession, grace period) |
-| 4 | COMPLETE | Admin Controls (edit, cancel, void, mark-paid, soft delete, bulk) |
-| 5 | COMPLETE | Financial Features & Reporting (late fee, reports, PDF, exports) |
-| 5.5 | COMPLETE | Business Logic Audit (settings-driven, payment-gated, state machine) |
-| 6 | COMPLETE | UX Polish (pagination, charts, forms, skeleton, command palette) |
-| 6.5 MP-6A~6G | COMPLETE | RTO Business Model (DP, billing, rollover, Libur Bayar, frontend) |
-| 8 | COMPLETE | PostgreSQL + Prisma Migration |
-| 9 (partial) | COMPLETE | CI/CD pipeline, Git branching, SWR caching |
+| Phase        | Status   | Description                                                           |
+| ------------ | -------- | --------------------------------------------------------------------- |
+| 1            | COMPLETE | Full Stack Foundation (Express + Next.js + Clean Architecture)        |
+| 2            | COMPLETE | Enhancements & Testing (52 tests, detail pages, search/filter)        |
+| 3            | COMPLETE | Core RTO Mechanics (ownership, extension, repossession, grace period) |
+| 4            | COMPLETE | Admin Controls (edit, cancel, void, mark-paid, soft delete, bulk)     |
+| 5            | COMPLETE | Financial Features & Reporting (late fee, reports, PDF, exports)      |
+| 5.5          | COMPLETE | Business Logic Audit (settings-driven, payment-gated, state machine)  |
+| 6            | COMPLETE | UX Polish (pagination, charts, forms, skeleton, command palette)      |
+| 6.5 MP-6A~6G | COMPLETE | RTO Business Model (DP, billing, rollover, Libur Bayar, frontend)     |
+| 8            | COMPLETE | PostgreSQL + Prisma Migration                                         |
+| 9 (partial)  | COMPLETE | CI/CD pipeline, Git branching, SWR caching                            |
 
 ### Pending Phases
 
-| Phase | Status | Description |
-|-------|--------|-------------|
-| 6.5 MP-6D | PENDING | DOKU Payment Gateway integration |
-| 6.5 MP-6E | PENDING | WhatsApp Reminder (depends on MP-6D) |
-| 6.5 MP-6H | PENDING | Frontend Payment Gateway UI (depends on MP-6D) |
-| 6.5 MP-6I | PENDING | Seed Data & Tests Update |
-| 7 | PENDING | Security: JWT + bcrypt, RBAC, User Management, Sessions |
-| 8 (remaining) | PENDING | File upload (KTP images), error monitoring, DB backup |
-| 9 (remaining) | PENDING | Production deployment (Railway + Vercel), SSL, domain |
+| Phase         | Status  | Description                                             |
+| ------------- | ------- | ------------------------------------------------------- |
+| 6.5 MP-6D     | PENDING | DOKU Payment Gateway integration                        |
+| 6.5 MP-6E     | PENDING | WhatsApp Reminder (depends on MP-6D)                    |
+| 6.5 MP-6H     | PENDING | Frontend Payment Gateway UI (depends on MP-6D)          |
+| 6.5 MP-6I     | PENDING | Seed Data & Tests Update                                |
+| 7             | PENDING | Security: JWT + bcrypt, RBAC, User Management, Sessions |
+| 8 (remaining) | PENDING | File upload (KTP images), error monitoring, DB backup   |
+| 9 (remaining) | PENDING | Production deployment (Railway + Vercel), SSL, domain   |
 
 ### Phase 7: Security & Authentication (Detail)
 

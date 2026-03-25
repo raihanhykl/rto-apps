@@ -8,12 +8,13 @@ Dangerous configuration patterns that enable security failures.
 
 ```yaml
 # What does 0 mean?
-session_timeout: 0    # Infinite timeout? Immediate expiry? Disabled?
-token_lifetime: 0     # Never expires? Already expired? Use default?
-max_attempts: 0       # No attempts allowed? Unlimited attempts?
+session_timeout: 0 # Infinite timeout? Immediate expiry? Disabled?
+token_lifetime: 0 # Never expires? Already expired? Use default?
+max_attempts: 0 # No attempts allowed? Unlimited attempts?
 ```
 
 **Real-world failures:**
+
 - OTP libraries where `lifetime=0` means "accept any OTP regardless of age"
 - Rate limiters where `max_attempts=0` disables rate limiting
 - Session managers where `timeout=0` means "session never expires"
@@ -55,14 +56,14 @@ if api_key == config.api_key:  # What if config is empty?
 ```javascript
 // DANGEROUS: null means "skip verification"
 function verifySignature(data, signature, publicKey) {
-    if (!publicKey) return true;  // No key = trust everything?
-    return crypto.verify(data, signature, publicKey);
+  if (!publicKey) return true; // No key = trust everything?
+  return crypto.verify(data, signature, publicKey);
 }
 
 // DANGEROUS: null means "any value"
 function checkRole(user, requiredRole) {
-    if (!requiredRole) return true;  // No requirement = allow all?
-    return user.roles.includes(requiredRole);
+  if (!requiredRole) return true; // No requirement = allow all?
+  return user.roles.includes(requiredRole);
 }
 ```
 
@@ -83,6 +84,7 @@ sanitize_input: false
 **Pattern**: Any boolean that disables a security control.
 
 **The typo problem:**
+
 ```yaml
 verify_ssl: fasle   # Typo - what does the parser do?
 verify_ssl: "false" # String "false" - truthy in many languages!
@@ -93,8 +95,8 @@ verify_ssl: 0       # Integer 0 - falsy, but is it valid?
 
 ```yaml
 # Confusing
-disable_auth: false      # Auth enabled? Let me re-read...
-skip_validation: false   # Validation runs? Think carefully...
+disable_auth: false # Auth enabled? Let me re-read...
+skip_validation: false # Validation runs? Think carefully...
 
 # Clear
 auth_enabled: true
@@ -107,9 +109,10 @@ validate_input: true
 
 ```yaml
 # What do these mean?
-max_retries: -1      # Infinite? Error? Use default?
-cache_ttl: -1        # Never expire? Disabled?
-timeout_seconds: -1  # Wait forever? Use system default?
+max_retries: -1 # Infinite? Error? Use default?
+cache_ttl: -1 # Never expire? Disabled?
+timeout_seconds: -1 # Wait forever? Use system default?
+
 
 # Real vulnerability: connection pool with max_connections: -1
 # meant "unlimited" - enabled DoS via connection exhaustion
@@ -119,10 +122,10 @@ timeout_seconds: -1  # Wait forever? Use system default?
 
 ```yaml
 # Dangerous patterns
-allowed_origins: "*"       # CORS wildcard
-allowed_hosts: "any"       # Bypass host validation
-log_level: "none"          # Disable security logging
-password_policy: "disabled" # No password requirements
+allowed_origins: '*' # CORS wildcard
+allowed_hosts: 'any' # Bypass host validation
+log_level: 'none' # Disable security logging
+password_policy: 'disabled' # No password requirements
 ```
 
 **Detection**: String configs that accept wildcards or "disable" keywords.
@@ -138,10 +141,10 @@ allow_anonymous_access: true
 
 # Both specified - conflict
 session_cookie_secure: true
-force_http: true  # HTTP can't use Secure cookies
+force_http: true # HTTP can't use Secure cookies
 
 # Mutually exclusive
-encryption_key: "..."
+encryption_key: '...'
 encryption_disabled: true
 ```
 
@@ -194,13 +197,13 @@ export DEBUG=true  # Enables verbose logging of secrets
 
 ```yaml
 # User-controlled paths
-log_file: "../../../etc/passwd"
-upload_dir: "/etc/nginx/conf.d/"
-template_dir: "../../../etc/shadow"
+log_file: '../../../etc/passwd'
+upload_dir: '/etc/nginx/conf.d/'
+template_dir: '../../../etc/shadow'
 
 # Even "read-only" paths can leak secrets
-config_include: "/etc/shadow"
-certificate_file: "/proc/self/environ"
+config_include: '/etc/shadow'
+certificate_file: '/proc/self/environ'
 ```
 
 **Fix**: Validate paths; restrict to allowed directories; resolve and check.

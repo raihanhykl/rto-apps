@@ -24,6 +24,7 @@ p == q  // FALSE - outside cache range!
 ```
 
 **Fix**: Always use `.equals()` for object comparison:
+
 ```java
 a.equals(b)  // TRUE
 p.equals(q)  // TRUE
@@ -69,6 +70,7 @@ Object obj = ois.readObject();
 ```
 
 **Fix**: Use JSON or implement `ObjectInputFilter` (Java 9+):
+
 ```java
 ObjectInputFilter filter = ObjectInputFilter.Config.createFilter(
     "!*"  // Reject all classes
@@ -92,6 +94,7 @@ optional.get();     // NoSuchElementException if empty
 ```
 
 **Fix**: Use Optional correctly:
+
 ```java
 Optional.ofNullable(value);
 optional.orElse(default);
@@ -189,6 +192,7 @@ try {
 ```
 
 **Fix**: Use try-with-resources:
+
 ```java
 try (FileInputStream fis = new FileInputStream(file)) {
     process(fis);
@@ -207,6 +211,7 @@ new BigDecimal(0.1);  // 0.1000000000000000055511151231257827...
 ```
 
 **Fix**: Use `BigDecimal` with String constructor:
+
 ```java
 new BigDecimal("0.1");  // Exactly 0.1
 ```
@@ -237,6 +242,7 @@ factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
 ```
 
 **Fix**: Disable all external entities:
+
 ```java
 factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
 factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
@@ -247,17 +253,17 @@ factory.setExpandEntityReferences(false);
 
 ## Detection Patterns
 
-| Pattern | Risk |
-|---------|------|
-| `==` with objects | Reference comparison |
-| `Integer/Long` comparison with `==` | Cache boundary |
-| `ObjectInputStream.readObject()` | Deserialization RCE |
-| Empty `catch` block | Swallowed exception |
-| `catch (Exception e)` | Over-broad catch |
-| `String +=` in loop | Performance, memory |
-| `split(".")` | Regex interpretation |
-| `static SimpleDateFormat` | Thread safety |
-| `HashMap` shared across threads | Race condition |
-| Resources without try-with-resources | Resource leak |
-| `new BigDecimal(double)` | Precision loss |
-| `DocumentBuilderFactory.newInstance()` | XXE vulnerability |
+| Pattern                                | Risk                 |
+| -------------------------------------- | -------------------- |
+| `==` with objects                      | Reference comparison |
+| `Integer/Long` comparison with `==`    | Cache boundary       |
+| `ObjectInputStream.readObject()`       | Deserialization RCE  |
+| Empty `catch` block                    | Swallowed exception  |
+| `catch (Exception e)`                  | Over-broad catch     |
+| `String +=` in loop                    | Performance, memory  |
+| `split(".")`                           | Regex interpretation |
+| `static SimpleDateFormat`              | Thread safety        |
+| `HashMap` shared across threads        | Race condition       |
+| Resources without try-with-resources   | Resource leak        |
+| `new BigDecimal(double)`               | Precision loss       |
+| `DocumentBuilderFactory.newInstance()` | XXE vulnerability    |

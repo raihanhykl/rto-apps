@@ -308,7 +308,9 @@ describe('PaymentService', () => {
       await paymentService.generateDailyPayments(yesterday);
 
       let payments = await invoiceRepo.findByContractId(rolloverContract.id);
-      const rolloverPayments = payments.filter((p: Invoice) => p.type === InvoiceType.DAILY_BILLING);
+      const rolloverPayments = payments.filter(
+        (p: Invoice) => p.type === InvoiceType.DAILY_BILLING,
+      );
       expect(rolloverPayments.length).toBe(1);
 
       const today = new Date();
@@ -380,11 +382,15 @@ describe('PaymentService', () => {
       const pendingPayment = payments.find((p: Invoice) => p.status === PaymentStatus.PENDING)!;
 
       await paymentService.payPayment(pendingPayment.id, adminId);
-      await expect(paymentService.payPayment(pendingPayment.id, adminId)).rejects.toThrow('Payment already paid');
+      await expect(paymentService.payPayment(pendingPayment.id, adminId)).rejects.toThrow(
+        'Payment already paid',
+      );
     });
 
     it('should throw if payment not found', async () => {
-      await expect(paymentService.payPayment('non-existent', adminId)).rejects.toThrow('Payment not found');
+      await expect(paymentService.payPayment('non-existent', adminId)).rejects.toThrow(
+        'Payment not found',
+      );
     });
 
     it('should create audit log on payment', async () => {
@@ -496,7 +502,8 @@ describe('PaymentService', () => {
       let expectedDays = 0;
       const cursor = new Date(firstUnpaid);
       while (cursor <= today) {
-        if (cursor.getDay() !== 0) expectedDays++; // simplified: all Sundays skipped for default 2 holidays/month
+        if (cursor.getDay() !== 0)
+          expectedDays++; // simplified: all Sundays skipped for default 2 holidays/month
         else expectedDays++; // actually non-holiday Sundays count too, just use the service logic
         cursor.setDate(cursor.getDate() + 1);
       }
@@ -605,15 +612,18 @@ describe('PaymentService', () => {
     });
 
     it('should throw for invalid days', async () => {
-      await expect(paymentService.createManualPayment(activeContract.id, 0, adminId))
-        .rejects.toThrow('Manual payment must be 1-7 days');
-      await expect(paymentService.createManualPayment(activeContract.id, 8, adminId))
-        .rejects.toThrow('Manual payment must be 1-7 days');
+      await expect(
+        paymentService.createManualPayment(activeContract.id, 0, adminId),
+      ).rejects.toThrow('Manual payment must be 1-7 days');
+      await expect(
+        paymentService.createManualPayment(activeContract.id, 8, adminId),
+      ).rejects.toThrow('Manual payment must be 1-7 days');
     });
 
     it('should throw for contract not found', async () => {
-      await expect(paymentService.createManualPayment('non-existent', 3, adminId))
-        .rejects.toThrow('Contract not found');
+      await expect(paymentService.createManualPayment('non-existent', 3, adminId)).rejects.toThrow(
+        'Contract not found',
+      );
     });
 
     it('should throw for contract without billing started', async () => {
@@ -621,8 +631,9 @@ describe('PaymentService', () => {
         billingStartDate: null,
         unitReceivedDate: null,
       });
-      await expect(paymentService.createManualPayment(noBillingContract.id, 3, adminId))
-        .rejects.toThrow('Billing has not started yet');
+      await expect(
+        paymentService.createManualPayment(noBillingContract.id, 3, adminId),
+      ).rejects.toThrow('Billing has not started yet');
     });
 
     it('should create audit log', async () => {
@@ -660,13 +671,15 @@ describe('PaymentService', () => {
     it('should throw for non-pending payment', async () => {
       const payment = await paymentService.createManualPayment(activeContract.id, 2, adminId);
       await paymentService.cancelPayment(payment.id, adminId);
-      await expect(paymentService.cancelPayment(payment.id, adminId))
-        .rejects.toThrow('Only PENDING payments can be cancelled');
+      await expect(paymentService.cancelPayment(payment.id, adminId)).rejects.toThrow(
+        'Only PENDING payments can be cancelled',
+      );
     });
 
     it('should throw for payment not found', async () => {
-      await expect(paymentService.cancelPayment('non-existent', adminId))
-        .rejects.toThrow('Payment not found');
+      await expect(paymentService.cancelPayment('non-existent', adminId)).rejects.toThrow(
+        'Payment not found',
+      );
     });
 
     it('should create audit log on cancel', async () => {
@@ -675,7 +688,7 @@ describe('PaymentService', () => {
       const logs = await auditRepo.findAll();
       // 1 for create + 1 for cancel
       expect(logs.length).toBe(2);
-      const cancelLog = logs.find(l => l.action === 'UPDATE');
+      const cancelLog = logs.find((l) => l.action === 'UPDATE');
       expect(cancelLog).toBeDefined();
       expect(cancelLog!.module).toBe('payment');
     });
@@ -771,23 +784,25 @@ describe('PaymentService', () => {
         updatedAt: new Date(),
       });
 
-      samplePayment = await invoiceRepo.create(createInvoice({
-        contractId,
-        customerId,
-        invoiceNumber: 'PMT-260301-0099',
-        amount: 165000,
-        type: InvoiceType.MANUAL_PAYMENT,
-        extensionDays: 3,
-        daysCount: 3,
-        dailyRate: 55000,
-      }));
+      samplePayment = await invoiceRepo.create(
+        createInvoice({
+          contractId,
+          customerId,
+          invoiceNumber: 'PMT-260301-0099',
+          amount: 165000,
+          type: InvoiceType.MANUAL_PAYMENT,
+          extensionDays: 3,
+          daysCount: 3,
+          dailyRate: 55000,
+        }),
+      );
     });
 
     it('should mark payment as PAID', async () => {
       const updated = await paymentService.simulatePayment(
         samplePayment.id,
         PaymentStatus.PAID,
-        adminId
+        adminId,
       );
       expect(updated.status).toBe(PaymentStatus.PAID);
       expect(updated.paidAt).not.toBeNull();
@@ -823,7 +838,7 @@ describe('PaymentService', () => {
       const updated = await paymentService.simulatePayment(
         samplePayment.id,
         PaymentStatus.FAILED,
-        adminId
+        adminId,
       );
       expect(updated.status).toBe(PaymentStatus.FAILED);
       expect(updated.paidAt).toBeNull();
@@ -834,13 +849,13 @@ describe('PaymentService', () => {
     it('should throw if payment already paid', async () => {
       await paymentService.simulatePayment(samplePayment.id, PaymentStatus.PAID, adminId);
       await expect(
-        paymentService.simulatePayment(samplePayment.id, PaymentStatus.PAID, adminId)
+        paymentService.simulatePayment(samplePayment.id, PaymentStatus.PAID, adminId),
       ).rejects.toThrow('Payment already paid');
     });
 
     it('should throw if payment not found', async () => {
       await expect(
-        paymentService.simulatePayment('non-existent', PaymentStatus.PAID, adminId)
+        paymentService.simulatePayment('non-existent', PaymentStatus.PAID, adminId),
       ).rejects.toThrow('Payment not found');
     });
 
@@ -849,7 +864,9 @@ describe('PaymentService', () => {
       await paymentService.simulatePayment(samplePayment.id, PaymentStatus.PAID, adminId);
       const logsAfter = await auditRepo.findAll();
       expect(logsAfter.length).toBe(logsBefore.length + 1);
-      const payLog = logsAfter.find(l => l.action === 'PAYMENT' && l.entityId === samplePayment.id);
+      const payLog = logsAfter.find(
+        (l) => l.action === 'PAYMENT' && l.entityId === samplePayment.id,
+      );
       expect(payLog).toBeDefined();
       expect(payLog!.module).toBe('payment');
     });
@@ -859,11 +876,13 @@ describe('PaymentService', () => {
 
   describe('totalRevenue', () => {
     it('should return sum of paid payments', async () => {
-      const payment = await invoiceRepo.create(createInvoice({
-        amount: 165000,
-        status: PaymentStatus.PAID,
-        paidAt: new Date(),
-      }));
+      const payment = await invoiceRepo.create(
+        createInvoice({
+          amount: 165000,
+          status: PaymentStatus.PAID,
+          paidAt: new Date(),
+        }),
+      );
       const revenue = await paymentService.totalRevenue();
       expect(revenue).toBe(165000);
     });
@@ -876,10 +895,12 @@ describe('PaymentService', () => {
 
   describe('totalPending', () => {
     it('should return sum of pending payments', async () => {
-      await invoiceRepo.create(createInvoice({
-        amount: 165000,
-        status: PaymentStatus.PENDING,
-      }));
+      await invoiceRepo.create(
+        createInvoice({
+          amount: 165000,
+          status: PaymentStatus.PENDING,
+        }),
+      );
       const pending = await paymentService.totalPending();
       expect(pending).toBe(165000);
     });
@@ -895,7 +916,9 @@ describe('PaymentService', () => {
     });
 
     it('should throw if payment not found', async () => {
-      await expect(paymentService.generateQRCode('non-existent')).rejects.toThrow('Payment not found');
+      await expect(paymentService.generateQRCode('non-existent')).rejects.toThrow(
+        'Payment not found',
+      );
     });
   });
 
@@ -909,34 +932,36 @@ describe('PaymentService', () => {
     });
 
     it('should throw if payment already paid', async () => {
-      const payment = await invoiceRepo.create(createInvoice({
-        status: PaymentStatus.PAID,
-        paidAt: new Date(),
-      }));
-      await expect(
-        paymentService.voidPayment(payment.id, adminId)
-      ).rejects.toThrow('Cannot void a paid payment');
+      const payment = await invoiceRepo.create(
+        createInvoice({
+          status: PaymentStatus.PAID,
+          paidAt: new Date(),
+        }),
+      );
+      await expect(paymentService.voidPayment(payment.id, adminId)).rejects.toThrow(
+        'Cannot void a paid payment',
+      );
     });
 
     it('should throw if payment already voided', async () => {
       const payment = await invoiceRepo.create(createInvoice());
       await paymentService.voidPayment(payment.id, adminId);
-      await expect(
-        paymentService.voidPayment(payment.id, adminId)
-      ).rejects.toThrow('Payment already voided');
+      await expect(paymentService.voidPayment(payment.id, adminId)).rejects.toThrow(
+        'Payment already voided',
+      );
     });
 
     it('should throw if payment not found', async () => {
-      await expect(
-        paymentService.voidPayment('non-existent', adminId)
-      ).rejects.toThrow('Payment not found');
+      await expect(paymentService.voidPayment('non-existent', adminId)).rejects.toThrow(
+        'Payment not found',
+      );
     });
 
     it('should create audit log', async () => {
       const payment = await invoiceRepo.create(createInvoice());
       await paymentService.voidPayment(payment.id, adminId);
       const logs = await auditRepo.findAll();
-      const voidLog = logs.find(l => l.description.includes('Voided'));
+      const voidLog = logs.find((l) => l.description.includes('Voided'));
       expect(voidLog).toBeDefined();
     });
   });
@@ -945,22 +970,26 @@ describe('PaymentService', () => {
 
   describe('markPaid (payPayment)', () => {
     it('should mark a pending payment as paid', async () => {
-      const payment = await invoiceRepo.create(createInvoice({
-        contractId: activeContract.id,
-        customerId: activeContract.customerId,
-      }));
+      const payment = await invoiceRepo.create(
+        createInvoice({
+          contractId: activeContract.id,
+          customerId: activeContract.customerId,
+        }),
+      );
       const updated = await paymentService.payPayment(payment.id, adminId);
       expect(updated.status).toBe(PaymentStatus.PAID);
       expect(updated.paidAt).not.toBeNull();
     });
 
     it('should throw if payment is voided', async () => {
-      const payment = await invoiceRepo.create(createInvoice({
-        status: PaymentStatus.VOID,
-      }));
-      await expect(
-        paymentService.payPayment(payment.id, adminId)
-      ).rejects.toThrow('Payment has been cancelled');
+      const payment = await invoiceRepo.create(
+        createInvoice({
+          status: PaymentStatus.VOID,
+        }),
+      );
+      await expect(paymentService.payPayment(payment.id, adminId)).rejects.toThrow(
+        'Payment has been cancelled',
+      );
     });
   });
 
@@ -968,12 +997,14 @@ describe('PaymentService', () => {
 
   describe('revertPaymentStatus', () => {
     it('should revert PAID payment to PENDING and undo contract changes', async () => {
-      const payment = await invoiceRepo.create(createInvoice({
-        contractId: activeContract.id,
-        customerId: activeContract.customerId,
-        extensionDays: 1,
-        daysCount: 1,
-      }));
+      const payment = await invoiceRepo.create(
+        createInvoice({
+          contractId: activeContract.id,
+          customerId: activeContract.customerId,
+          extensionDays: 1,
+          daysCount: 1,
+        }),
+      );
 
       // Create a PaymentDay record linked to this payment
       const today = new Date();
@@ -1008,15 +1039,15 @@ describe('PaymentService', () => {
 
     it('should throw if payment already PENDING', async () => {
       const payment = await invoiceRepo.create(createInvoice());
-      await expect(
-        paymentService.revertPaymentStatus(payment.id, adminId)
-      ).rejects.toThrow('Payment sudah berstatus PENDING');
+      await expect(paymentService.revertPaymentStatus(payment.id, adminId)).rejects.toThrow(
+        'Payment sudah berstatus PENDING',
+      );
     });
 
     it('should throw if payment not found', async () => {
-      await expect(
-        paymentService.revertPaymentStatus('non-existent', adminId)
-      ).rejects.toThrow('Payment not found');
+      await expect(paymentService.revertPaymentStatus('non-existent', adminId)).rejects.toThrow(
+        'Payment not found',
+      );
     });
   });
 
@@ -1024,9 +1055,11 @@ describe('PaymentService', () => {
 
   describe('search', () => {
     it('should find payments by invoice number', async () => {
-      await invoiceRepo.create(createInvoice({
-        invoiceNumber: 'PMT-260305-0001',
-      }));
+      await invoiceRepo.create(
+        createInvoice({
+          invoiceNumber: 'PMT-260305-0001',
+        }),
+      );
       const results = await paymentService.search('PMT-260305');
       expect(results.length).toBeGreaterThanOrEqual(1);
       expect(results[0].invoiceNumber).toContain('PMT-260305');
@@ -1042,16 +1075,20 @@ describe('PaymentService', () => {
 
   describe('bulkMarkPaid', () => {
     it('should mark multiple payments as paid', async () => {
-      const p1 = await invoiceRepo.create(createInvoice({
-        contractId: activeContract.id,
-        customerId: activeContract.customerId,
-        invoiceNumber: 'PMT-260305-0010',
-      }));
-      const p2 = await invoiceRepo.create(createInvoice({
-        contractId: activeContract.id,
-        customerId: activeContract.customerId,
-        invoiceNumber: 'PMT-260305-0011',
-      }));
+      const p1 = await invoiceRepo.create(
+        createInvoice({
+          contractId: activeContract.id,
+          customerId: activeContract.customerId,
+          invoiceNumber: 'PMT-260305-0010',
+        }),
+      );
+      const p2 = await invoiceRepo.create(
+        createInvoice({
+          contractId: activeContract.id,
+          customerId: activeContract.customerId,
+          invoiceNumber: 'PMT-260305-0011',
+        }),
+      );
 
       const result = await paymentService.bulkMarkPaid([p1.id, p2.id], adminId);
       expect(result.success.length).toBe(2);
@@ -1059,11 +1096,13 @@ describe('PaymentService', () => {
     });
 
     it('should handle mixed success/failure', async () => {
-      const p1 = await invoiceRepo.create(createInvoice({
-        contractId: activeContract.id,
-        customerId: activeContract.customerId,
-        invoiceNumber: 'PMT-260305-0020',
-      }));
+      const p1 = await invoiceRepo.create(
+        createInvoice({
+          contractId: activeContract.id,
+          customerId: activeContract.customerId,
+          invoiceNumber: 'PMT-260305-0020',
+        }),
+      );
 
       const result = await paymentService.bulkMarkPaid([p1.id, 'non-existent'], adminId);
       expect(result.success.length).toBe(1);
@@ -1221,7 +1260,11 @@ describe('PaymentService', () => {
 
         await paymentService.generatePaymentDaysForPeriod(activeContract, workDay, 1);
         const updated = await paymentService.updatePaymentDayStatus(
-          activeContract.id, workDay, PaymentDayStatus.HOLIDAY, adminId, 'Admin override'
+          activeContract.id,
+          workDay,
+          PaymentDayStatus.HOLIDAY,
+          adminId,
+          'Admin override',
         );
 
         expect(updated.status).toBe(PaymentDayStatus.HOLIDAY);
@@ -1241,7 +1284,12 @@ describe('PaymentService', () => {
         await paymentDayRepo.update(pd!.id, { status: PaymentDayStatus.VOIDED });
 
         await expect(
-          paymentService.updatePaymentDayStatus(activeContract.id, workDay, PaymentDayStatus.UNPAID, adminId)
+          paymentService.updatePaymentDayStatus(
+            activeContract.id,
+            workDay,
+            PaymentDayStatus.UNPAID,
+            adminId,
+          ),
         ).rejects.toThrow('Cannot modify a voided day');
       });
 
@@ -1255,7 +1303,10 @@ describe('PaymentService', () => {
         await paymentService.generatePaymentDaysForPeriod(activeContract, workDay, 1);
         // Change to HOLIDAY → should update contract holidayDaysPaid
         await paymentService.updatePaymentDayStatus(
-          activeContract.id, workDay, PaymentDayStatus.HOLIDAY, adminId
+          activeContract.id,
+          workDay,
+          PaymentDayStatus.HOLIDAY,
+          adminId,
         );
 
         const contract = await contractRepo.findById(activeContract.id);
@@ -1269,14 +1320,22 @@ describe('PaymentService', () => {
         today.setHours(0, 0, 0, 0);
 
         // Create 3 UNPAID payment days in the past
-        const day1 = new Date(today); day1.setDate(day1.getDate() - 2); day1.setHours(0, 0, 0, 0);
-        const day2 = new Date(today); day2.setDate(day2.getDate() - 1); day2.setHours(0, 0, 0, 0);
-        const day3 = new Date(today); day3.setHours(0, 0, 0, 0);
+        const day1 = new Date(today);
+        day1.setDate(day1.getDate() - 2);
+        day1.setHours(0, 0, 0, 0);
+        const day2 = new Date(today);
+        day2.setDate(day2.getDate() - 1);
+        day2.setHours(0, 0, 0, 0);
+        const day3 = new Date(today);
+        day3.setHours(0, 0, 0, 0);
 
         // Skip if any of these is a holiday
-        if (paymentService.isLiburBayar(activeContract, day1) ||
-            paymentService.isLiburBayar(activeContract, day2) ||
-            paymentService.isLiburBayar(activeContract, day3)) return;
+        if (
+          paymentService.isLiburBayar(activeContract, day1) ||
+          paymentService.isLiburBayar(activeContract, day2) ||
+          paymentService.isLiburBayar(activeContract, day3)
+        )
+          return;
 
         await paymentService.generatePaymentDaysForPeriod(activeContract, day1, 3);
 
@@ -1286,7 +1345,12 @@ describe('PaymentService', () => {
         const activePayment = await invoiceRepo.findActiveByContractId(activeContract.id);
         if (!activePayment || (activePayment.daysCount || 0) < 2) return;
 
-        const reduced = await paymentService.reducePayment(activePayment.id, 1, adminId, 'Partial payment');
+        const reduced = await paymentService.reducePayment(
+          activePayment.id,
+          1,
+          adminId,
+          'Partial payment',
+        );
         expect(reduced.daysCount).toBe(1);
         expect(reduced.amount).toBe(activeContract.dailyRate);
 
@@ -1296,25 +1360,29 @@ describe('PaymentService', () => {
       });
 
       it('should reject if payment is not PENDING', async () => {
-        const payment = await invoiceRepo.create(createInvoice({
-          status: PaymentStatus.PAID,
-          daysCount: 3,
-        }));
+        const payment = await invoiceRepo.create(
+          createInvoice({
+            status: PaymentStatus.PAID,
+            daysCount: 3,
+          }),
+        );
 
-        await expect(
-          paymentService.reducePayment(payment.id, 1, adminId)
-        ).rejects.toThrow('Can only reduce PENDING payments');
+        await expect(paymentService.reducePayment(payment.id, 1, adminId)).rejects.toThrow(
+          'Can only reduce PENDING payments',
+        );
       });
 
       it('should reject if newDaysCount >= current daysCount', async () => {
-        const payment = await invoiceRepo.create(createInvoice({
-          contractId: activeContract.id,
-          daysCount: 3,
-        }));
+        const payment = await invoiceRepo.create(
+          createInvoice({
+            contractId: activeContract.id,
+            daysCount: 3,
+          }),
+        );
 
-        await expect(
-          paymentService.reducePayment(payment.id, 3, adminId)
-        ).rejects.toThrow('newDaysCount must be less than current daysCount');
+        await expect(paymentService.reducePayment(payment.id, 3, adminId)).rejects.toThrow(
+          'newDaysCount must be less than current daysCount',
+        );
       });
     });
 
@@ -1334,7 +1402,7 @@ describe('PaymentService', () => {
         expect(calendar.length).toBeGreaterThan(0);
 
         // Days with records should have non-'not_issued' statuses
-        const daysWithRecords = calendar.filter(d => d.status !== 'not_issued');
+        const daysWithRecords = calendar.filter((d) => d.status !== 'not_issued');
         expect(daysWithRecords.length).toBeGreaterThanOrEqual(0);
       });
 
@@ -1353,7 +1421,7 @@ describe('PaymentService', () => {
         if (pd) {
           await paymentDayRepo.update(pd.id, { status: PaymentDayStatus.VOIDED });
           const calendar = await paymentService.getCalendarData(activeContract.id, year, month);
-          const day15 = calendar.find(d => d.date.endsWith('-15'));
+          const day15 = calendar.find((d) => d.date.endsWith('-15'));
           if (day15) {
             expect(day15.status).toBe('voided');
           }
@@ -1395,7 +1463,10 @@ describe('PaymentService', () => {
         const tuePd = await paymentDayRepo.findByContractAndDate(contract.id, tuesday);
         if (tuePd) {
           await paymentService.updatePaymentDayStatus(
-            contract.id, tuesday, PaymentDayStatus.PAID, adminId
+            contract.id,
+            tuesday,
+            PaymentDayStatus.PAID,
+            adminId,
           );
         }
 
@@ -1424,32 +1495,53 @@ describe('PaymentService', () => {
       // Create PAID records for March 1-5
       for (let day = 1; day <= 5; day++) {
         await paymentDayRepo.create({
-          id: uuidv4(), contractId: contract.id,
-          date: new Date(2026, 2, day), status: PaymentDayStatus.PAID,
-          paymentId: null, dailyRate: 58000, amount: 58000,
-          notes: null, createdAt: new Date(), updatedAt: new Date(),
+          id: uuidv4(),
+          contractId: contract.id,
+          date: new Date(2026, 2, day),
+          status: PaymentDayStatus.PAID,
+          paymentId: null,
+          dailyRate: 58000,
+          amount: 58000,
+          notes: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
         });
       }
       // March 6 UNPAID (gap)
       await paymentDayRepo.create({
-        id: uuidv4(), contractId: contract.id,
-        date: new Date(2026, 2, 6), status: PaymentDayStatus.UNPAID,
-        paymentId: null, dailyRate: 58000, amount: 58000,
-        notes: null, createdAt: new Date(), updatedAt: new Date(),
+        id: uuidv4(),
+        contractId: contract.id,
+        date: new Date(2026, 2, 6),
+        status: PaymentDayStatus.UNPAID,
+        paymentId: null,
+        dailyRate: 58000,
+        amount: 58000,
+        notes: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       });
       // March 29-31 HOLIDAY (future, pre-generated)
       for (let day = 29; day <= 31; day++) {
         await paymentDayRepo.create({
-          id: uuidv4(), contractId: contract.id,
-          date: new Date(2026, 2, day), status: PaymentDayStatus.HOLIDAY,
-          paymentId: null, dailyRate: 58000, amount: 0,
-          notes: null, createdAt: new Date(), updatedAt: new Date(),
+          id: uuidv4(),
+          contractId: contract.id,
+          date: new Date(2026, 2, day),
+          status: PaymentDayStatus.HOLIDAY,
+          paymentId: null,
+          dailyRate: 58000,
+          amount: 0,
+          notes: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
         });
       }
 
       // Trigger sync via updatePaymentDayStatus (marks day 5 as PAID again, triggering sync)
       await paymentService.updatePaymentDayStatus(
-        contract.id, new Date(2026, 2, 5), PaymentDayStatus.PAID, adminId
+        contract.id,
+        new Date(2026, 2, 5),
+        PaymentDayStatus.PAID,
+        adminId,
       );
 
       const updated = await contractRepo.findById(contract.id);
@@ -1472,25 +1564,40 @@ describe('PaymentService', () => {
       // Create PAID records for March 1-28
       for (let day = 1; day <= 28; day++) {
         await paymentDayRepo.create({
-          id: uuidv4(), contractId: contract.id,
-          date: new Date(2026, 2, day), status: PaymentDayStatus.PAID,
-          paymentId: null, dailyRate: 58000, amount: 58000,
-          notes: null, createdAt: new Date(), updatedAt: new Date(),
+          id: uuidv4(),
+          contractId: contract.id,
+          date: new Date(2026, 2, day),
+          status: PaymentDayStatus.PAID,
+          paymentId: null,
+          dailyRate: 58000,
+          amount: 58000,
+          notes: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
         });
       }
       // March 29-31 HOLIDAY (contiguous right after PAID)
       for (let day = 29; day <= 31; day++) {
         await paymentDayRepo.create({
-          id: uuidv4(), contractId: contract.id,
-          date: new Date(2026, 2, day), status: PaymentDayStatus.HOLIDAY,
-          paymentId: null, dailyRate: 58000, amount: 0,
-          notes: null, createdAt: new Date(), updatedAt: new Date(),
+          id: uuidv4(),
+          contractId: contract.id,
+          date: new Date(2026, 2, day),
+          status: PaymentDayStatus.HOLIDAY,
+          paymentId: null,
+          dailyRate: 58000,
+          amount: 0,
+          notes: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
         });
       }
 
       // Trigger sync
       await paymentService.updatePaymentDayStatus(
-        contract.id, new Date(2026, 2, 28), PaymentDayStatus.PAID, adminId
+        contract.id,
+        new Date(2026, 2, 28),
+        PaymentDayStatus.PAID,
+        adminId,
       );
 
       const updated = await contractRepo.findById(contract.id);
@@ -1522,24 +1629,40 @@ describe('PaymentService', () => {
       // Create PaymentDay records: March 1-10 all PAID
       for (let day = 1; day <= 10; day++) {
         await paymentDayRepo.create({
-          id: uuidv4(), contractId: contract.id,
-          date: new Date(2026, 2, day), status: PaymentDayStatus.PAID,
-          paymentId: null, dailyRate: 58000, amount: 58000,
-          notes: null, createdAt: new Date(), updatedAt: new Date(),
+          id: uuidv4(),
+          contractId: contract.id,
+          date: new Date(2026, 2, day),
+          status: PaymentDayStatus.PAID,
+          paymentId: null,
+          dailyRate: 58000,
+          amount: 58000,
+          notes: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
         });
       }
       // March 11 UNPAID
       await paymentDayRepo.create({
-        id: uuidv4(), contractId: contract.id,
-        date: new Date(2026, 2, 11), status: PaymentDayStatus.UNPAID,
-        paymentId: null, dailyRate: 58000, amount: 58000,
-        notes: null, createdAt: new Date(), updatedAt: new Date(),
+        id: uuidv4(),
+        contractId: contract.id,
+        date: new Date(2026, 2, 11),
+        status: PaymentDayStatus.UNPAID,
+        paymentId: null,
+        dailyRate: 58000,
+        amount: 58000,
+        notes: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       });
 
       // Trigger sync
       await paymentService.updatePaymentDayStatus(
-        contract.id, new Date(2026, 2, 10), PaymentDayStatus.PAID, adminId,
-        undefined, today
+        contract.id,
+        new Date(2026, 2, 10),
+        PaymentDayStatus.PAID,
+        adminId,
+        undefined,
+        today,
       );
 
       const updated = await contractRepo.findById(contract.id);
@@ -1562,23 +1685,38 @@ describe('PaymentService', () => {
       // March 1-2 PAID
       for (let day = 1; day <= 2; day++) {
         await paymentDayRepo.create({
-          id: uuidv4(), contractId: contract.id,
-          date: new Date(2026, 2, day), status: PaymentDayStatus.PAID,
-          paymentId: null, dailyRate: 58000, amount: 58000,
-          notes: null, createdAt: new Date(), updatedAt: new Date(),
+          id: uuidv4(),
+          contractId: contract.id,
+          date: new Date(2026, 2, day),
+          status: PaymentDayStatus.PAID,
+          paymentId: null,
+          dailyRate: 58000,
+          amount: 58000,
+          notes: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
         });
       }
       // March 3 UNPAID
       await paymentDayRepo.create({
-        id: uuidv4(), contractId: contract.id,
-        date: new Date(2026, 2, 3), status: PaymentDayStatus.UNPAID,
-        paymentId: null, dailyRate: 58000, amount: 58000,
-        notes: null, createdAt: new Date(), updatedAt: new Date(),
+        id: uuidv4(),
+        contractId: contract.id,
+        date: new Date(2026, 2, 3),
+        status: PaymentDayStatus.UNPAID,
+        paymentId: null,
+        dailyRate: 58000,
+        amount: 58000,
+        notes: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       });
 
       // Trigger sync
       await paymentService.updatePaymentDayStatus(
-        contract.id, new Date(2026, 2, 2), PaymentDayStatus.PAID, adminId
+        contract.id,
+        new Date(2026, 2, 2),
+        PaymentDayStatus.PAID,
+        adminId,
       );
 
       const updated = await contractRepo.findById(contract.id);
@@ -1587,7 +1725,11 @@ describe('PaymentService', () => {
     });
 
     it('should not change terminal statuses (COMPLETED, CANCELLED, REPOSSESSED)', async () => {
-      for (const terminalStatus of [ContractStatus.COMPLETED, ContractStatus.CANCELLED, ContractStatus.REPOSSESSED]) {
+      for (const terminalStatus of [
+        ContractStatus.COMPLETED,
+        ContractStatus.CANCELLED,
+        ContractStatus.REPOSSESSED,
+      ]) {
         const contract = await createActiveContract({
           holidayScheme: HolidayScheme.NEW_CONTRACT,
           billingStartDate: new Date(2026, 2, 1),
@@ -1597,22 +1739,37 @@ describe('PaymentService', () => {
 
         // Create 1 PAID day
         await paymentDayRepo.create({
-          id: uuidv4(), contractId: contract.id,
-          date: new Date(2026, 2, 1), status: PaymentDayStatus.PAID,
-          paymentId: null, dailyRate: 58000, amount: 58000,
-          notes: null, createdAt: new Date(), updatedAt: new Date(),
+          id: uuidv4(),
+          contractId: contract.id,
+          date: new Date(2026, 2, 1),
+          status: PaymentDayStatus.PAID,
+          paymentId: null,
+          dailyRate: 58000,
+          amount: 58000,
+          notes: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
         });
         // Create UNPAID gap
         await paymentDayRepo.create({
-          id: uuidv4(), contractId: contract.id,
-          date: new Date(2026, 2, 2), status: PaymentDayStatus.UNPAID,
-          paymentId: null, dailyRate: 58000, amount: 58000,
-          notes: null, createdAt: new Date(), updatedAt: new Date(),
+          id: uuidv4(),
+          contractId: contract.id,
+          date: new Date(2026, 2, 2),
+          status: PaymentDayStatus.UNPAID,
+          paymentId: null,
+          dailyRate: 58000,
+          amount: 58000,
+          notes: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
         });
 
         // Trigger sync via updatePaymentDayStatus
         await paymentService.updatePaymentDayStatus(
-          contract.id, new Date(2026, 2, 1), PaymentDayStatus.PAID, adminId
+          contract.id,
+          new Date(2026, 2, 1),
+          PaymentDayStatus.PAID,
+          adminId,
         );
 
         const updated = await contractRepo.findById(contract.id);
@@ -1634,23 +1791,38 @@ describe('PaymentService', () => {
       // Only March 1-2 are actually PAID
       for (let day = 1; day <= 2; day++) {
         await paymentDayRepo.create({
-          id: uuidv4(), contractId: contract.id,
-          date: new Date(2026, 2, day), status: PaymentDayStatus.PAID,
-          paymentId: null, dailyRate: 58000, amount: 58000,
-          notes: null, createdAt: new Date(), updatedAt: new Date(),
+          id: uuidv4(),
+          contractId: contract.id,
+          date: new Date(2026, 2, day),
+          status: PaymentDayStatus.PAID,
+          paymentId: null,
+          dailyRate: 58000,
+          amount: 58000,
+          notes: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
         });
       }
       // March 3 UNPAID
       await paymentDayRepo.create({
-        id: uuidv4(), contractId: contract.id,
-        date: new Date(2026, 2, 3), status: PaymentDayStatus.UNPAID,
-        paymentId: null, dailyRate: 58000, amount: 58000,
-        notes: null, createdAt: new Date(), updatedAt: new Date(),
+        id: uuidv4(),
+        contractId: contract.id,
+        date: new Date(2026, 2, 3),
+        status: PaymentDayStatus.UNPAID,
+        paymentId: null,
+        dailyRate: 58000,
+        amount: 58000,
+        notes: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       });
 
       // Trigger sync
       await paymentService.updatePaymentDayStatus(
-        contract.id, new Date(2026, 2, 2), PaymentDayStatus.PAID, adminId
+        contract.id,
+        new Date(2026, 2, 2),
+        PaymentDayStatus.PAID,
+        adminId,
       );
 
       const updated = await contractRepo.findById(contract.id);
@@ -1688,11 +1860,11 @@ describe('PaymentService', () => {
         today.setHours(0, 0, 0, 0);
 
         const days = [
-          makePD(new Date(2026, 2, 5)),  // diff=5 >= 2 → penalty
-          makePD(new Date(2026, 2, 6)),  // diff=4 >= 2 → penalty
-          makePD(new Date(2026, 2, 7)),  // diff=3 >= 2 → penalty
-          makePD(new Date(2026, 2, 8)),  // diff=2 >= 2 → penalty
-          makePD(new Date(2026, 2, 9)),  // diff=1 < 2  → no penalty
+          makePD(new Date(2026, 2, 5)), // diff=5 >= 2 → penalty
+          makePD(new Date(2026, 2, 6)), // diff=4 >= 2 → penalty
+          makePD(new Date(2026, 2, 7)), // diff=3 >= 2 → penalty
+          makePD(new Date(2026, 2, 8)), // diff=2 >= 2 → penalty
+          makePD(new Date(2026, 2, 9)), // diff=1 < 2  → no penalty
           makePD(new Date(2026, 2, 10)), // diff=0 < 2  → no penalty
         ];
 
@@ -1705,7 +1877,7 @@ describe('PaymentService', () => {
         today.setHours(0, 0, 0, 0);
 
         const days = [
-          makePD(new Date(2026, 2, 9)),  // diff=1 < 2
+          makePD(new Date(2026, 2, 9)), // diff=1 < 2
           makePD(new Date(2026, 2, 10)), // diff=0 < 2
         ];
 
@@ -1718,9 +1890,9 @@ describe('PaymentService', () => {
         today.setHours(0, 0, 0, 0);
 
         const days = [
-          makePD(new Date(2026, 2, 5)),                      // working day, penalty
-          { ...makePD(new Date(2026, 2, 6)), amount: 0 },    // holiday, skip
-          makePD(new Date(2026, 2, 7)),                      // working day, penalty
+          makePD(new Date(2026, 2, 5)), // working day, penalty
+          { ...makePD(new Date(2026, 2, 6)), amount: 0 }, // holiday, skip
+          makePD(new Date(2026, 2, 7)), // working day, penalty
         ];
 
         const fee = await paymentService.calculateLateFee(days, today);
@@ -1732,9 +1904,9 @@ describe('PaymentService', () => {
         today.setHours(0, 0, 0, 0);
 
         const days = [
-          makePD(new Date(2026, 2, 5)),  // diff=10
-          makePD(new Date(2026, 2, 6)),  // diff=9
-          makePD(new Date(2026, 2, 7)),  // diff=8
+          makePD(new Date(2026, 2, 5)), // diff=10
+          makePD(new Date(2026, 2, 6)), // diff=9
+          makePD(new Date(2026, 2, 7)), // diff=8
         ];
 
         const fee = await paymentService.calculateLateFee(days, today);
@@ -1746,9 +1918,9 @@ describe('PaymentService', () => {
         today.setHours(0, 0, 0, 0);
 
         const days = [
-          makePD(new Date(2026, 2, 5)),  // diff=10 >= 2 → would be penalty for NEW_CONTRACT
-          makePD(new Date(2026, 2, 6)),  // diff=9 >= 2
-          makePD(new Date(2026, 2, 7)),  // diff=8 >= 2
+          makePD(new Date(2026, 2, 5)), // diff=10 >= 2 → would be penalty for NEW_CONTRACT
+          makePD(new Date(2026, 2, 6)), // diff=9 >= 2
+          makePD(new Date(2026, 2, 7)), // diff=8 >= 2
         ];
 
         const fee = await paymentService.calculateLateFee(days, today, HolidayScheme.OLD_CONTRACT);
@@ -1807,8 +1979,8 @@ describe('PaymentService', () => {
         today.setHours(0, 0, 0, 0);
 
         const days = [
-          makePD(new Date(2026, 2, 8)),  // diff=2 >= 2 → penalty
-          makePD(new Date(2026, 2, 9)),  // diff=1 < 2  → no penalty
+          makePD(new Date(2026, 2, 8)), // diff=2 >= 2 → penalty
+          makePD(new Date(2026, 2, 9)), // diff=1 < 2  → no penalty
           makePD(new Date(2026, 2, 10)), // diff=0 < 2  → no penalty
         ];
 
@@ -1828,9 +2000,7 @@ describe('PaymentService', () => {
         const today10 = new Date(2026, 2, 10);
         today10.setHours(0, 0, 0, 0);
 
-        const fee = await paymentService.calculateLateFee(
-          [makePD(new Date(2026, 2, 5))], today10
-        );
+        const fee = await paymentService.calculateLateFee([makePD(new Date(2026, 2, 5))], today10);
         expect(83000 + fee).toBe(103000);
       });
 
@@ -1853,7 +2023,7 @@ describe('PaymentService', () => {
         today11.setHours(0, 0, 0, 0);
 
         const days = [
-          makePD(new Date(2026, 2, 9)),  // diff=2 >= 2 → penalty
+          makePD(new Date(2026, 2, 9)), // diff=2 >= 2 → penalty
           makePD(new Date(2026, 2, 10)), // diff=1 < 2  → no penalty
         ];
 

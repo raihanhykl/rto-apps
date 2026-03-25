@@ -29,15 +29,15 @@ Security-focused code review for PRs, commits, and diffs.
 
 ## Rationalizations (Do Not Skip)
 
-| Rationalization | Why It's Wrong | Required Action |
-|-----------------|----------------|-----------------|
-| "Small PR, quick review" | Heartbleed was 2 lines | Classify by RISK, not size |
-| "I know this codebase" | Familiarity breeds blind spots | Build explicit baseline context |
-| "Git history takes too long" | History reveals regressions | Never skip Phase 1 |
-| "Blast radius is obvious" | You'll miss transitive callers | Calculate quantitatively |
-| "No tests = not my problem" | Missing tests = elevated risk rating | Flag in report, elevate severity |
-| "Just a refactor, no security impact" | Refactors break invariants | Analyze as HIGH until proven LOW |
-| "I'll explain verbally" | No artifact = findings lost | Always write report |
+| Rationalization                       | Why It's Wrong                       | Required Action                  |
+| ------------------------------------- | ------------------------------------ | -------------------------------- |
+| "Small PR, quick review"              | Heartbleed was 2 lines               | Classify by RISK, not size       |
+| "I know this codebase"                | Familiarity breeds blind spots       | Build explicit baseline context  |
+| "Git history takes too long"          | History reveals regressions          | Never skip Phase 1               |
+| "Blast radius is obvious"             | You'll miss transitive callers       | Calculate quantitatively         |
+| "No tests = not my problem"           | Missing tests = elevated risk rating | Flag in report, elevate severity |
+| "Just a refactor, no security impact" | Refactors break invariants           | Analyze as HIGH until proven LOW |
+| "I'll explain verbally"               | No artifact = findings lost          | Always write report              |
 
 ---
 
@@ -45,19 +45,19 @@ Security-focused code review for PRs, commits, and diffs.
 
 ### Codebase Size Strategy
 
-| Codebase Size | Strategy | Approach |
-|---------------|----------|----------|
-| SMALL (<20 files) | DEEP | Read all deps, full git blame |
-| MEDIUM (20-200) | FOCUSED | 1-hop deps, priority files |
-| LARGE (200+) | SURGICAL | Critical paths only |
+| Codebase Size     | Strategy | Approach                      |
+| ----------------- | -------- | ----------------------------- |
+| SMALL (<20 files) | DEEP     | Read all deps, full git blame |
+| MEDIUM (20-200)   | FOCUSED  | 1-hop deps, priority files    |
+| LARGE (200+)      | SURGICAL | Critical paths only           |
 
 ### Risk Level Triggers
 
-| Risk Level | Triggers |
-|------------|----------|
-| HIGH | Auth, crypto, external calls, value transfer, validation removal |
-| MEDIUM | Business logic, state changes, new public APIs |
-| LOW | Comments, tests, UI, logging |
+| Risk Level | Triggers                                                         |
+| ---------- | ---------------------------------------------------------------- |
+| HIGH       | Auth, crypto, external calls, value transfer, validation removal |
+| MEDIUM     | Business logic, state changes, new public APIs                   |
+| LOW        | Comments, tests, UI, logging                                     |
 
 ---
 
@@ -115,10 +115,12 @@ Before delivering:
 ## Integration
 
 **audit-context-building skill:**
+
 - Pre-Analysis: Build baseline context
 - Phase 4: Deep context on HIGH RISK changes
 
 **issue-writer skill:**
+
 - Transform findings into formal audit reports
 - Command: `issue-writer --input DIFFERENTIAL_REVIEW_REPORT.md --format audit-report`
 
@@ -127,6 +129,7 @@ Before delivering:
 ## Example Usage
 
 ### Quick Triage (Small PR)
+
 ```
 Input: 5 file PR, 2 HIGH RISK files
 Strategy: Use Quick Reference
@@ -138,6 +141,7 @@ Time: ~30 minutes
 ```
 
 ### Standard Review (Medium Codebase)
+
 ```
 Input: 80 files, 12 HIGH RISK changes
 Strategy: FOCUSED (see methodology.md)
@@ -149,6 +153,7 @@ Time: ~3-4 hours
 ```
 
 ### Deep Audit (Large, Critical Change)
+
 ```
 Input: 450 files, auth system rewrite
 Strategy: SURGICAL + audit-context-building
@@ -176,6 +181,7 @@ For these cases, use standard code review instead.
 ## Red Flags (Stop and Investigate)
 
 **Immediate escalation triggers:**
+
 - Removed code from "security", "CVE", or "fix" commits
 - Access control modifiers removed (onlyOwner, internal → external)
 - Validation removed without replacement
@@ -189,6 +195,7 @@ These patterns require adversarial analysis even in quick triage.
 ## Tips for Best Results
 
 **Do:**
+
 - Start with git blame for removed code
 - Calculate blast radius early to prioritize
 - Generate concrete attack scenarios
@@ -197,6 +204,7 @@ These patterns require adversarial analysis even in quick triage.
 - Always generate the output file
 
 **Don't:**
+
 - Skip git history analysis
 - Make generic findings without evidence
 - Claim full analysis when time-limited

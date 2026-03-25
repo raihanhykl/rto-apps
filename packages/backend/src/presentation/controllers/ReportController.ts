@@ -7,7 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 export class ReportController {
   constructor(
     private reportService: ReportService,
-    private auditRepo: IAuditLogRepository
+    private auditRepo: IAuditLogRepository,
   ) {}
 
   private parseFilters(query: any): ReportFilters {

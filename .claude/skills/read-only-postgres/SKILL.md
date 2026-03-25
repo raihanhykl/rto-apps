@@ -1,6 +1,6 @@
 ---
 name: read-only-postgres
-description: "Execute read-only SQL queries against PostgreSQL databases. Use when: (1) querying PostgreSQL data, (2) exploring schemas/tables, (3) running SELECT queries for analysis, (4) checking database contents. Supports multiple database connections with descriptions for auto-selection. Blocks all write operations (INSERT, UPDATE, DELETE, DROP, etc.) for safety."
+description: 'Execute read-only SQL queries against PostgreSQL databases. Use when: (1) querying PostgreSQL data, (2) exploring schemas/tables, (3) running SELECT queries for analysis, (4) checking database contents. Supports multiple database connections with descriptions for auto-selection. Blocks all write operations (INSERT, UPDATE, DELETE, DROP, etc.) for safety.'
 ---
 
 # PostgreSQL Read-Only Query Skill
@@ -17,6 +17,7 @@ Execute safe, read-only queries against configured PostgreSQL databases.
 Create `connections.json` in the skill directory or `~/.config/claude/read-only-postgres-connections.json`.
 
 **Security**: Set file permissions to `600` since it contains credentials:
+
 ```bash
 chmod 600 connections.json
 ```
@@ -50,17 +51,17 @@ chmod 600 connections.json
 
 ### Config Fields
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| name | Yes | Identifier for the database (case-insensitive) |
-| description | Yes | What data this database contains (used for auto-selection) |
-| host | Yes | Database hostname |
-| port | No | Port number (default: 5432) |
-| database | Yes | Database name |
-| user | Yes | Username |
-| password | Yes | Password |
-| sslmode | No | SSL mode: disable, allow, prefer (default), require, verify-ca, verify-full |
-| pii_masking | No | Object mapping table names to arrays of column names to mask |
+| Field       | Required | Description                                                                 |
+| ----------- | -------- | --------------------------------------------------------------------------- |
+| name        | Yes      | Identifier for the database (case-insensitive)                              |
+| description | Yes      | What data this database contains (used for auto-selection)                  |
+| host        | Yes      | Database hostname                                                           |
+| port        | No       | Port number (default: 5432)                                                 |
+| database    | Yes      | Database name                                                               |
+| user        | Yes      | Username                                                                    |
+| password    | Yes      | Password                                                                    |
+| sslmode     | No       | SSL mode: disable, allow, prefer (default), require, verify-ca, verify-full |
+| pii_masking | No       | Object mapping table names to arrays of column names to mask                |
 
 ### PII Masking
 
@@ -81,6 +82,7 @@ Mask sensitive data in query results by adding a `pii_masking` field to any data
 ```
 
 **How it works:**
+
 - `john@email.com` → `j************m`
 - `555-1234` → `5******4`
 - `Jo` → `Jo` (2 chars or fewer are not masked)
@@ -90,26 +92,31 @@ Masking is applied automatically when querying a matching table. A footer note i
 ## Usage
 
 ### List configured databases
+
 ```bash
 python3 scripts/query.py --list
 ```
 
 ### Query a database
+
 ```bash
 python3 scripts/query.py --db app-db-dev --query "SELECT id, email, created_at FROM users LIMIT 10"
 ```
 
 ### List tables
+
 ```bash
 python3 scripts/query.py --db app-db-dev --tables
 ```
 
 ### Show schema
+
 ```bash
 python3 scripts/query.py --db app-db-dev --schema
 ```
 
 ### Limit results
+
 ```bash
 python3 scripts/query.py --db app-db-dev --query "SELECT id, status, total_amount FROM orders" --limit 100
 ```
@@ -118,14 +125,14 @@ python3 scripts/query.py --db app-db-dev --query "SELECT id, status, total_amoun
 
 Match user intent to database `description`:
 
-| User asks about | Look for description containing |
-|-----------------|--------------------------------|
-| users, accounts | users, accounts |
-| organizations, teams | organizations, teams |
-| orders, payments | orders, payments |
-| events, audit logs | events, audit, logs |
-| analytics or reporting | analytics, reporting |
-| background jobs or queues | jobs, queue, outbox |
+| User asks about           | Look for description containing |
+| ------------------------- | ------------------------------- |
+| users, accounts           | users, accounts                 |
+| organizations, teams      | organizations, teams            |
+| orders, payments          | orders, payments                |
+| events, audit logs        | events, audit, logs             |
+| analytics or reporting    | analytics, reporting            |
+| background jobs or queues | jobs, queue, outbox             |
 
 If unclear, run `--list` and ask user which database.
 
@@ -143,13 +150,13 @@ If unclear, run `--list` and ask user which database.
 
 ## Troubleshooting
 
-| Error | Solution |
-|-------|----------|
-| Config not found | Create `connections.json` in skill directory |
-| Authentication failed | Check username/password in config |
-| Connection timeout | Verify host/port, check firewall/VPN |
-| SSL error | Try `"sslmode": "disable"` for local databases |
-| Permission warning | Run `chmod 600 connections.json` |
+| Error                 | Solution                                       |
+| --------------------- | ---------------------------------------------- |
+| Config not found      | Create `connections.json` in skill directory   |
+| Authentication failed | Check username/password in config              |
+| Connection timeout    | Verify host/port, check firewall/VPN           |
+| SSL error             | Try `"sslmode": "disable"` for local databases |
+| Permission warning    | Run `chmod 600 connections.json`               |
 
 ## Exit Codes
 

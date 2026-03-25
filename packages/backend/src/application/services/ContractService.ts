@@ -29,7 +29,13 @@ import {
 import { IPaymentDayRepository } from '../../domain/interfaces';
 import { PaymentDay } from '../../domain/entities';
 import { computeLateFee } from '../../domain/utils/lateFeeCalculator';
-import { CreateContractDto, UpdateContractStatusDto, ExtendContractDto, UpdateContractDto, CancelContractDto } from '../dtos';
+import {
+  CreateContractDto,
+  UpdateContractStatusDto,
+  ExtendContractDto,
+  UpdateContractDto,
+  CancelContractDto,
+} from '../dtos';
 import { SettingService } from './SettingService';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -45,7 +51,7 @@ export class ContractService {
     private invoiceRepo: IInvoiceRepository,
     private paymentDayRepo: IPaymentDayRepository,
     private auditRepo: IAuditLogRepository,
-    private settingService?: SettingService
+    private settingService?: SettingService,
   ) {}
 
   private async getSetting(key: string, fallback: number): Promise<number> {
@@ -55,7 +61,7 @@ export class ContractService {
 
   async getAll(includeDeleted = false): Promise<Contract[]> {
     const contracts = await this.contractRepo.findAll();
-    return includeDeleted ? contracts : contracts.filter(c => !c.isDeleted);
+    return includeDeleted ? contracts : contracts.filter((c) => !c.isDeleted);
   }
 
   async getAllPaginated(params: PaginationParams): Promise<PaginatedResult<Contract>> {
@@ -68,7 +74,9 @@ export class ContractService {
     return contract;
   }
 
-  async getDetailById(id: string): Promise<{ contract: Contract; customer: Customer; invoices: Invoice[] }> {
+  async getDetailById(
+    id: string,
+  ): Promise<{ contract: Contract; customer: Customer; invoices: Invoice[] }> {
     const contract = await this.contractRepo.findById(id);
     if (!contract) throw new Error('Contract not found');
 
@@ -84,7 +92,10 @@ export class ContractService {
     return this.contractRepo.findByCustomerId(customerId);
   }
 
-  async create(dto: CreateContractDto, adminId: string): Promise<{ contract: Contract; invoices: Invoice[] }> {
+  async create(
+    dto: CreateContractDto,
+    adminId: string,
+  ): Promise<{ contract: Contract; invoices: Invoice[] }> {
     const customer = await this.customerRepo.findById(dto.customerId);
     if (!customer) throw new Error('Customer not found');
 
@@ -98,7 +109,10 @@ export class ContractService {
     const startDate = new Date(dto.startDate);
 
     const contractNumber = await this.generateContractNumber();
-    const ownershipTargetDays = await this.getSetting('ownership_target_days', DEFAULT_OWNERSHIP_TARGET_DAYS);
+    const ownershipTargetDays = await this.getSetting(
+      'ownership_target_days',
+      DEFAULT_OWNERSHIP_TARGET_DAYS,
+    );
     const gracePeriodDays = await this.getSetting('grace_period_days', DEFAULT_GRACE_PERIOD_DAYS);
 
     const contract: Contract = {
@@ -269,7 +283,12 @@ export class ContractService {
     return { contract: createdContract, invoices };
   }
 
-  async receiveUnit(id: string, adminId: string, bastPhoto: string, bastNotes?: string): Promise<Contract> {
+  async receiveUnit(
+    id: string,
+    adminId: string,
+    bastPhoto: string,
+    bastNotes?: string,
+  ): Promise<Contract> {
     const existing = await this.contractRepo.findById(id);
     if (!existing) throw new Error('Contract not found');
 
@@ -288,17 +307,19 @@ export class ContractService {
     // Validate DP payment - check dpFullyPaid flag first, then verify against invoices
     if (!existing.dpFullyPaid) {
       const invoices = await this.invoiceRepo.findByContractId(id);
-      const dpInvoices = invoices.filter(i => i.type === InvoiceType.DP || i.type === InvoiceType.DP_INSTALLMENT);
+      const dpInvoices = invoices.filter(
+        (i) => i.type === InvoiceType.DP || i.type === InvoiceType.DP_INSTALLMENT,
+      );
 
       if (existing.dpScheme === DPScheme.FULL) {
-        const dpInvoice = dpInvoices.find(i => i.type === InvoiceType.DP);
+        const dpInvoice = dpInvoices.find((i) => i.type === InvoiceType.DP);
         if (!dpInvoice || dpInvoice.status !== PaymentStatus.PAID) {
           throw new Error('DP harus dibayar lunas sebelum unit bisa diterima');
         }
       } else {
         // INSTALLMENT: at least 1st installment must be paid
         const sortedDpInvoices = dpInvoices
-          .filter(i => i.type === InvoiceType.DP_INSTALLMENT)
+          .filter((i) => i.type === InvoiceType.DP_INSTALLMENT)
           .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
         if (sortedDpInvoices.length === 0 || sortedDpInvoices[0].status !== PaymentStatus.PAID) {
           throw new Error('DP cicilan pertama harus dibayar sebelum unit bisa diterima');
@@ -328,7 +349,8 @@ export class ContractService {
       const wib = getWibParts(d);
       const isSunday = wib.dayOfWeek === 0;
       const isDate29Plus = wib.day > 28;
-      const isHoliday = existing.holidayScheme === HolidayScheme.OLD_CONTRACT ? isSunday : isDate29Plus;
+      const isHoliday =
+        existing.holidayScheme === HolidayScheme.OLD_CONTRACT ? isSunday : isDate29Plus;
 
       records.push({
         id: uuidv4(),
@@ -372,7 +394,11 @@ export class ContractService {
     return updated;
   }
 
-  async extend(id: string, dto: ExtendContractDto, adminId: string): Promise<{ contract: Contract; invoice: Invoice }> {
+  async extend(
+    id: string,
+    dto: ExtendContractDto,
+    adminId: string,
+  ): Promise<{ contract: Contract; invoice: Invoice }> {
     const existing = await this.contractRepo.findById(id);
     if (!existing) throw new Error('Contract not found');
 
@@ -382,9 +408,11 @@ export class ContractService {
 
     // Block extension if there are unpaid pending invoices
     const existingInvoices = await this.invoiceRepo.findByContractId(id);
-    const hasPending = existingInvoices.some(inv => inv.status === PaymentStatus.PENDING);
+    const hasPending = existingInvoices.some((inv) => inv.status === PaymentStatus.PENDING);
     if (hasPending) {
-      throw new Error('Tidak bisa perpanjang: masih ada invoice yang belum dibayar. Bayar atau void terlebih dahulu.');
+      throw new Error(
+        'Tidak bisa perpanjang: masih ada invoice yang belum dibayar. Bayar atau void terlebih dahulu.',
+      );
     }
 
     const maxRentalDays = await this.getSetting('max_rental_days', MAX_RENTAL_DAYS);
@@ -399,9 +427,15 @@ export class ContractService {
     let lateFee = 0;
     const now = getWibToday();
     if (existing.billingStartDate && existing.holidayScheme !== HolidayScheme.OLD_CONTRACT) {
-      const penaltyGraceDays = await this.getSetting('penalty_grace_days', DEFAULT_PENALTY_GRACE_DAYS);
+      const penaltyGraceDays = await this.getSetting(
+        'penalty_grace_days',
+        DEFAULT_PENALTY_GRACE_DAYS,
+      );
       const feePerDay = await this.getSetting('late_fee_per_day', DEFAULT_LATE_FEE_PER_DAY);
-      const allUnpaid = await this.paymentDayRepo.findByContractAndStatus(existing.id, PaymentDayStatus.UNPAID);
+      const allUnpaid = await this.paymentDayRepo.findByContractAndStatus(
+        existing.id,
+        PaymentDayStatus.UNPAID,
+      );
       lateFee = computeLateFee(allUnpaid, now, penaltyGraceDays, feePerDay);
     }
 
@@ -483,8 +517,14 @@ export class ContractService {
     }
 
     // Void all UNPAID and PENDING PaymentDays
-    const unpaidDays = await this.paymentDayRepo.findByContractAndStatus(id, PaymentDayStatus.UNPAID);
-    const pendingDays = await this.paymentDayRepo.findByContractAndStatus(id, PaymentDayStatus.PENDING);
+    const unpaidDays = await this.paymentDayRepo.findByContractAndStatus(
+      id,
+      PaymentDayStatus.UNPAID,
+    );
+    const pendingDays = await this.paymentDayRepo.findByContractAndStatus(
+      id,
+      PaymentDayStatus.PENDING,
+    );
     for (const day of [...unpaidDays, ...pendingDays]) {
       await this.paymentDayRepo.update(day.id, {
         status: PaymentDayStatus.VOIDED,
@@ -512,7 +552,9 @@ export class ContractService {
         motorModel: existing.motorModel,
         totalDaysPaid: existing.totalDaysPaid,
         ownershipProgress: existing.ownershipProgress,
-        voidedInvoices: invoices.filter(i => i.status === PaymentStatus.PENDING || i.status === PaymentStatus.FAILED).length,
+        voidedInvoices: invoices.filter(
+          (i) => i.status === PaymentStatus.PENDING || i.status === PaymentStatus.FAILED,
+        ).length,
       },
       ipAddress: '',
       createdAt: new Date(),
@@ -530,7 +572,9 @@ export class ContractService {
     if (dto.gracePeriodDays !== undefined) updateData.gracePeriodDays = dto.gracePeriodDays;
     if (dto.ownershipTargetDays !== undefined) {
       updateData.ownershipTargetDays = dto.ownershipTargetDays;
-      updateData.ownershipProgress = parseFloat(((existing.totalDaysPaid / dto.ownershipTargetDays) * 100).toFixed(2));
+      updateData.ownershipProgress = parseFloat(
+        ((existing.totalDaysPaid / dto.ownershipTargetDays) * 100).toFixed(2),
+      );
     }
     if (dto.color !== undefined) updateData.color = dto.color;
     if (dto.year !== undefined) updateData.year = dto.year;
@@ -578,8 +622,14 @@ export class ContractService {
     }
 
     // Void all UNPAID and PENDING PaymentDays
-    const unpaidDays = await this.paymentDayRepo.findByContractAndStatus(id, PaymentDayStatus.UNPAID);
-    const pendingDays = await this.paymentDayRepo.findByContractAndStatus(id, PaymentDayStatus.PENDING);
+    const unpaidDays = await this.paymentDayRepo.findByContractAndStatus(
+      id,
+      PaymentDayStatus.UNPAID,
+    );
+    const pendingDays = await this.paymentDayRepo.findByContractAndStatus(
+      id,
+      PaymentDayStatus.PENDING,
+    );
     for (const day of [...unpaidDays, ...pendingDays]) {
       await this.paymentDayRepo.update(day.id, {
         status: PaymentDayStatus.VOIDED,
@@ -589,7 +639,9 @@ export class ContractService {
 
     const updated = await this.contractRepo.update(id, {
       status: ContractStatus.CANCELLED,
-      notes: existing.notes ? `${existing.notes}\n[CANCELLED] ${dto.reason}` : `[CANCELLED] ${dto.reason}`,
+      notes: existing.notes
+        ? `${existing.notes}\n[CANCELLED] ${dto.reason}`
+        : `[CANCELLED] ${dto.reason}`,
     });
     if (!updated) throw new Error('Failed to update contract');
 
@@ -605,7 +657,9 @@ export class ContractService {
       metadata: {
         reason: dto.reason,
         previousStatus: existing.status,
-        voidedInvoices: invoices.filter(i => i.status === PaymentStatus.PENDING || i.status === PaymentStatus.FAILED).length,
+        voidedInvoices: invoices.filter(
+          (i) => i.status === PaymentStatus.PENDING || i.status === PaymentStatus.FAILED,
+        ).length,
       },
       ipAddress: '',
       createdAt: new Date(),
@@ -686,18 +740,27 @@ export class ContractService {
     return overdueCount;
   }
 
-  async getOverdueWarnings(): Promise<Array<{ contract: Contract; customer: Customer; daysOverdue: number; graceRemaining: number }>> {
+  async getOverdueWarnings(): Promise<
+    Array<{ contract: Contract; customer: Customer; daysOverdue: number; graceRemaining: number }>
+  > {
     const overdueContracts = await this.contractRepo.findByStatus(ContractStatus.OVERDUE);
     const activeContracts = await this.contractRepo.findByStatus(ContractStatus.ACTIVE);
     const now = getWibToday();
-    const warnings: Array<{ contract: Contract; customer: Customer; daysOverdue: number; graceRemaining: number }> = [];
+    const warnings: Array<{
+      contract: Contract;
+      customer: Customer;
+      daysOverdue: number;
+      graceRemaining: number;
+    }> = [];
 
     // Check overdue contracts
     for (const contract of overdueContracts) {
       const customer = await this.customerRepo.findById(contract.customerId);
       if (!customer) continue;
 
-      const daysOverdue = Math.floor((now.getTime() - contract.endDate.getTime()) / (1000 * 60 * 60 * 24));
+      const daysOverdue = Math.floor(
+        (now.getTime() - contract.endDate.getTime()) / (1000 * 60 * 60 * 24),
+      );
       const graceRemaining = Math.max(0, contract.gracePeriodDays - daysOverdue);
 
       warnings.push({ contract, customer, daysOverdue, graceRemaining });
@@ -705,12 +768,19 @@ export class ContractService {
 
     // Check active contracts nearing end date (within 2 days)
     for (const contract of activeContracts) {
-      const daysUntilEnd = Math.floor((contract.endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      const daysUntilEnd = Math.floor(
+        (contract.endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
+      );
       if (daysUntilEnd <= 2 && daysUntilEnd >= 0) {
         const customer = await this.customerRepo.findById(contract.customerId);
         if (!customer) continue;
 
-        warnings.push({ contract, customer, daysOverdue: -daysUntilEnd, graceRemaining: contract.gracePeriodDays + daysUntilEnd });
+        warnings.push({
+          contract,
+          customer,
+          daysOverdue: -daysUntilEnd,
+          graceRemaining: contract.gracePeriodDays + daysUntilEnd,
+        });
       }
     }
 
@@ -761,7 +831,20 @@ export class ContractService {
     }
   }
 
-  private static readonly ROMAN_MONTHS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
+  private static readonly ROMAN_MONTHS = [
+    'I',
+    'II',
+    'III',
+    'IV',
+    'V',
+    'VI',
+    'VII',
+    'VIII',
+    'IX',
+    'X',
+    'XI',
+    'XII',
+  ];
 
   private async generateContractNumber(): Promise<string> {
     await this.initContractCounter();

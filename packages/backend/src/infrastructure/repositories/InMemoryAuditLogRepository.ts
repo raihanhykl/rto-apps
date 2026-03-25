@@ -11,13 +11,33 @@ export class InMemoryAuditLogRepository implements IAuditLogRepository {
 
   async findAllPaginated(params: PaginationParams): Promise<PaginatedResult<AuditLog>> {
     let items = [...this.logs];
-    if (params.search) { const q = params.search.toLowerCase(); items = items.filter(l => l.description.toLowerCase().includes(q) || l.action.toLowerCase().includes(q)); }
-    if (params.module) { items = items.filter(l => l.module === params.module); }
-    if (params.startDate) { const s = new Date(params.startDate); items = items.filter(l => l.createdAt >= s); }
-    if (params.endDate) { const e = new Date(params.endDate); e.setDate(e.getDate() + 1); items = items.filter(l => l.createdAt < e); }
+    if (params.search) {
+      const q = params.search.toLowerCase();
+      items = items.filter(
+        (l) => l.description.toLowerCase().includes(q) || l.action.toLowerCase().includes(q),
+      );
+    }
+    if (params.module) {
+      items = items.filter((l) => l.module === params.module);
+    }
+    if (params.startDate) {
+      const s = new Date(params.startDate);
+      items = items.filter((l) => l.createdAt >= s);
+    }
+    if (params.endDate) {
+      const e = new Date(params.endDate);
+      e.setDate(e.getDate() + 1);
+      items = items.filter((l) => l.createdAt < e);
+    }
     const sortBy = params.sortBy || 'createdAt';
     const sortOrder = params.sortOrder || 'desc';
-    items.sort((a, b) => { const aVal = (a as any)[sortBy]; const bVal = (b as any)[sortBy]; if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1; if (aVal > bVal) return sortOrder === 'asc' ? 1 : -1; return 0; });
+    items.sort((a, b) => {
+      const aVal = (a as any)[sortBy];
+      const bVal = (b as any)[sortBy];
+      if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortOrder === 'asc' ? 1 : -1;
+      return 0;
+    });
     const total = items.length;
     const page = params.page || 1;
     const limit = params.limit || 20;
@@ -28,13 +48,13 @@ export class InMemoryAuditLogRepository implements IAuditLogRepository {
 
   async findByUserId(userId: string): Promise<AuditLog[]> {
     return this.logs
-      .filter(l => l.userId === userId)
+      .filter((l) => l.userId === userId)
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   }
 
   async findByModule(module: string): Promise<AuditLog[]> {
     return this.logs
-      .filter(l => l.module === module)
+      .filter((l) => l.module === module)
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   }
 

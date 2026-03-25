@@ -7,6 +7,7 @@ This document provides detailed examples for each category in the Quick Verifica
 ### ❌ VULNERABLE - Report These
 
 **Python: Environment variable with fallback**
+
 ```python
 # File: src/auth/jwt.py
 SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-secret-key-123')
@@ -15,9 +16,11 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-secret-key-123')
 def create_token(user_id):
     return jwt.encode({'user_id': user_id}, SECRET_KEY, algorithm='HS256')
 ```
+
 **Why vulnerable:** App runs with known secret if `SECRET_KEY` is missing. Attacker can forge tokens.
 
 **JavaScript: Logical OR fallback**
+
 ```javascript
 // File: config/database.js
 const DB_PASSWORD = process.env.DB_PASSWORD || 'admin123';
@@ -25,22 +28,26 @@ const DB_PASSWORD = process.env.DB_PASSWORD || 'admin123';
 const pool = new Pool({
   user: 'admin',
   password: DB_PASSWORD,
-  database: 'production'
+  database: 'production',
 });
 ```
+
 **Why vulnerable:** Database accepts hardcoded password in production if env var missing.
 
 **Ruby: fetch with default**
+
 ```ruby
 # File: config/secrets.rb
 Rails.application.credentials.secret_key_base =
   ENV.fetch('SECRET_KEY_BASE', 'fallback-secret-base')
 ```
+
 **Why vulnerable:** Rails session encryption uses weak known key as fallback.
 
 ### ✅ SECURE - Skip These
 
 **Fail-secure: Crashes without config**
+
 ```python
 # File: src/auth/jwt.py
 SECRET_KEY = os.environ['SECRET_KEY']  # Raises KeyError if missing
@@ -49,6 +56,7 @@ SECRET_KEY = os.environ['SECRET_KEY']  # Raises KeyError if missing
 ```
 
 **Explicit validation**
+
 ```javascript
 // File: config/database.js
 if (!process.env.DB_PASSWORD) {
@@ -58,6 +66,7 @@ const DB_PASSWORD = process.env.DB_PASSWORD;
 ```
 
 **Test fixtures (clearly scoped)**
+
 ```python
 # File: tests/fixtures/auth.py
 TEST_SECRET = 'test-secret-key-123'  # OK - test-only
@@ -74,6 +83,7 @@ def test_token_creation():
 ### ❌ VULNERABLE - Report These
 
 **Hardcoded admin account**
+
 ```python
 # File: src/models/user.py
 def bootstrap_admin():
@@ -87,18 +97,22 @@ def bootstrap_admin():
         db.session.add(admin)
         db.session.commit()
 ```
+
 **Why vulnerable:** Default admin account created on first run with known credentials.
 
 **API key in code**
+
 ```javascript
 // File: src/integrations/payment.js
 const STRIPE_API_KEY = process.env.STRIPE_KEY || 'sk_tes...';
 
 const stripe = require('stripe')(STRIPE_API_KEY);
 ```
+
 **Why vulnerable:** Uses test API key if env var missing. Might reach production.
 
 **Database connection string**
+
 ```java
 // File: DatabaseConfig.java
 private static final String DB_URL = System.getenv().getOrDefault(
@@ -106,11 +120,13 @@ private static final String DB_URL = System.getenv().getOrDefault(
     "postgresql://admin:password@localhost:5432/prod"
 );
 ```
+
 **Why vulnerable:** Hardcoded database credentials as fallback.
 
 ### ✅ SECURE - Skip These
 
 **Disabled default account**
+
 ```python
 # File: src/models/user.py
 def bootstrap_admin():
@@ -124,15 +140,17 @@ def bootstrap_admin():
 ```
 
 **Example/documentation credentials**
-```bash
+
+````bash
 # File: README.md
 ## Setup
 
 Configure your API key:
 ```bash
 export STRIPE_KEY='sk_tes...'  # Example only
-```
-```
+````
+
+````
 
 **Test fixture credentials**
 ```python
@@ -140,7 +158,7 @@ export STRIPE_KEY='sk_tes...'  # Example only
 @pytest.fixture
 def test_user():
     return User(username='test_user', password='test_pass')  # OK - test scope
-```
+````
 
 ---
 
@@ -149,6 +167,7 @@ def test_user():
 ### ❌ VULNERABLE - Report These
 
 **Authentication disabled by default**
+
 ```python
 # File: config/security.py
 REQUIRE_AUTH = os.getenv('REQUIRE_AUTH', 'false').lower() == 'true'
@@ -159,18 +178,22 @@ def check_auth():
         return  # Skip auth check
     # ... auth logic
 ```
+
 **Why vulnerable:** Default is no authentication. App runs insecurely if env var missing.
 
 **CORS allows all origins**
+
 ```javascript
 // File: server.js
 const allowedOrigins = process.env.ALLOWED_ORIGINS || '*';
 
 app.use(cors({ origin: allowedOrigins }));
 ```
+
 **Why vulnerable:** Default allows requests from any origin. XSS/CSRF risk.
 
 **Debug mode enabled by default**
+
 ```python
 # File: config.py
 DEBUG = os.getenv('DEBUG', 'true').lower() != 'false'  # Default: true
@@ -179,11 +202,13 @@ if DEBUG:
     app.config['DEBUG'] = True
     app.config['PROPAGATE_EXCEPTIONS'] = True
 ```
+
 **Why vulnerable:** Debug mode default. Stack traces leak sensitive info in production.
 
 ### ✅ SECURE - Skip These
 
 **Authentication required by default**
+
 ```python
 # File: config/security.py
 REQUIRE_AUTH = os.getenv('REQUIRE_AUTH', 'true').lower() == 'true'  # Default: true
@@ -193,6 +218,7 @@ REQUIRE_AUTH = os.environ['REQUIRE_AUTH'].lower() == 'true'
 ```
 
 **CORS requires explicit configuration**
+
 ```javascript
 // File: server.js
 if (!process.env.ALLOWED_ORIGINS) {
@@ -204,6 +230,7 @@ app.use(cors({ origin: allowedOrigins }));
 ```
 
 **Debug mode disabled by default**
+
 ```python
 # File: config.py
 DEBUG = os.getenv('DEBUG', 'false').lower() == 'true'  # Default: false
@@ -216,6 +243,7 @@ DEBUG = os.getenv('DEBUG', 'false').lower() == 'true'  # Default: false
 ### ❌ VULNERABLE - Report These
 
 **MD5 for password hashing**
+
 ```python
 # File: src/auth/passwords.py
 import hashlib
@@ -224,9 +252,11 @@ def hash_password(password):
     """Hash user password"""
     return hashlib.md5(password.encode()).hexdigest()
 ```
+
 **Why vulnerable:** MD5 is cryptographically broken. Rainbow tables exist. Use bcrypt/Argon2.
 
 **DES encryption for sensitive data**
+
 ```java
 // File: Encryption.java
 public static byte[] encrypt(String data, byte[] key) {
@@ -236,9 +266,11 @@ public static byte[] encrypt(String data, byte[] key) {
     return cipher.doFinal(data.getBytes());
 }
 ```
+
 **Why vulnerable:** DES has 56-bit keys (brute-forceable). ECB mode leaks patterns.
 
 **SHA1 for signature verification**
+
 ```javascript
 // File: webhooks.js
 function verifySignature(payload, signature) {
@@ -247,11 +279,13 @@ function verifySignature(payload, signature) {
   return computed === signature;
 }
 ```
+
 **Why vulnerable:** SHA1 collisions exist. Use SHA256 or better.
 
 ### ✅ SECURE - Skip These
 
 **Weak crypto for non-security checksums**
+
 ```python
 # File: src/utils/cache.py
 import hashlib
@@ -262,6 +296,7 @@ def cache_key(data):
 ```
 
 **Modern crypto for passwords**
+
 ```python
 # File: src/auth/passwords.py
 import bcrypt
@@ -271,6 +306,7 @@ def hash_password(password):
 ```
 
 **Strong encryption**
+
 ```java
 // File: Encryption.java
 Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
@@ -284,15 +320,18 @@ Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
 ### ❌ VULNERABLE - Report These
 
 **File permissions world-writable**
+
 ```python
 # File: src/storage/files.py
 def create_secure_file(path):
     fd = os.open(path, os.O_CREAT | os.O_WRONLY, 0o666)  # rw-rw-rw-
     return fd
 ```
+
 **Why vulnerable:** Any user can write to file. Should be 0o600 or 0o644.
 
 **S3 bucket public by default**
+
 ```python
 # File: infrastructure/storage.py
 def create_storage_bucket(name):
@@ -301,9 +340,11 @@ def create_storage_bucket(name):
         ACL='public-read'  # Publicly readable by default
     )
 ```
+
 **Why vulnerable:** Sensitive data exposed publicly. Should require explicit configuration.
 
 **API allows any origin**
+
 ```python
 # File: app.py
 @app.after_request
@@ -312,11 +353,13 @@ def after_request(response):
     response.headers['Access-Control-Allow-Credentials'] = 'true'
     return response
 ```
+
 **Why vulnerable:** CORS misconfiguration. Allows credential theft from any site.
 
 ### ✅ SECURE - Skip These
 
 **Explicitly configured permissiveness with justification**
+
 ```python
 # File: src/storage/public_assets.py
 def create_public_asset(path):
@@ -327,6 +370,7 @@ def create_public_asset(path):
 ```
 
 **Restrictive by default**
+
 ```python
 # File: infrastructure/storage.py
 def create_storage_bucket(name, public=False):
@@ -343,6 +387,7 @@ def create_storage_bucket(name, public=False):
 ### ❌ VULNERABLE - Report These
 
 **Stack traces in API responses**
+
 ```python
 # File: app.py
 @app.errorhandler(Exception)
@@ -352,21 +397,25 @@ def handle_error(error):
         'traceback': traceback.format_exc()  # Leaks internal paths, library versions
     }), 500
 ```
+
 **Why vulnerable:** Exposes internal implementation details to attackers.
 
 **GraphQL introspection enabled**
+
 ```javascript
 // File: server.js
 const server = new ApolloServer({
   typeDefs,
   resolvers,
-  introspection: true,  // Enabled in production
-  playground: true
+  introspection: true, // Enabled in production
+  playground: true,
 });
 ```
+
 **Why vulnerable:** Attackers can discover entire API schema, including admin-only fields.
 
 **Verbose error messages**
+
 ```java
 // File: UserController.java
 catch (SQLException e) {
@@ -375,11 +424,13 @@ catch (SQLException e) {
     );
 }
 ```
+
 **Why vulnerable:** SQL error messages reveal database structure.
 
 ### ✅ SECURE - Skip These
 
 **Debug features in logging only**
+
 ```python
 # File: app.py
 @app.errorhandler(Exception)
@@ -389,17 +440,19 @@ def handle_error(error):
 ```
 
 **Environment-aware debug settings**
+
 ```javascript
 // File: server.js
 const server = new ApolloServer({
   typeDefs,
   resolvers,
   introspection: process.env.NODE_ENV !== 'production',
-  playground: process.env.NODE_ENV !== 'production'
+  playground: process.env.NODE_ENV !== 'production',
 });
 ```
 
 **Generic user-facing errors**
+
 ```java
 // File: UserController.java
 catch (SQLException e) {

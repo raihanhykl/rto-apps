@@ -1,20 +1,20 @@
-"use client";
+'use client';
 
-import { useEffect, useState } from "react";
-import { useForm, Controller } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
+import { useEffect, useState } from 'react';
+import { useForm, Controller } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from '@/components/ui/select';
 import {
   Dialog,
   DialogContent,
@@ -22,27 +22,47 @@ import {
   DialogTitle,
   DialogFooter,
   DialogDescription,
-} from "@/components/ui/dialog";
-import { Pagination } from "@/components/ui/pagination";
-import { SortableHeader } from "@/components/SortableHeader";
-import { usePagination } from "@/hooks/usePagination";
-import { useContractsPaginated, useCustomersList, useMotorRates, useInvalidate } from "@/hooks/useApi";
-import { api } from "@/lib/api";
-import { Contract, Customer, MotorModel, BatteryType, DPScheme, HolidayScheme, DP_AMOUNTS, MOTOR_DAILY_RATES } from "@/types";
-import { formatCurrency, formatDate } from "@/lib/utils";
-import { contractSchema, ContractFormData } from "@/lib/schemas";
-import { Plus, FileText, Search, X } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { toastSuccess } from "@/stores/toastStore";
+} from '@/components/ui/dialog';
+import { Pagination } from '@/components/ui/pagination';
+import { SortableHeader } from '@/components/SortableHeader';
+import { usePagination } from '@/hooks/usePagination';
+import {
+  useContractsPaginated,
+  useCustomersList,
+  useMotorRates,
+  useInvalidate,
+} from '@/hooks/useApi';
+import { api } from '@/lib/api';
+import {
+  Contract,
+  Customer,
+  MotorModel,
+  BatteryType,
+  DPScheme,
+  HolidayScheme,
+  DP_AMOUNTS,
+  MOTOR_DAILY_RATES,
+} from '@/types';
+import { formatCurrency, formatDate } from '@/lib/utils';
+import { contractSchema, ContractFormData } from '@/lib/schemas';
+import { Plus, FileText, Search, X } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { toastSuccess } from '@/stores/toastStore';
 
 const statusBadgeVariant = (status: string) => {
   switch (status) {
-    case "ACTIVE": return "default" as const;
-    case "COMPLETED": return "success" as const;
-    case "OVERDUE": return "destructive" as const;
-    case "CANCELLED": return "secondary" as const;
-    case "REPOSSESSED": return "destructive" as const;
-    default: return "outline" as const;
+    case 'ACTIVE':
+      return 'default' as const;
+    case 'COMPLETED':
+      return 'success' as const;
+    case 'OVERDUE':
+      return 'destructive' as const;
+    case 'CANCELLED':
+      return 'secondary' as const;
+    case 'REPOSSESSED':
+      return 'destructive' as const;
+    default:
+      return 'outline' as const;
   }
 };
 
@@ -51,14 +71,14 @@ export default function ContractsPage() {
   const invalidate = useInvalidate();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [formError, setFormError] = useState("");
-  const [statusFilter, setStatusFilter] = useState("ALL");
-  const [motorModelFilter, setMotorModelFilter] = useState("ALL");
-  const [batteryTypeFilter, setBatteryTypeFilter] = useState("ALL");
-  const [dpSchemeFilter, setDpSchemeFilter] = useState("ALL");
-  const [dpFullyPaidFilter, setDpFullyPaidFilter] = useState("ALL");
+  const [formError, setFormError] = useState('');
+  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [motorModelFilter, setMotorModelFilter] = useState('ALL');
+  const [batteryTypeFilter, setBatteryTypeFilter] = useState('ALL');
+  const [dpSchemeFilter, setDpSchemeFilter] = useState('ALL');
+  const [dpFullyPaidFilter, setDpFullyPaidFilter] = useState('ALL');
 
-  const pagination = usePagination({ initialSortBy: "createdAt", initialSortOrder: "desc" });
+  const pagination = usePagination({ initialSortBy: 'createdAt', initialSortOrder: 'desc' });
 
   const { data: contractsData, isLoading: loading } = useContractsPaginated({
     page: pagination.page,
@@ -66,11 +86,11 @@ export default function ContractsPage() {
     sortBy: pagination.sortBy,
     sortOrder: pagination.sortOrder,
     search: pagination.debouncedSearch || undefined,
-    status: statusFilter !== "ALL" ? statusFilter : undefined,
-    motorModel: motorModelFilter !== "ALL" ? motorModelFilter : undefined,
-    batteryType: batteryTypeFilter !== "ALL" ? batteryTypeFilter : undefined,
-    dpScheme: dpSchemeFilter !== "ALL" ? dpSchemeFilter : undefined,
-    dpFullyPaid: dpFullyPaidFilter !== "ALL" ? dpFullyPaidFilter : undefined,
+    status: statusFilter !== 'ALL' ? statusFilter : undefined,
+    motorModel: motorModelFilter !== 'ALL' ? motorModelFilter : undefined,
+    batteryType: batteryTypeFilter !== 'ALL' ? batteryTypeFilter : undefined,
+    dpScheme: dpSchemeFilter !== 'ALL' ? dpSchemeFilter : undefined,
+    dpFullyPaid: dpFullyPaidFilter !== 'ALL' ? dpFullyPaidFilter : undefined,
   });
   const contracts = (contractsData?.data as Contract[]) || [];
 
@@ -81,51 +101,63 @@ export default function ContractsPage() {
   const { data: customers = [] as Customer[] } = useCustomersList();
   const { data: motorRates = {} as Record<string, number> } = useMotorRates();
 
-  const { register, handleSubmit: rhfSubmit, reset, control, watch, formState: { errors } } = useForm<ContractFormData>({
+  const {
+    register,
+    handleSubmit: rhfSubmit,
+    reset,
+    control,
+    watch,
+    formState: { errors },
+  } = useForm<ContractFormData>({
     resolver: zodResolver(contractSchema),
     defaultValues: {
-      customerId: "",
+      customerId: '',
       motorModel: undefined,
       batteryType: undefined,
       dpScheme: undefined,
-      startDate: new Date().toISOString().split("T")[0],
-      notes: "",
+      startDate: new Date().toISOString().split('T')[0],
+      notes: '',
     },
   });
-  const watchMotorModel = watch("motorModel");
-  const watchBatteryType = watch("batteryType");
-  const watchDpScheme = watch("dpScheme");
+  const watchMotorModel = watch('motorModel');
+  const watchBatteryType = watch('batteryType');
+  const watchDpScheme = watch('dpScheme');
 
   const handleFilterChange = (setter: (v: string) => void) => (value: string) => {
     setter(value);
     pagination.setPage(1);
   };
 
-  const hasActiveFilters = statusFilter !== "ALL" || motorModelFilter !== "ALL" || batteryTypeFilter !== "ALL" || dpSchemeFilter !== "ALL" || dpFullyPaidFilter !== "ALL";
+  const hasActiveFilters =
+    statusFilter !== 'ALL' ||
+    motorModelFilter !== 'ALL' ||
+    batteryTypeFilter !== 'ALL' ||
+    dpSchemeFilter !== 'ALL' ||
+    dpFullyPaidFilter !== 'ALL';
 
   const clearAllFilters = () => {
-    setStatusFilter("ALL");
-    setMotorModelFilter("ALL");
-    setBatteryTypeFilter("ALL");
-    setDpSchemeFilter("ALL");
-    setDpFullyPaidFilter("ALL");
+    setStatusFilter('ALL');
+    setMotorModelFilter('ALL');
+    setBatteryTypeFilter('ALL');
+    setDpSchemeFilter('ALL');
+    setDpFullyPaidFilter('ALL');
     pagination.setPage(1);
   };
 
   const openCreate = () => {
     reset({
-      customerId: "",
+      customerId: '',
       motorModel: undefined,
       batteryType: undefined,
       dpScheme: undefined,
-      startDate: new Date().toISOString().split("T")[0],
-      color: "",
-      year: "",
-      vinNumber: "",
-      engineNumber: "",
-      notes: "",
+      startDate: new Date().toISOString().split('T')[0],
+      color: '',
+      year: '',
+      vinNumber: '',
+      engineNumber: '',
+      notes: '',
     });
-    setFormError("");
+    setFormError('');
     setDialogOpen(true);
   };
 
@@ -136,17 +168,17 @@ export default function ContractsPage() {
 
   const getDpAmount = () => {
     const key = getRateKey();
-    return key ? (DP_AMOUNTS[key] || 0) : 0;
+    return key ? DP_AMOUNTS[key] || 0 : 0;
   };
 
   const getDailyRate = () => {
     const key = getRateKey();
-    return key ? (MOTOR_DAILY_RATES[key] || 0) : 0;
+    return key ? MOTOR_DAILY_RATES[key] || 0 : 0;
   };
 
   const handleSave = async (data: ContractFormData) => {
     setSaving(true);
-    setFormError("");
+    setFormError('');
     try {
       const payload: any = {
         ...data,
@@ -154,8 +186,11 @@ export default function ContractsPage() {
       };
       await api.createContract(payload);
       setDialogOpen(false);
-      toastSuccess("Kontrak dibuat", `Kontrak ${data.motorModel} ${data.batteryType} (DP: ${data.dpScheme}) berhasil dibuat.`);
-      invalidate("/contracts", "/customers", "/dashboard");
+      toastSuccess(
+        'Kontrak dibuat',
+        `Kontrak ${data.motorModel} ${data.batteryType} (DP: ${data.dpScheme}) berhasil dibuat.`,
+      );
+      invalidate('/contracts', '/customers', '/dashboard');
     } catch (error: any) {
       setFormError(error.message);
     } finally {
@@ -164,7 +199,7 @@ export default function ContractsPage() {
   };
 
   const getCustomerName = (customerId: string) => {
-    return customers.find((c) => c.id === customerId)?.fullName || "Unknown";
+    return customers.find((c) => c.id === customerId)?.fullName || 'Unknown';
   };
 
   return (
@@ -217,11 +252,16 @@ export default function ContractsPage() {
             </SelectContent>
           </Select>
           {pagination.total > 0 && (
-            <span className="text-sm text-muted-foreground self-center">{pagination.total} kontrak</span>
+            <span className="text-sm text-muted-foreground self-center">
+              {pagination.total} kontrak
+            </span>
           )}
         </div>
         <div className="flex flex-wrap gap-2">
-          <Select value={batteryTypeFilter} onValueChange={handleFilterChange(setBatteryTypeFilter)}>
+          <Select
+            value={batteryTypeFilter}
+            onValueChange={handleFilterChange(setBatteryTypeFilter)}
+          >
             <SelectTrigger className="w-40">
               <SelectValue />
             </SelectTrigger>
@@ -241,7 +281,10 @@ export default function ContractsPage() {
               <SelectItem value="INSTALLMENT">Cicilan 2x</SelectItem>
             </SelectContent>
           </Select>
-          <Select value={dpFullyPaidFilter} onValueChange={handleFilterChange(setDpFullyPaidFilter)}>
+          <Select
+            value={dpFullyPaidFilter}
+            onValueChange={handleFilterChange(setDpFullyPaidFilter)}
+          >
             <SelectTrigger className="w-40">
               <SelectValue />
             </SelectTrigger>
@@ -252,7 +295,12 @@ export default function ContractsPage() {
             </SelectContent>
           </Select>
           {hasActiveFilters && (
-            <Button variant="ghost" size="sm" onClick={clearAllFilters} className="text-muted-foreground">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={clearAllFilters}
+              className="text-muted-foreground"
+            >
               <X className="h-4 w-4 mr-1" /> Reset Filter
             </Button>
           )}
@@ -265,8 +313,8 @@ export default function ContractsPage() {
             <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <p className="text-muted-foreground">
               {pagination.debouncedSearch || hasActiveFilters
-                ? "Tidak ada kontrak yang cocok dengan filter."
-                : "Belum ada kontrak."}
+                ? 'Tidak ada kontrak yang cocok dengan filter.'
+                : 'Belum ada kontrak.'}
             </p>
             {!pagination.debouncedSearch && !hasActiveFilters && customers.length > 0 && (
               <Button className="mt-4" onClick={openCreate}>
@@ -283,78 +331,142 @@ export default function ContractsPage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b bg-muted/50">
-                    <SortableHeader label="No. Kontrak" field="contractNumber" currentSortBy={pagination.sortBy} currentSortOrder={pagination.sortOrder} onSort={pagination.handleSort} />
+                    <SortableHeader
+                      label="No. Kontrak"
+                      field="contractNumber"
+                      currentSortBy={pagination.sortBy}
+                      currentSortOrder={pagination.sortOrder}
+                      onSort={pagination.handleSort}
+                    />
                     <th className="text-left p-4 text-sm font-medium">Customer</th>
                     <th className="text-left p-4 text-sm font-medium">Motor</th>
                     <th className="text-left p-4 text-sm font-medium">DP</th>
-                    <SortableHeader label="Progress" field="ownershipProgress" currentSortBy={pagination.sortBy} currentSortOrder={pagination.sortOrder} onSort={pagination.handleSort} />
-                    <SortableHeader label="Total" field="totalAmount" currentSortBy={pagination.sortBy} currentSortOrder={pagination.sortOrder} onSort={pagination.handleSort} />
-                    <SortableHeader label="Periode Aktif" field="endDate" currentSortBy={pagination.sortBy} currentSortOrder={pagination.sortOrder} onSort={pagination.handleSort} />
-                    <SortableHeader label="Sisa Hari" field="endDate" currentSortBy={pagination.sortBy} currentSortOrder={pagination.sortOrder} onSort={pagination.handleSort} />
+                    <SortableHeader
+                      label="Progress"
+                      field="ownershipProgress"
+                      currentSortBy={pagination.sortBy}
+                      currentSortOrder={pagination.sortOrder}
+                      onSort={pagination.handleSort}
+                    />
+                    <SortableHeader
+                      label="Total"
+                      field="totalAmount"
+                      currentSortBy={pagination.sortBy}
+                      currentSortOrder={pagination.sortOrder}
+                      onSort={pagination.handleSort}
+                    />
+                    <SortableHeader
+                      label="Periode Aktif"
+                      field="endDate"
+                      currentSortBy={pagination.sortBy}
+                      currentSortOrder={pagination.sortOrder}
+                      onSort={pagination.handleSort}
+                    />
+                    <SortableHeader
+                      label="Sisa Hari"
+                      field="endDate"
+                      currentSortBy={pagination.sortBy}
+                      currentSortOrder={pagination.sortOrder}
+                      onSort={pagination.handleSort}
+                    />
                     <th className="text-left p-4 text-sm font-medium">Status</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {loading ? (
-                    Array.from({ length: 5 }).map((_, i) => (
-                      <tr key={i} className="border-b">
-                        {Array.from({ length: 9 }).map((_, j) => (
-                          <td key={j} className="p-4">
-                            <div className="h-4 bg-muted animate-pulse rounded" />
+                  {loading
+                    ? Array.from({ length: 5 }).map((_, i) => (
+                        <tr key={i} className="border-b">
+                          {Array.from({ length: 9 }).map((_, j) => (
+                            <td key={j} className="p-4">
+                              <div className="h-4 bg-muted animate-pulse rounded" />
+                            </td>
+                          ))}
+                        </tr>
+                      ))
+                    : contracts.map((contract) => (
+                        <tr
+                          key={contract.id}
+                          className="border-b last:border-0 hover:bg-muted/30 cursor-pointer"
+                          onClick={() => router.push(`/contracts/${contract.id}`)}
+                        >
+                          <td className="p-4 font-mono text-sm text-primary">
+                            {contract.contractNumber}
                           </td>
-                        ))}
-                      </tr>
-                    ))
-                  ) : (
-                    contracts.map((contract) => (
-                      <tr key={contract.id} className="border-b last:border-0 hover:bg-muted/30 cursor-pointer" onClick={() => router.push(`/contracts/${contract.id}`)}>
-                        <td className="p-4 font-mono text-sm text-primary">{contract.contractNumber}</td>
-                        <td className="p-4 text-sm">{getCustomerName(contract.customerId)}</td>
-                        <td className="p-4 text-sm">{contract.motorModel}</td>
-                        <td className="p-4">
-                          <Badge variant={contract.dpFullyPaid ? "success" : "warning"} className="text-xs">
-                            {contract.dpFullyPaid ? "Lunas" : "Pending"}
-                          </Badge>
-                        </td>
-                        <td className="p-4">
-                          <div className="flex items-center gap-2">
-                            <div className="w-16 bg-muted rounded-full h-2 overflow-hidden">
-                              <div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(contract.ownershipProgress, 100)}%` }} />
+                          <td className="p-4 text-sm">{getCustomerName(contract.customerId)}</td>
+                          <td className="p-4 text-sm">{contract.motorModel}</td>
+                          <td className="p-4">
+                            <Badge
+                              variant={contract.dpFullyPaid ? 'success' : 'warning'}
+                              className="text-xs"
+                            >
+                              {contract.dpFullyPaid ? 'Lunas' : 'Pending'}
+                            </Badge>
+                          </td>
+                          <td className="p-4">
+                            <div className="flex items-center gap-2">
+                              <div className="w-16 bg-muted rounded-full h-2 overflow-hidden">
+                                <div
+                                  className="h-full rounded-full bg-primary"
+                                  style={{ width: `${Math.min(contract.ownershipProgress, 100)}%` }}
+                                />
+                              </div>
+                              <span className="text-xs text-muted-foreground">
+                                {contract.ownershipProgress}%
+                              </span>
                             </div>
-                            <span className="text-xs text-muted-foreground">{contract.ownershipProgress}%</span>
-                          </div>
-                        </td>
-                        <td className="p-4 text-sm font-medium">{formatCurrency(contract.totalAmount)}</td>
-                        <td className="p-4 text-sm text-muted-foreground">
-                          {formatDate(contract.startDate)} - {formatDate(contract.endDate)}
-                        </td>
-                        <td className="p-4 text-sm">
-                          {(() => {
-                            if (contract.status === "COMPLETED" || contract.status === "CANCELLED" || contract.status === "REPOSSESSED") {
-                              return <span className="text-muted-foreground">-</span>;
-                            }
-                            const end = new Date(contract.endDate);
-                            const now = new Date();
-                            const diffMs = end.getTime() - now.getTime();
-                            const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-                            if (diffDays <= 0) {
-                              return <span className="text-destructive font-medium">Lewat {Math.abs(diffDays)} hari</span>;
-                            }
-                            return <span className={diffDays <= 2 ? "text-yellow-600 font-medium" : "font-medium"}>{diffDays} Hari</span>;
-                          })()}
-                        </td>
-                        <td className="p-4">
-                          <Badge variant={statusBadgeVariant(contract.status)}>
-                            {contract.status}
-                          </Badge>
-                        </td>
-                      </tr>
-                    ))
-                  )}
+                          </td>
+                          <td className="p-4 text-sm font-medium">
+                            {formatCurrency(contract.totalAmount)}
+                          </td>
+                          <td className="p-4 text-sm text-muted-foreground">
+                            {formatDate(contract.startDate)} - {formatDate(contract.endDate)}
+                          </td>
+                          <td className="p-4 text-sm">
+                            {(() => {
+                              if (
+                                contract.status === 'COMPLETED' ||
+                                contract.status === 'CANCELLED' ||
+                                contract.status === 'REPOSSESSED'
+                              ) {
+                                return <span className="text-muted-foreground">-</span>;
+                              }
+                              const end = new Date(contract.endDate);
+                              const now = new Date();
+                              const diffMs = end.getTime() - now.getTime();
+                              const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+                              if (diffDays <= 0) {
+                                return (
+                                  <span className="text-destructive font-medium">
+                                    Lewat {Math.abs(diffDays)} hari
+                                  </span>
+                                );
+                              }
+                              return (
+                                <span
+                                  className={
+                                    diffDays <= 2 ? 'text-yellow-600 font-medium' : 'font-medium'
+                                  }
+                                >
+                                  {diffDays} Hari
+                                </span>
+                              );
+                            })()}
+                          </td>
+                          <td className="p-4">
+                            <Badge variant={statusBadgeVariant(contract.status)}>
+                              {contract.status}
+                            </Badge>
+                          </td>
+                        </tr>
+                      ))}
                 </tbody>
               </table>
             </div>
-            <Pagination page={pagination.page} totalPages={pagination.totalPages} onPageChange={pagination.setPage} />
+            <Pagination
+              page={pagination.page}
+              totalPages={pagination.totalPages}
+              onPageChange={pagination.setPage}
+            />
           </CardContent>
         </Card>
       )}
@@ -394,7 +506,9 @@ export default function ContractsPage() {
                   </Select>
                 )}
               />
-              {errors.customerId && <p className="text-destructive text-xs">{errors.customerId.message}</p>}
+              {errors.customerId && (
+                <p className="text-destructive text-xs">{errors.customerId.message}</p>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -404,7 +518,7 @@ export default function ContractsPage() {
                   name="motorModel"
                   control={control}
                   render={({ field }) => (
-                    <Select value={field.value || ""} onValueChange={field.onChange}>
+                    <Select value={field.value || ''} onValueChange={field.onChange}>
                       <SelectTrigger>
                         <SelectValue placeholder="Pilih motor" />
                       </SelectTrigger>
@@ -416,7 +530,9 @@ export default function ContractsPage() {
                     </Select>
                   )}
                 />
-                {errors.motorModel && <p className="text-destructive text-xs">{errors.motorModel.message}</p>}
+                {errors.motorModel && (
+                  <p className="text-destructive text-xs">{errors.motorModel.message}</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label>Tipe Baterai *</Label>
@@ -424,7 +540,7 @@ export default function ContractsPage() {
                   name="batteryType"
                   control={control}
                   render={({ field }) => (
-                    <Select value={field.value || ""} onValueChange={field.onChange}>
+                    <Select value={field.value || ''} onValueChange={field.onChange}>
                       <SelectTrigger>
                         <SelectValue placeholder="Pilih baterai" />
                       </SelectTrigger>
@@ -435,7 +551,9 @@ export default function ContractsPage() {
                     </Select>
                   )}
                 />
-                {errors.batteryType && <p className="text-destructive text-xs">{errors.batteryType.message}</p>}
+                {errors.batteryType && (
+                  <p className="text-destructive text-xs">{errors.batteryType.message}</p>
+                )}
               </div>
             </div>
 
@@ -446,7 +564,7 @@ export default function ContractsPage() {
                   name="dpScheme"
                   control={control}
                   render={({ field }) => (
-                    <Select value={field.value || ""} onValueChange={field.onChange}>
+                    <Select value={field.value || ''} onValueChange={field.onChange}>
                       <SelectTrigger>
                         <SelectValue placeholder="Pilih skema" />
                       </SelectTrigger>
@@ -457,7 +575,9 @@ export default function ContractsPage() {
                     </Select>
                   )}
                 />
-                {errors.dpScheme && <p className="text-destructive text-xs">{errors.dpScheme.message}</p>}
+                {errors.dpScheme && (
+                  <p className="text-destructive text-xs">{errors.dpScheme.message}</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label>Tipe Kontrak *</Label>
@@ -465,57 +585,67 @@ export default function ContractsPage() {
                   name="holidayScheme"
                   control={control}
                   render={({ field }) => (
-                    <Select value={field.value || ""} onValueChange={field.onChange}>
+                    <Select value={field.value || ''} onValueChange={field.onChange}>
                       <SelectTrigger>
                         <SelectValue placeholder="Pilih tipe kontrak" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value={HolidayScheme.OLD_CONTRACT}>Kontrak Lama (Libur Minggu)</SelectItem>
-                        <SelectItem value={HolidayScheme.NEW_CONTRACT}>Kontrak Baru (Libur tgl 29-31)</SelectItem>
+                        <SelectItem value={HolidayScheme.OLD_CONTRACT}>
+                          Kontrak Lama (Libur Minggu)
+                        </SelectItem>
+                        <SelectItem value={HolidayScheme.NEW_CONTRACT}>
+                          Kontrak Baru (Libur tgl 29-31)
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                   )}
                 />
-                {errors.holidayScheme && <p className="text-destructive text-xs">{errors.holidayScheme.message}</p>}
+                {errors.holidayScheme && (
+                  <p className="text-destructive text-xs">{errors.holidayScheme.message}</p>
+                )}
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Tanggal Mulai *</Label>
-                <Input type="date" {...register("startDate")} />
-                {errors.startDate && <p className="text-destructive text-xs">{errors.startDate.message}</p>}
+                <Input type="date" {...register('startDate')} />
+                {errors.startDate && (
+                  <p className="text-destructive text-xs">{errors.startDate.message}</p>
+                )}
               </div>
             </div>
 
             {/* Detail Unit */}
             <div className="space-y-2">
-              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Detail Unit</h3>
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                Detail Unit
+              </h3>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Warna</Label>
-                  <Input {...register("color")} placeholder="Warna motor" />
+                  <Input {...register('color')} placeholder="Warna motor" />
                 </div>
                 <div className="space-y-2">
                   <Label>Tahun</Label>
-                  <Input type="number" {...register("year")} placeholder="2025" />
+                  <Input type="number" {...register('year')} placeholder="2025" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>VIN Number</Label>
-                  <Input {...register("vinNumber")} placeholder="Nomor VIN" />
+                  <Input {...register('vinNumber')} placeholder="Nomor VIN" />
                 </div>
                 <div className="space-y-2">
                   <Label>Nomor Mesin</Label>
-                  <Input {...register("engineNumber")} placeholder="Nomor mesin" />
+                  <Input {...register('engineNumber')} placeholder="Nomor mesin" />
                 </div>
               </div>
             </div>
 
             <div className="space-y-2">
               <Label>Catatan</Label>
-              <Input {...register("notes")} placeholder="Catatan tambahan (opsional)" />
+              <Input {...register('notes')} placeholder="Catatan tambahan (opsional)" />
             </div>
 
             {watchMotorModel && watchBatteryType && (
@@ -525,12 +655,15 @@ export default function ContractsPage() {
                   <span>{formatCurrency(getDailyRate())}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span>DP ({watchDpScheme === DPScheme.INSTALLMENT ? "Cicilan 2x" : "Lunas"})</span>
+                  <span>
+                    DP ({watchDpScheme === DPScheme.INSTALLMENT ? 'Cicilan 2x' : 'Lunas'})
+                  </span>
                   <span className="font-bold text-primary">{formatCurrency(getDpAmount())}</span>
                 </div>
                 {watchDpScheme === DPScheme.INSTALLMENT && getDpAmount() > 0 && (
                   <div className="text-xs text-muted-foreground pl-2">
-                    Cicilan 1: {formatCurrency(Math.ceil(getDpAmount() / 2))} &middot; Cicilan 2: {formatCurrency(Math.floor(getDpAmount() / 2))}
+                    Cicilan 1: {formatCurrency(Math.ceil(getDpAmount() / 2))} &middot; Cicilan 2:{' '}
+                    {formatCurrency(Math.floor(getDpAmount() / 2))}
                   </div>
                 )}
               </div>
@@ -541,7 +674,7 @@ export default function ContractsPage() {
                 Batal
               </Button>
               <Button type="submit" disabled={saving}>
-                {saving ? "Menyimpan..." : "Buat Kontrak"}
+                {saving ? 'Menyimpan...' : 'Buat Kontrak'}
               </Button>
             </DialogFooter>
           </form>

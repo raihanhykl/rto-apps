@@ -19,16 +19,19 @@ mpz_powm(result, base, secret_exponent, modulus);
 ```
 
 **Why This Matters**:
+
 - Paillier encryption uses `mpz_powm` with secret keys
 - RSA implementations using GMP leak private key bits
 - Even "blinded" implementations often have residual timing leaks
 
 **Detection Pattern**: Any use of GMP (`mpz_*` functions) with secret values:
+
 - `mpz_powm`, `mpz_powm_sec` (the "sec" version is still not fully constant-time)
 - `mpz_mul`, `mpz_mod` with secret operands
 - `mpz_cmp` for secret comparison
 
 **Real Vulnerabilities**:
+
 - CVE-2018-16152: Timing attack on strongSwan IKEv2
 - Numerous academic papers demonstrating key recovery from GMP-based crypto
 
@@ -61,6 +64,7 @@ mpz_export(buf, &count, order, size, endian, nails, op);
 ### Mitigation
 
 For cryptographic use, prefer:
+
 - **libsodium** for common operations
 - **OpenSSL BIGNUM** (has constant-time variants)
 - **libgmp with mpz_powm_sec** (partial mitigation, not complete)
@@ -85,11 +89,13 @@ int verify_callback(int preverify_ok, X509_STORE_CTX *ctx) {
 ```
 
 **The Problem**: The callback's return value determines whether verification succeeds. Developers often:
+
 - Return 1 (success) unconditionally while "just adding logging"
 - Forget that returning non-zero bypasses all verification
 - Copy-paste examples that return 1 for "debugging"
 
 **Correct Pattern**:
+
 ```c
 int verify_callback(int preverify_ok, X509_STORE_CTX *ctx) {
     if (!preverify_ok) {
@@ -117,6 +123,7 @@ if (EVP_EncryptFinal_ex(ctx, outbuf, &outlen) != 1) {
 ```
 
 **The Problem**:
+
 - Functions return 1 for success (not 0!)
 - Errors accumulate in a thread-local queue
 - Easy to forget to check, easy to check wrong way
@@ -188,6 +195,7 @@ data = pickle.loads(untrusted_input)
 ```
 
 **The Problem**: `pickle` is not a data format—it's a code execution format. There is no safe way to unpickle untrusted data, but:
+
 - The function looks like a data parser
 - The name suggests food preservation, not danger
 - Many developers don't realize the risk
@@ -211,6 +219,7 @@ data = yaml.load(untrusted_input)
 ```
 
 **The Problem**: YAML's tag system allows arbitrary object instantiation. The "safe" loader is:
+
 ```python
 data = yaml.safe_load(untrusted_input)  # Safe
 data = yaml.load(untrusted_input, Loader=yaml.SafeLoader)  # Also safe
@@ -236,12 +245,14 @@ if (strcmp($_POST['password'], $stored_password) == 0) {
 ```
 
 **The Problem**:
+
 - `strcmp` returns `NULL` on type error, not `-1` or `1`
 - PHP's `==` operator coerces `NULL` to `0`
 - `NULL == 0` evaluates to `TRUE`
 - Authentication bypassed
 
 **Fix**:
+
 ```php
 if (hash_equals($stored_hash, hash('sha256', $_POST['password']))) {
     // Use hash_equals for timing-safe comparison
@@ -257,18 +268,18 @@ When examining a library for sharp edges:
 
 ### Input → Expected Output
 
-| Input | Expected | Actual | Vulnerability |
-|-------|----------|--------|---------------|
-| `verify_ssl=false` | Clear warning | Silent acceptance | Config cliff |
-| `password=""` | Rejection | Login success | Empty bypass |
-| `algorithm="none"` | Error | Signature skipped | Downgrade |
-| `timeout=-1` | Error | Infinite timeout | Magic value |
+| Input              | Expected      | Actual            | Vulnerability |
+| ------------------ | ------------- | ----------------- | ------------- |
+| `verify_ssl=false` | Clear warning | Silent acceptance | Config cliff  |
+| `password=""`      | Rejection     | Login success     | Empty bypass  |
+| `algorithm="none"` | Error         | Signature skipped | Downgrade     |
+| `timeout=-1`       | Error         | Infinite timeout  | Magic value   |
 
 ### Library Comparison
 
-| Feature | Dangerous Library | Safer Alternative |
-|---------|------------------|-------------------|
-| Bignum crypto | GMP | libsodium, OpenSSL BIGNUM |
-| TLS | Raw OpenSSL | Higher-level wrappers |
-| Serialization | pickle, YAML | JSON, protobuf |
-| Password compare | strcmp | hash_equals, secrets.compare_digest |
+| Feature          | Dangerous Library | Safer Alternative                   |
+| ---------------- | ----------------- | ----------------------------------- |
+| Bignum crypto    | GMP               | libsodium, OpenSSL BIGNUM           |
+| TLS              | Raw OpenSSL       | Higher-level wrappers               |
+| Serialization    | pickle, YAML      | JSON, protobuf                      |
+| Password compare | strcmp            | hash_equals, secrets.compare_digest |
