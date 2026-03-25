@@ -17,7 +17,7 @@
     "lint:frontend": "npm run lint --workspace=packages/frontend",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "prepare": "husky"
+    "prepare": "husky || true"
   },
   "lint-staged": {
     "packages/backend/src/**/*.ts": [
