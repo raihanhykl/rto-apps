@@ -56,7 +56,10 @@ export class PaymentService {
    * Hitung total late fee berdasarkan umur setiap hari yang belum dibayar.
    * Delegasi ke pure function computeLateFee() di domain layer.
    */
-  async calculateLateFee(unpaidDays: PaymentDay[], today: Date): Promise<number> {
+  async calculateLateFee(unpaidDays: PaymentDay[], today: Date, holidayScheme?: HolidayScheme): Promise<number> {
+    // Kontrak lama (OLD_CONTRACT) tidak dikenakan denda
+    if (holidayScheme === HolidayScheme.OLD_CONTRACT) return 0;
+
     const penaltyGraceDays = await this.getSetting('penalty_grace_days', DEFAULT_PENALTY_GRACE_DAYS);
     const feePerDay = await this.getSetting('late_fee_per_day', DEFAULT_LATE_FEE_PER_DAY);
     return computeLateFee(unpaidDays, today, penaltyGraceDays, feePerDay);
@@ -286,7 +289,7 @@ export class PaymentService {
       if (unpaidDays.length === 0) continue;
 
       const totalAmount = unpaidDays.reduce((sum, pd) => sum + pd.amount, 0);
-      const lateFee = await this.calculateLateFee(unpaidDays, now);
+      const lateFee = await this.calculateLateFee(unpaidDays, now, contract.holidayScheme);
       const periodStart = toLocalMidnightWib(new Date(unpaidDays[0].date));
       const periodEnd = toLocalMidnightWib(new Date(unpaidDays[unpaidDays.length - 1].date));
 
@@ -461,7 +464,7 @@ export class PaymentService {
       }
 
       const totalAmount = unpaidDays.reduce((sum, pd) => sum + pd.amount, 0);
-      const lateFee = await this.calculateLateFee(unpaidDays, today);
+      const lateFee = await this.calculateLateFee(unpaidDays, today, contract.holidayScheme);
       const periodStart = toLocalMidnightWib(new Date(unpaidDays[0].date));
       const periodEnd = toLocalMidnightWib(new Date(unpaidDays[unpaidDays.length - 1].date));
 
@@ -650,7 +653,7 @@ export class PaymentService {
     if (selectedDays.length === 0) throw new Error('No unpaid days available');
 
     const amount = selectedDays.reduce((sum, pd) => sum + pd.amount, 0);
-    const lateFee = await this.calculateLateFee(selectedDays, today);
+    const lateFee = await this.calculateLateFee(selectedDays, today, contract.holidayScheme);
 
     return {
       amount,
@@ -710,7 +713,7 @@ export class PaymentService {
     if (selectedDays.length === 0) throw new Error('No unpaid days available');
 
     const totalAmount = selectedDays.reduce((sum, pd) => sum + pd.amount, 0);
-    const lateFee = await this.calculateLateFee(selectedDays, today);
+    const lateFee = await this.calculateLateFee(selectedDays, today, contract.holidayScheme);
     const periodStart = toLocalMidnightWib(new Date(selectedDays[0].date));
     const periodEnd = toLocalMidnightWib(new Date(selectedDays[selectedDays.length - 1].date));
 
@@ -1270,7 +1273,7 @@ export class PaymentService {
     const periodEnd = new Date(eligibleDays[eligibleDays.length - 1].date);
     const totalAmount = eligibleDays.reduce((sum, pd) => sum + pd.amount, 0);
     const today = getWibToday();
-    const lateFee = await this.calculateLateFee(eligibleDays, today);
+    const lateFee = await this.calculateLateFee(eligibleDays, today, contract.holidayScheme);
 
     // Step 3: Buat invoice baru
     const newPayment: Invoice = {
