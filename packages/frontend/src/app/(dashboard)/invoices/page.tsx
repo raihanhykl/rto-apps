@@ -176,7 +176,7 @@ export default function InvoicesPage() {
         'Pembayaran',
         `Tagihan berhasil di-${status === 'PAID' ? 'bayar' : 'gagalkan'}.`,
       );
-      invalidate('/contracts', '/dashboard');
+      invalidate('/contracts', '/payments', '/dashboard');
     } catch (error: any) {
       toastError('Gagal', error?.message || 'Gagal memproses pembayaran.');
     } finally {
@@ -192,7 +192,7 @@ export default function InvoicesPage() {
       toastSuccess('Berhasil', `Tagihan ${voidInvoiceTarget.invoiceNumber} berhasil di-void.`);
       setVoidDialogOpen(false);
       setVoidInvoiceTarget(null);
-      invalidate('/contracts', '/dashboard');
+      invalidate('/contracts', '/payments', '/dashboard');
     } catch (error: any) {
       toastError('Gagal', error?.message || 'Gagal void tagihan.');
     } finally {
@@ -208,7 +208,7 @@ export default function InvoicesPage() {
       toastSuccess('Berhasil', `Tagihan ${markPaidTarget.invoiceNumber} ditandai lunas.`);
       setMarkPaidDialogOpen(false);
       setMarkPaidTarget(null);
-      invalidate('/contracts', '/dashboard');
+      invalidate('/contracts', '/payments', '/dashboard');
     } catch (error: any) {
       toastError('Gagal', error?.message || 'Gagal menandai tagihan lunas.');
     } finally {
@@ -224,7 +224,7 @@ export default function InvoicesPage() {
       toastSuccess('Berhasil', `Tagihan ${revertTarget.invoiceNumber} dikembalikan ke PENDING.`);
       setRevertDialogOpen(false);
       setRevertTarget(null);
-      invalidate('/contracts', '/dashboard');
+      invalidate('/contracts', '/payments', '/dashboard');
     } catch (error: any) {
       toastError('Gagal', error?.message || 'Gagal me-revert tagihan.');
     } finally {

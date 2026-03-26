@@ -179,7 +179,7 @@ export default function ContractDetailPage() {
   const loading = detailLoading;
 
   const refreshAll = () => {
-    invalidate('/contracts', '/dashboard', '/savings');
+    invalidate('/contracts', '/payments', '/dashboard', '/savings', '/service-records');
   };
 
   const savingTransactions = (savingData as any)?.transactions || [];
