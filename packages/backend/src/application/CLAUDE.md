@@ -287,3 +287,32 @@ Berlaku untuk: daily billing (scheduler), manual payment, rollover, reduce payme
 | Merah   | `overdue`    | Tanggal sudah lewat dalam tagihan aktif (tunggakan) |
 | Biru    | `holiday`    | PaymentDay status = HOLIDAY                         |
 | Abu-abu | `not_issued` | Tidak ada PaymentDay record untuk tanggal ini       |
+
+---
+
+### Service Compensation (Kompensasi Servis)
+
+**Skenario:**
+
+- **MINOR** atau **MAJOR + motor pengganti**: Hanya record, tanpa kompensasi (compensationDays=0)
+- **MAJOR + tanpa motor pengganti**: Hari service → COMPENSATED, payment PAID di-shift ke setelah periode service
+
+**PaymentDayStatus COMPENSATED:**
+
+- Amount = 0, auto-handled (tidak perlu bayar)
+- Tidak credit ke ownership (tidak menambah totalDaysPaid)
+- Tidak break contiguous walk di syncContractFromPaymentDays()
+- Kontrak extend natural karena COMPENSATED days = "pause"
+
+**ServiceCompensationService methods:**
+
+- `createServiceRecord(dto, adminId)` — apply compensation
+- `revokeServiceRecord(id, reason, adminId)` — undo compensation (restore dari daySnapshots)
+- `getByContractId(contractId)` — list service records
+- `getById(id)` — detail satu record
+
+**daySnapshots JSON** — menyimpan state asli setiap hari sebelum kompensasi, memungkinkan revoke sempurna.
+
+**Payment Shifting:** Hari PAID di periode service → COMPENSATED, payment di-shift ke hari UNPAID pertama setelah endDate (skip HOLIDAY).
+
+**Holiday handling:** HOLIDAY days di periode service tidak di-compensate (skip, tetap HOLIDAY).

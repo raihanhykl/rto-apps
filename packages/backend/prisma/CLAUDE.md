@@ -11,20 +11,21 @@
 - **Provider**: PostgreSQL (production), SQLite tidak digunakan
 - **ORM**: Prisma v6
 
-### Models (6 model)
+### Models (7 model)
 
-| Model    | Keterangan                                             |
-| -------- | ------------------------------------------------------ |
-| User     | Admin user (role: SUPER_ADMIN/ADMIN/VIEWER)            |
-| Customer | Data customer (soft delete: isDeleted, deletedAt)      |
-| Contract | Kontrak RTO (soft delete, status machine)              |
-| Invoice  | Semua pembayaran: DP, harian, manual (unified PMT-xxx) |
-| AuditLog | Log semua operasi mutasi                               |
-| Setting  | Key-value settings (penalty_grace_days, dll.)          |
+| Model         | Keterangan                                             |
+| ------------- | ------------------------------------------------------ |
+| User          | Admin user (role: SUPER_ADMIN/ADMIN/VIEWER)            |
+| Customer      | Data customer (soft delete: isDeleted, deletedAt)      |
+| Contract      | Kontrak RTO (soft delete, status machine)              |
+| Invoice       | Semua pembayaran: DP, harian, manual (unified PMT-xxx) |
+| AuditLog      | Log semua operasi mutasi                               |
+| Setting       | Key-value settings (penalty_grace_days, dll.)          |
+| ServiceRecord | Record servis motor: MINOR/MAJOR, kompensasi hari      |
 
-### Enums (10 enum)
+### Enums (12 enum)
 
-`MotorModel, BatteryType, ContractStatus, PaymentStatus, InvoiceType, DPScheme, HolidayScheme, Gender, AuditAction, UserRole`
+`MotorModel, BatteryType, ContractStatus, PaymentStatus, InvoiceType, DPScheme, HolidayScheme, Gender, AuditAction, UserRole, ServiceType, ServiceRecordStatus`
 
 ### Naming Convention
 

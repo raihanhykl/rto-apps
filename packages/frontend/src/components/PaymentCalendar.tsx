@@ -9,7 +9,7 @@ import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 
 interface CalendarDay {
   date: string;
-  status: 'paid' | 'pending' | 'overdue' | 'holiday' | 'not_issued' | 'voided';
+  status: 'paid' | 'pending' | 'overdue' | 'holiday' | 'not_issued' | 'voided' | 'compensated';
   amount?: number;
 }
 
@@ -29,6 +29,7 @@ const STATUS_COLORS: Record<string, { bg: string; text: string; label: string }>
     label: 'Belum Terbit',
   },
   voided: { bg: 'bg-gray-400', text: 'text-white', label: 'Dibatalkan' },
+  compensated: { bg: 'bg-violet-500', text: 'text-white', label: 'Kompensasi Servis' },
 };
 
 const DAY_NAMES = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
@@ -94,7 +95,15 @@ export default function PaymentCalendar({ contractId, billingStartDate }: Paymen
   });
 
   // Count stats
-  const stats = { paid: 0, pending: 0, overdue: 0, holiday: 0, not_issued: 0, voided: 0 };
+  const stats = {
+    paid: 0,
+    pending: 0,
+    overdue: 0,
+    holiday: 0,
+    not_issued: 0,
+    voided: 0,
+    compensated: 0,
+  };
   days.forEach((d) => {
     if (d.status in stats) stats[d.status as keyof typeof stats]++;
   });

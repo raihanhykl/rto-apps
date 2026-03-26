@@ -56,6 +56,7 @@ describe('SavingService', () => {
       totalDaysPaid: 0,
       workingDaysPaid: 0,
       holidayDaysPaid: 0,
+      compensatedDaysPaid: 0,
       ownershipProgress: 0,
       gracePeriodDays: 7,
       savingBalance: 0,

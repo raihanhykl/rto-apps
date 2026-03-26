@@ -72,7 +72,7 @@ Monorepo (npm workspaces)
 └── railway.json          Railway deployment config
 ```
 
-## Running the Project (127 tests, 4 suites)
+## Running the Project (230 tests, 5 suites)
 
 ### Prerequisites
 
@@ -115,7 +115,7 @@ npm run dev
 ### Testing
 
 ```bash
-# Run all tests (127 tests, 4 suites)
+# Run all tests (230 tests, 5 suites)
 cd packages/backend && npm test
 
 # TypeScript check
@@ -136,18 +136,20 @@ cd packages/frontend && npm run build
 
 ## Database Schema
 
-6 models with full relations:
+8 models with full relations:
 
-| Model    | Description                                                    |
-| -------- | -------------------------------------------------------------- |
-| User     | Admin users (username, password, role)                         |
-| Customer | Customer data (KTP, contact, guarantor, spouse, documents)     |
-| Contract | RTO contracts (motor, battery, DP, ownership tracking)         |
-| Invoice  | Unified payment records — PMT-xxx (DP, daily, manual, holiday) |
-| AuditLog | All mutation operations logged                                 |
-| Setting  | Configurable system settings                                   |
+| Model         | Description                                                    |
+| ------------- | -------------------------------------------------------------- |
+| User          | Admin users (username, password, role)                         |
+| Customer      | Customer data (KTP, contact, guarantor, spouse, documents)     |
+| Contract      | RTO contracts (motor, battery, DP, ownership tracking)         |
+| Invoice       | Unified payment records — PMT-xxx (DP, daily, manual, holiday) |
+| PaymentDay    | Per-date payment status records per contract                   |
+| ServiceRecord | Bike service records with day snapshots for compensation       |
+| AuditLog      | All mutation operations logged                                 |
+| Setting       | Configurable system settings                                   |
 
-9 enums: MotorModel, BatteryType, ContractStatus, PaymentStatus, InvoiceType, DPScheme, Gender, AuditAction, UserRole
+13 enums: MotorModel, BatteryType, ContractStatus, PaymentStatus, InvoiceType, DPScheme, PaymentDayStatus, HolidayScheme, ServiceType, ServiceRecordStatus, Gender, AuditAction, UserRole
 
 ## API Endpoints
 
@@ -242,6 +244,15 @@ cd packages/frontend && npm run build
 | POST   | /api/savings/contract/:contractId/debit-transfer | Debit saving untuk biaya balik nama STNK/BPKB |
 | POST   | /api/savings/contract/:contractId/claim          | Claim sisa saving oleh customer               |
 | POST   | /api/savings/contract/:contractId/recalculate    | Recalculate saving balance dari transaksi     |
+
+### Service Records (Kompensasi Servis)
+
+| Method | Path                                      | Description                             |
+| ------ | ----------------------------------------- | --------------------------------------- |
+| POST   | /api/service-records                      | Create service record                   |
+| GET    | /api/service-records/contract/:contractId | List service records by contract        |
+| GET    | /api/service-records/:id                  | Get service record detail               |
+| PATCH  | /api/service-records/:id/revoke           | Revoke service record (undo kompensasi) |
 
 ### Webhook
 

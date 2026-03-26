@@ -451,6 +451,7 @@ export async function seedDummyData(
       totalDaysPaid: actualTotalDaysPaid,
       workingDaysPaid: workingCount,
       holidayDaysPaid: actualTotalDaysPaid - workingCount,
+      compensatedDaysPaid: 0,
       ownershipProgress: progress,
       gracePeriodDays: DEFAULT_GRACE_PERIOD_DAYS,
       savingBalance: 0,

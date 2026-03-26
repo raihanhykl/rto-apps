@@ -94,6 +94,17 @@ export enum PaymentDayStatus {
   PAID = 'PAID',
   HOLIDAY = 'HOLIDAY',
   VOIDED = 'VOIDED',
+  COMPENSATED = 'COMPENSATED',
+}
+
+export enum ServiceType {
+  MINOR = 'MINOR',
+  MAJOR = 'MAJOR',
+}
+
+export enum ServiceRecordStatus {
+  ACTIVE = 'ACTIVE',
+  REVOKED = 'REVOKED',
 }
 
 export enum SavingTransactionType {

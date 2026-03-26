@@ -18,9 +18,18 @@ import {
   useContractDetail,
   useActivePayment,
   useSavingByContract,
+  useServiceRecords,
   useInvalidate,
 } from '@/hooks/useApi';
-import { Contract, Customer, Invoice, SavingTransactionType } from '@/types';
+import {
+  Contract,
+  Customer,
+  Invoice,
+  SavingTransactionType,
+  ServiceRecord,
+  ServiceType,
+  ServiceRecordStatus,
+} from '@/types';
 import { formatCurrency, formatDate, formatDateTime, getWibToday } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -50,6 +59,9 @@ import {
   ChevronDown,
   ChevronUp,
   Wallet,
+  Wrench,
+  Plus,
+  ShieldOff,
 } from 'lucide-react';
 import {
   Dialog,
@@ -158,6 +170,7 @@ export default function ContractDetailPage() {
   const { data: detailData, isLoading: detailLoading } = useContractDetail(id);
   const { data: activePaymentData } = useActivePayment(id);
   const { data: savingData, mutate: mutateSaving } = useSavingByContract(id);
+  const { data: serviceRecordsData, mutate: mutateServiceRecords } = useServiceRecords(id);
 
   const contract = ((detailData as any)?.contract as Contract | undefined) ?? null;
   const customer = ((detailData as any)?.customer as Customer | undefined) ?? null;
@@ -315,6 +328,20 @@ export default function ContractDetailPage() {
     (savingPage - 1) * SAVING_PAGE_SIZE,
     savingPage * SAVING_PAGE_SIZE,
   );
+
+  // Service record state
+  const [servisOpen, setServisOpen] = useState(true);
+  const [servisPage, setServisPage] = useState(1);
+  const [addServisDialogOpen, setAddServisDialogOpen] = useState(false);
+  const [revokeServisDialogOpen, setRevokeServisDialogOpen] = useState(false);
+  const [revokeServisTarget, setRevokeServisTarget] = useState<ServiceRecord | null>(null);
+  const [servisType, setServisType] = useState<ServiceType>(ServiceType.MINOR);
+  const [servisReplacement, setServisReplacement] = useState(false);
+  const [servisStartDate, setServisStartDate] = useState('');
+  const [servisEndDate, setServisEndDate] = useState('');
+  const [servisNotes, setServisNotes] = useState('');
+  const [servisAttachment, setServisAttachment] = useState('');
+  const [revokeReason, setRevokeReason] = useState('');
 
   // Collapsible sections
   const [tagihanOpen, setTagihanOpen] = useState(true);
@@ -556,6 +583,61 @@ export default function ContractDetailPage() {
     }
   };
 
+  const handleCreateServiceRecord = async () => {
+    if (!servisStartDate || !servisEndDate) {
+      toastError('Gagal', 'Tanggal mulai dan selesai wajib diisi.');
+      return;
+    }
+    setProcessing(true);
+    try {
+      await api.createServiceRecord({
+        contractId: id,
+        serviceType: servisType,
+        replacementProvided: servisReplacement,
+        startDate: servisStartDate,
+        endDate: servisEndDate,
+        notes: servisNotes || undefined,
+        attachment: servisAttachment || null,
+      });
+      toastSuccess('Berhasil', 'Record servis berhasil ditambahkan.');
+      setAddServisDialogOpen(false);
+      setServisType(ServiceType.MINOR);
+      setServisReplacement(false);
+      setServisStartDate('');
+      setServisEndDate('');
+      setServisNotes('');
+      setServisAttachment('');
+      mutateServiceRecords();
+      refreshAll();
+    } catch (error: any) {
+      toastError('Gagal', error?.message || 'Gagal membuat record servis.');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleRevokeServiceRecord = async () => {
+    if (!revokeServisTarget) return;
+    if (!revokeReason.trim()) {
+      toastError('Gagal', 'Alasan revoke wajib diisi.');
+      return;
+    }
+    setProcessing(true);
+    try {
+      await api.revokeServiceRecord(revokeServisTarget.id, revokeReason);
+      toastSuccess('Berhasil', 'Record servis berhasil di-revoke.');
+      setRevokeServisDialogOpen(false);
+      setRevokeServisTarget(null);
+      setRevokeReason('');
+      mutateServiceRecords();
+      refreshAll();
+    } catch (error: any) {
+      toastError('Gagal', error?.message || 'Gagal me-revoke record servis.');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -587,6 +669,14 @@ export default function ContractDetailPage() {
   );
 
   const dpInvoices = invoices.filter((inv) => inv.type === 'DP' || inv.type === 'DP_INSTALLMENT');
+
+  const serviceRecords = (serviceRecordsData as ServiceRecord[]) || [];
+  const SERVIS_PAGE_SIZE = 5;
+  const servisTotalPages = Math.ceil(serviceRecords.length / SERVIS_PAGE_SIZE);
+  const servisSlice = serviceRecords.slice(
+    (servisPage - 1) * SERVIS_PAGE_SIZE,
+    servisPage * SERVIS_PAGE_SIZE,
+  );
 
   return (
     <div className="space-y-6">
@@ -812,6 +902,14 @@ export default function ContractDetailPage() {
                 <p className="text-xs text-muted-foreground">Total Bayar</p>
                 <p className="font-bold text-lg">{formatCurrency(contract.totalAmount)}</p>
               </div>
+              {(contract.compensatedDaysPaid ?? 0) > 0 && (
+                <div className="px-4 py-2 rounded-lg bg-white/60 dark:bg-gray-900/40">
+                  <p className="text-xs text-muted-foreground">Kompensasi</p>
+                  <p className="font-bold text-lg text-violet-600">
+                    {contract.compensatedDaysPaid}
+                  </p>
+                </div>
+              )}
               <div className="px-4 py-2 rounded-lg bg-white/60 dark:bg-gray-900/40">
                 <p className="text-xs text-muted-foreground">Saving</p>
                 <p className="font-bold text-lg">{formatCurrency(contract.savingBalance)}</p>
@@ -1409,6 +1507,135 @@ export default function ContractDetailPage() {
                       size="sm"
                       disabled={tagihanPage >= tagihanTotalPages}
                       onClick={() => setTagihanPage(tagihanPage + 1)}
+                    >
+                      Selanjutnya
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        )}
+      </Card>
+
+      {/* Riwayat Servis */}
+      <Card>
+        <CardHeader className="cursor-pointer" onClick={() => setServisOpen(!servisOpen)}>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Wrench className="h-5 w-5" /> Riwayat Servis ({serviceRecords.length})
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              {(contract.status === 'ACTIVE' || contract.status === 'OVERDUE') && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setAddServisDialogOpen(true);
+                  }}
+                >
+                  <Plus className="h-3.5 w-3.5 mr-1" /> Tambah Record Servis
+                </Button>
+              )}
+              {servisOpen ? (
+                <ChevronUp className="h-5 w-5 text-muted-foreground" />
+              ) : (
+                <ChevronDown className="h-5 w-5 text-muted-foreground" />
+              )}
+            </div>
+          </div>
+        </CardHeader>
+        {servisOpen && (
+          <CardContent>
+            {serviceRecords.length === 0 ? (
+              <p className="text-muted-foreground text-center py-4">Belum ada riwayat servis.</p>
+            ) : (
+              <div className="space-y-3">
+                {servisSlice.map((record) => (
+                  <div key={record.id} className="border rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Badge
+                          variant={record.serviceType === ServiceType.MAJOR ? 'default' : 'outline'}
+                        >
+                          {record.serviceType === ServiceType.MAJOR ? 'Major' : 'Minor'}
+                        </Badge>
+                        <Badge
+                          variant={
+                            record.status === ServiceRecordStatus.ACTIVE ? 'success' : 'secondary'
+                          }
+                        >
+                          {record.status === ServiceRecordStatus.ACTIVE ? 'Aktif' : 'Dibatalkan'}
+                        </Badge>
+                        {record.replacementProvided && (
+                          <Badge variant="outline" className="text-violet-600 border-violet-300">
+                            Motor Pengganti
+                          </Badge>
+                        )}
+                      </div>
+                      {record.status === ServiceRecordStatus.ACTIVE && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-orange-600 border-orange-300 hover:bg-orange-50"
+                          onClick={() => {
+                            setRevokeServisTarget(record);
+                            setRevokeServisDialogOpen(true);
+                          }}
+                        >
+                          <ShieldOff className="h-3.5 w-3.5 mr-1" /> Revoke
+                        </Button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Tanggal Mulai</p>
+                        <p className="font-medium">{formatDate(record.startDate)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Tanggal Selesai</p>
+                        <p className="font-medium">{formatDate(record.endDate)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Hari Kompensasi</p>
+                        <p className="font-medium text-violet-600">
+                          {record.compensationDays} hari
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Dibuat</p>
+                        <p className="font-medium text-xs">{formatDate(record.createdAt)}</p>
+                      </div>
+                    </div>
+                    {record.notes && (
+                      <p className="text-sm text-muted-foreground mt-2">{record.notes}</p>
+                    )}
+                    {record.status === ServiceRecordStatus.REVOKED && record.revokeReason && (
+                      <div className="mt-2 bg-gray-50 dark:bg-gray-900/30 rounded p-2 text-xs text-muted-foreground">
+                        <span className="font-medium">Alasan revoke:</span> {record.revokeReason}
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {servisTotalPages > 1 && (
+                  <div className="flex items-center justify-center gap-2 pt-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={servisPage <= 1}
+                      onClick={() => setServisPage(servisPage - 1)}
+                    >
+                      Sebelumnya
+                    </Button>
+                    <span className="text-xs text-muted-foreground">
+                      {servisPage} / {servisTotalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={servisPage >= servisTotalPages}
+                      onClick={() => setServisPage(servisPage + 1)}
                     >
                       Selanjutnya
                     </Button>
@@ -2342,6 +2569,187 @@ export default function ContractDetailPage() {
             </Button>
             <Button onClick={handleClaimSaving} disabled={processing}>
               {processing ? 'Memproses...' : 'Claim'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Tambah Record Servis */}
+      <Dialog
+        open={addServisDialogOpen}
+        onOpenChange={(open) => {
+          setAddServisDialogOpen(open);
+          if (!open) {
+            setServisType(ServiceType.MINOR);
+            setServisReplacement(false);
+            setServisStartDate('');
+            setServisEndDate('');
+            setServisNotes('');
+            setServisAttachment('');
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Wrench className="h-5 w-5" /> Tambah Record Servis
+            </DialogTitle>
+            <DialogDescription>
+              Catat servis motor untuk kontrak {contract.contractNumber}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>
+                Jenis Servis <span className="text-destructive">*</span>
+              </Label>
+              <select
+                className="w-full border border-input rounded-md px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                value={servisType}
+                onChange={(e) => {
+                  setServisType(e.target.value as ServiceType);
+                  if (e.target.value === ServiceType.MINOR) {
+                    setServisReplacement(false);
+                  }
+                }}
+              >
+                <option value={ServiceType.MINOR}>Minor</option>
+                <option value={ServiceType.MAJOR}>Major</option>
+              </select>
+            </div>
+            {servisType === ServiceType.MAJOR && (
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="servis-replacement"
+                  checked={servisReplacement}
+                  onChange={(e) => setServisReplacement(e.target.checked)}
+                  className="h-4 w-4 rounded border-input"
+                />
+                <Label htmlFor="servis-replacement">Motor pengganti tersedia?</Label>
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>
+                  Tanggal Mulai <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  type="date"
+                  value={servisStartDate}
+                  onChange={(e) => setServisStartDate(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>
+                  Tanggal Selesai <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  type="date"
+                  value={servisEndDate}
+                  onChange={(e) => setServisEndDate(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Catatan</Label>
+              <Textarea
+                placeholder="Deskripsi servis (opsional)..."
+                value={servisNotes}
+                onChange={(e) => setServisNotes(e.target.value)}
+                rows={3}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>URL Lampiran</Label>
+              <Input
+                placeholder="URL foto/dokumen (opsional)"
+                value={servisAttachment}
+                onChange={(e) => setServisAttachment(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setAddServisDialogOpen(false)}
+              disabled={processing}
+            >
+              Batal
+            </Button>
+            <Button
+              onClick={handleCreateServiceRecord}
+              disabled={processing || !servisStartDate || !servisEndDate}
+            >
+              {processing ? 'Menyimpan...' : 'Simpan'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Konfirmasi Revoke Servis */}
+      <Dialog
+        open={revokeServisDialogOpen}
+        onOpenChange={(open) => {
+          setRevokeServisDialogOpen(open);
+          if (!open) {
+            setRevokeServisTarget(null);
+            setRevokeReason('');
+          }
+        }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-orange-600">
+              <ShieldOff className="h-5 w-5" /> Revoke Record Servis
+            </DialogTitle>
+            <DialogDescription>
+              Batalkan record servis ini? Kompensasi hari yang sudah diberikan akan dikembalikan.
+            </DialogDescription>
+          </DialogHeader>
+          {revokeServisTarget && (
+            <div className="bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-900 rounded-lg p-4 text-sm space-y-1">
+              <p>
+                <strong>Jenis:</strong>{' '}
+                {revokeServisTarget.serviceType === ServiceType.MAJOR ? 'Major' : 'Minor'}
+              </p>
+              <p>
+                <strong>Periode:</strong> {formatDate(revokeServisTarget.startDate)} —{' '}
+                {formatDate(revokeServisTarget.endDate)}
+              </p>
+              <p>
+                <strong>Kompensasi:</strong> {revokeServisTarget.compensationDays} hari
+              </p>
+            </div>
+          )}
+          <div className="space-y-2">
+            <Label>
+              Alasan Revoke <span className="text-destructive">*</span>
+            </Label>
+            <Textarea
+              value={revokeReason}
+              onChange={(e) => setRevokeReason(e.target.value)}
+              placeholder="Masukkan alasan revoke..."
+              rows={3}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setRevokeServisDialogOpen(false);
+                setRevokeServisTarget(null);
+                setRevokeReason('');
+              }}
+            >
+              Batal
+            </Button>
+            <Button
+              className="bg-orange-600 hover:bg-orange-700 text-white"
+              onClick={handleRevokeServiceRecord}
+              disabled={processing || !revokeReason.trim()}
+            >
+              {processing ? 'Memproses...' : 'Ya, Revoke'}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -10,3 +10,4 @@ export { AuditService } from './AuditService';
 export { SettingService } from './SettingService';
 export { PdfService } from './PdfService';
 export { SavingService } from './SavingService';
+export { ServiceCompensationService } from './ServiceCompensationService';

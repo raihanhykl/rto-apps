@@ -80,6 +80,7 @@ enum PaymentDayStatus {
   PAID
   HOLIDAY
   VOIDED
+  COMPENSATED
 }
 
 enum SavingTransactionType {
@@ -88,6 +89,16 @@ enum SavingTransactionType {
   DEBIT_TRANSFER
   DEBIT_CLAIM
   REVERSAL
+}
+
+enum ServiceType {
+  MINOR
+  MAJOR
+}
+
+enum ServiceRecordStatus {
+  ACTIVE
+  REVOKED
 }
 
 // ============ MODELS ============
@@ -175,6 +186,7 @@ model Contract {
   totalDaysPaid       Int       @default(0) @map("total_days_paid")
   workingDaysPaid     Int       @default(0) @map("working_days_paid")
   holidayDaysPaid     Int       @default(0) @map("holiday_days_paid")
+  compensatedDaysPaid Int       @default(0) @map("compensated_days_paid")
   ownershipProgress   Float     @default(0) @map("ownership_progress")
   gracePeriodDays     Int       @default(7) @map("grace_period_days")
   savingBalance       Int       @default(0) @map("saving_balance")
@@ -189,6 +201,7 @@ model Contract {
   invoices           Invoice[]
   paymentDays        PaymentDay[]
   savingTransactions SavingTransaction[]
+  serviceRecords     ServiceRecord[]
 
   @@index([customerId])
   @@index([status])
@@ -319,4 +332,33 @@ model SavingTransaction {
   @@index([paymentId])
   @@index([type])
   @@map("saving_transactions")
+}
+
+model ServiceRecord {
+  id                  String              @id @default(uuid())
+  contractId          String              @map("contract_id")
+  serviceType         ServiceType         @map("service_type")
+  replacementProvided Boolean             @default(false) @map("replacement_provided")
+  startDate           DateTime            @map("start_date")
+  endDate             DateTime            @map("end_date")
+  compensationDays    Int                 @default(0) @map("compensation_days")
+  notes               String              @default("")
+  attachment          String?
+
+  daySnapshots        Json?               @map("day_snapshots")
+
+  status              ServiceRecordStatus @default(ACTIVE)
+  revokedAt           DateTime?           @map("revoked_at")
+  revokedBy           String?             @map("revoked_by")
+  revokeReason        String?             @map("revoke_reason")
+
+  createdBy           String              @map("created_by")
+  createdAt           DateTime            @default(now()) @map("created_at")
+  updatedAt           DateTime            @updatedAt @map("updated_at")
+
+  contract Contract @relation(fields: [contractId], references: [id])
+
+  @@index([contractId])
+  @@index([status])
+  @@map("service_records")
 }
