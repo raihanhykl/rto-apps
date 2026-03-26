@@ -10,6 +10,7 @@ import { SettingController } from '../controllers/SettingController';
 import { SavingController } from '../controllers/SavingController';
 import { ServiceRecordController } from '../controllers/ServiceRecordController';
 import { MOTOR_DAILY_RATES } from '../../domain/enums';
+import { Scheduler } from '../../infrastructure/scheduler';
 
 interface RouteControllers {
   authController: AuthController;
@@ -22,6 +23,7 @@ interface RouteControllers {
   settingController: SettingController;
   savingController: SavingController;
   serviceRecordController: ServiceRecordController;
+  scheduler: Scheduler;
   authMiddleware: any;
 }
 
@@ -195,6 +197,19 @@ export function createRoutes(controllers: RouteControllers): Router {
     authMiddleware,
     controllers.serviceRecordController.revoke,
   );
+
+  // Scheduler (Manual Trigger)
+  router.post('/scheduler/run-daily-tasks', authMiddleware, async (_req, res, next) => {
+    try {
+      const result = await controllers.scheduler.runManual();
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  });
+  router.get('/scheduler/status', authMiddleware, (_req, res) => {
+    res.json(controllers.scheduler.getStatus());
+  });
 
   return router;
 }

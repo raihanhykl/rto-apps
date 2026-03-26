@@ -2,13 +2,24 @@ import { schedule, ScheduledTask } from 'node-cron';
 import { PaymentService } from '../application/services/PaymentService';
 import { ContractService } from '../application/services/ContractService';
 
+export interface SchedulerStatus {
+  isStarted: boolean;
+  isJobRunning: boolean;
+  lastRunAt: Date | null;
+  lastRunResult: 'success' | 'error' | null;
+}
+
 /**
  * Scheduler that runs daily tasks using node-cron.
  * Executes at 00:01 every day (Asia/Jakarta timezone).
+ * Also supports manual trigger via runManual() with concurrency lock.
  */
 export class Scheduler {
   private task: ScheduledTask | null = null;
-  private isRunning = false;
+  private isStarted = false;
+  private isJobRunning = false;
+  private lastRunAt: Date | null = null;
+  private lastRunResult: 'success' | 'error' | null = null;
 
   constructor(
     private paymentService: PaymentService,
@@ -20,8 +31,8 @@ export class Scheduler {
    * Runs daily tasks immediately on startup, then at 00:01 every day.
    */
   start(): void {
-    if (this.isRunning) return;
-    this.isRunning = true;
+    if (this.isStarted) return;
+    this.isStarted = true;
 
     console.log('⏰ Scheduler started (cron: every day at 00:01 WIB)');
 
@@ -48,17 +59,46 @@ export class Scheduler {
       this.task.stop();
       this.task = null;
     }
-    this.isRunning = false;
+    this.isStarted = false;
     console.log('⏰ Scheduler stopped');
   }
 
   /**
+   * Get current scheduler status.
+   */
+  getStatus(): SchedulerStatus {
+    return {
+      isStarted: this.isStarted,
+      isJobRunning: this.isJobRunning,
+      lastRunAt: this.lastRunAt,
+      lastRunResult: this.lastRunResult,
+    };
+  }
+
+  /**
+   * Manual trigger with concurrency lock.
+   * Returns false if job is already running.
+   */
+  async runManual(): Promise<{ success: boolean; message: string }> {
+    if (this.isJobRunning) {
+      return { success: false, message: 'Job sedang berjalan, silakan tunggu.' };
+    }
+
+    await this.runDailyTasks();
+    return { success: true, message: 'Daily tasks berhasil dijalankan.' };
+  }
+
+  /**
    * Run all daily tasks:
-   * 1. Rollover expired payments
-   * 2. Generate new daily payments
-   * 3. Check and update overdue contracts
+   * 1. Extend PaymentDay records
+   * 2. Rollover expired payments
+   * 3. Generate new daily payments
+   * 4. Check and update overdue contracts
    */
   async runDailyTasks(): Promise<void> {
+    if (this.isJobRunning) return; // Prevent concurrent execution
+    this.isJobRunning = true;
+
     const now = new Date();
     console.log(`⏰ Running daily tasks at ${now.toISOString()}`);
 
@@ -82,9 +122,15 @@ export class Scheduler {
         console.log(`  ⚠️  Marked ${overdueCount} contracts as OVERDUE`);
       }
 
+      this.lastRunAt = new Date();
+      this.lastRunResult = 'success';
       console.log('⏰ Daily tasks completed');
     } catch (error) {
+      this.lastRunAt = new Date();
+      this.lastRunResult = 'error';
       console.error('⏰ Daily tasks failed:', error);
+    } finally {
+      this.isJobRunning = false;
     }
   }
 }
