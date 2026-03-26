@@ -2,7 +2,7 @@
 name: backend-agent
 description: Specialized backend engineer untuk WEDISON RTO system. Gunakan agent ini untuk semua task yang berkaitan dengan: implementasi Express.js routes/controllers, business logic di services (PaymentService, ContractService, CustomerService, dll.), repository pattern (InMemory & Prisma), domain entities, application DTOs, Zod validation, audit logging, timezone WIB handling, scheduled jobs, dan middleware. Jangan gunakan untuk frontend, database schema/migration, atau unit tests — ada agent terpisah untuk itu.
 tools: Read, Write, Edit, Glob, Grep, Bash
-model: sonnet
+model: opus
 memory: project
 ---
 
