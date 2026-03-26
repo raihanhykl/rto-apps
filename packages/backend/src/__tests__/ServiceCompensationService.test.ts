@@ -937,6 +937,219 @@ describe('ServiceCompensationService', () => {
       expect(revoked.revokedBy).toBe(adminId);
       expect(revoked.revokeReason).toBe(revokeReason);
     });
+
+    it('should restore PENDING days back to active invoice and expand it on revoke', async () => {
+      // Arrange: contract with 5 PENDING days (Jan 5-9) linked to one invoice
+      const contract = createTestContract({
+        holidayScheme: HolidayScheme.NEW_CONTRACT,
+        billingStartDate: new Date('2026-01-02'),
+      });
+      await contractRepo.create(contract);
+
+      // Create invoice covering Jan 5-9 (5 days)
+      const invoice = createTestInvoice(contract.id, {
+        status: PaymentStatus.PENDING,
+        daysCount: 5,
+        periodStart: new Date('2026-01-05'),
+        periodEnd: new Date('2026-01-09'),
+        dailyRate: 58000,
+        amount: 290000, // 5 * 58000
+        lateFee: 0,
+      });
+      await invoiceRepo.create(invoice);
+
+      // Create PENDING PaymentDays for Jan 5-9 all linked to the same invoice
+      for (const dateStr of [
+        '2026-01-05',
+        '2026-01-06',
+        '2026-01-07',
+        '2026-01-08',
+        '2026-01-09',
+      ]) {
+        const pd = createTestPaymentDay(contract.id, new Date(dateStr), PaymentDayStatus.PENDING, {
+          paymentId: invoice.id,
+          amount: 58000,
+        });
+        await paymentDayRepo.create(pd);
+      }
+
+      // Act: compensate days 5-7 (MAJOR, no replacement)
+      const record = await service.createServiceRecord(
+        {
+          contractId: contract.id,
+          serviceType: ServiceType.MAJOR,
+          replacementProvided: false,
+          startDate: '2026-01-05',
+          endDate: '2026-01-07',
+        },
+        adminId,
+      );
+
+      // Verify invoice was reduced to 2 days (Jan 8-9) after compensation
+      const invoiceAfterComp = await invoiceRepo.findById(invoice.id);
+      expect(invoiceAfterComp?.status).toBe(PaymentStatus.PENDING);
+      expect(invoiceAfterComp?.daysCount).toBe(2);
+      expect(invoiceAfterComp?.amount).toBe(116000); // 2 * 58000
+
+      // Act: revoke the service record
+      await service.revokeServiceRecord(record.id, 'Motor sudah kembali', adminId);
+
+      // Assert: days 5-7 are PENDING again (not UNPAID)
+      const pd5 = await paymentDayRepo.findByContractAndDate(contract.id, new Date('2026-01-05'));
+      const pd6 = await paymentDayRepo.findByContractAndDate(contract.id, new Date('2026-01-06'));
+      const pd7 = await paymentDayRepo.findByContractAndDate(contract.id, new Date('2026-01-07'));
+      expect(pd5?.status).toBe(PaymentDayStatus.PENDING);
+      expect(pd6?.status).toBe(PaymentDayStatus.PENDING);
+      expect(pd7?.status).toBe(PaymentDayStatus.PENDING);
+
+      // Assert: days 5-7 are linked to the same invoice
+      expect(pd5?.paymentId).toBe(invoice.id);
+      expect(pd6?.paymentId).toBe(invoice.id);
+      expect(pd7?.paymentId).toBe(invoice.id);
+
+      // Assert: invoice expanded back to 5 days
+      const invoiceAfterRevoke = await invoiceRepo.findById(invoice.id);
+      expect(invoiceAfterRevoke?.daysCount).toBe(5);
+      expect(invoiceAfterRevoke?.amount).toBe(290000); // 5 * 58000
+    });
+
+    it('should recalculate lateFee when reducing invoice during compensation', async () => {
+      // Arrange: contract (NEW_CONTRACT) with 5 PENDING days linked to an invoice that has lateFee
+      const contract = createTestContract({
+        holidayScheme: HolidayScheme.NEW_CONTRACT,
+        billingStartDate: new Date('2026-01-02'),
+      });
+      await contractRepo.create(contract);
+
+      // Create invoice with an existing lateFee value
+      const invoice = createTestInvoice(contract.id, {
+        status: PaymentStatus.PENDING,
+        daysCount: 5,
+        periodStart: new Date('2026-01-05'),
+        periodEnd: new Date('2026-01-09'),
+        dailyRate: 58000,
+        amount: 290000, // 5 * 58000
+        lateFee: 100000, // pre-existing late fee — should be recalculated after compensation
+      });
+      await invoiceRepo.create(invoice);
+
+      // Create PENDING PaymentDays for Jan 5-9 all linked to the same invoice
+      for (const dateStr of [
+        '2026-01-05',
+        '2026-01-06',
+        '2026-01-07',
+        '2026-01-08',
+        '2026-01-09',
+      ]) {
+        const pd = createTestPaymentDay(contract.id, new Date(dateStr), PaymentDayStatus.PENDING, {
+          paymentId: invoice.id,
+          amount: 58000,
+        });
+        await paymentDayRepo.create(pd);
+      }
+
+      // Act: compensate 2 of the 5 days (Jan 5-6), leaving 3 days in the invoice
+      await service.createServiceRecord(
+        {
+          contractId: contract.id,
+          serviceType: ServiceType.MAJOR,
+          replacementProvided: false,
+          startDate: '2026-01-05',
+          endDate: '2026-01-06',
+        },
+        adminId,
+      );
+
+      // Assert: invoice daysCount was reduced
+      const updatedInvoice = await invoiceRepo.findById(invoice.id);
+      expect(updatedInvoice?.status).toBe(PaymentStatus.PENDING);
+      expect(updatedInvoice?.daysCount).toBe(3); // 5 - 2 = 3 days remain
+
+      // Assert: lateFee was recalculated (not the stale 100000 value)
+      // The recalculated lateFee depends on current date vs paymentDay dates,
+      // but it must NOT be 100000 (which was for 5 days with stale logic)
+      // Since we are in a test environment with fixed dates far in the past relative to today (2026-01-05..09),
+      // all 3 remaining days have elapsed, so lateFee should be recalculated from scratch.
+      expect(updatedInvoice?.lateFee).not.toBe(100000);
+    });
+
+    it('should not create orphaned UNPAID days after revoke (no duplicate invoices)', async () => {
+      // Arrange: contract with 5 PENDING days (Jan 5-9) linked to one invoice
+      const contract = createTestContract({
+        holidayScheme: HolidayScheme.NEW_CONTRACT,
+        billingStartDate: new Date('2026-01-02'),
+      });
+      await contractRepo.create(contract);
+
+      // Create invoice covering Jan 5-9 (5 days)
+      const invoice = createTestInvoice(contract.id, {
+        status: PaymentStatus.PENDING,
+        daysCount: 5,
+        periodStart: new Date('2026-01-05'),
+        periodEnd: new Date('2026-01-09'),
+        dailyRate: 58000,
+        amount: 290000, // 5 * 58000
+        lateFee: 0,
+      });
+      await invoiceRepo.create(invoice);
+
+      // Create PENDING PaymentDays for Jan 5-9 all linked to the same invoice
+      for (const dateStr of [
+        '2026-01-05',
+        '2026-01-06',
+        '2026-01-07',
+        '2026-01-08',
+        '2026-01-09',
+      ]) {
+        const pd = createTestPaymentDay(contract.id, new Date(dateStr), PaymentDayStatus.PENDING, {
+          paymentId: invoice.id,
+          amount: 58000,
+        });
+        await paymentDayRepo.create(pd);
+      }
+
+      // Act: compensate days 5-7 then revoke
+      const record = await service.createServiceRecord(
+        {
+          contractId: contract.id,
+          serviceType: ServiceType.MAJOR,
+          replacementProvided: false,
+          startDate: '2026-01-05',
+          endDate: '2026-01-07',
+        },
+        adminId,
+      );
+      await service.revokeServiceRecord(record.id, 'Dibatalkan', adminId);
+
+      // Assert: all 5 days (Jan 5-9) have status PENDING
+      for (const dateStr of [
+        '2026-01-05',
+        '2026-01-06',
+        '2026-01-07',
+        '2026-01-08',
+        '2026-01-09',
+      ]) {
+        const pd = await paymentDayRepo.findByContractAndDate(contract.id, new Date(dateStr));
+        expect(pd?.status).toBe(PaymentDayStatus.PENDING);
+      }
+
+      // Assert: all 5 days are linked to the SAME invoice
+      for (const dateStr of [
+        '2026-01-05',
+        '2026-01-06',
+        '2026-01-07',
+        '2026-01-08',
+        '2026-01-09',
+      ]) {
+        const pd = await paymentDayRepo.findByContractAndDate(contract.id, new Date(dateStr));
+        expect(pd?.paymentId).toBe(invoice.id);
+      }
+
+      // Assert: there is only 1 active (PENDING) invoice for this contract
+      const activeInvoice = await invoiceRepo.findActiveByContractId(contract.id);
+      expect(activeInvoice).not.toBeNull();
+      expect(activeInvoice?.id).toBe(invoice.id);
+    });
   });
 
   // ============ syncContractFromPaymentDays with COMPENSATED ============
