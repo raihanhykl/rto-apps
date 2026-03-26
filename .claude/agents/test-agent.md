@@ -2,7 +2,7 @@
 name: test-agent
 description: Specialized testing engineer untuk WEDISON RTO. Gunakan agent ini untuk semua task yang berkaitan dengan: menulis unit tests baru (Jest + ts-jest) untuk backend services, memperbaiki unit tests yang gagal, meningkatkan test coverage, menulis atau memperbaiki E2E tests (Playwright), menganalisis test failures dan mencari root cause, serta memastikan semua tests pass sebelum commit. Jangan gunakan untuk implementasi fitur baru — test-agent fokus pada quality assurance.
 tools: Read, Write, Edit, Glob, Grep, Bash
-model: sonnet
+model: opus
 memory: project
 ---
 

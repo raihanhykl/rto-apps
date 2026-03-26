@@ -81,6 +81,15 @@ export class InMemoryInvoiceRepository implements IInvoiceRepository {
     return active || null;
   }
 
+  async findAllPendingByContractId(contractId: string): Promise<Invoice[]> {
+    return Array.from(this.invoices.values()).filter(
+      (i) =>
+        i.contractId === contractId &&
+        i.status === PaymentStatus.PENDING &&
+        (i.type === InvoiceType.DAILY_BILLING || i.type === InvoiceType.MANUAL_PAYMENT),
+    );
+  }
+
   async search(query: string): Promise<Invoice[]> {
     const q = query.toLowerCase();
     return Array.from(this.invoices.values())

@@ -2,7 +2,7 @@
 name: db-agent
 description: Specialized database engineer untuk WEDISON RTO. Gunakan agent ini untuk semua task yang berkaitan dengan: perubahan Prisma schema (menambah/mengubah model, field, relasi, enum), membuat dan menjalankan Prisma migrations, menambah/mengubah seed data di prisma/data/, debugging Prisma queries, optimasi query PostgreSQL, menambah index, dan railway deployment database concerns. Jangan gunakan untuk business logic di services atau frontend.
 tools: Read, Write, Edit, Glob, Grep, Bash
-model: sonnet
+model: opus
 memory: project
 ---
 

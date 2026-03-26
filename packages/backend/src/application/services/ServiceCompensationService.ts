@@ -16,7 +16,7 @@ import {
   AuditAction,
   MOTOR_DAILY_RATES,
 } from '../../domain/enums';
-import { toDateKey, toLocalMidnightWib } from '../../domain/utils/dateUtils';
+import { toDateKey, toLocalMidnightWib, getWibToday } from '../../domain/utils/dateUtils';
 import { PaymentService } from './PaymentService';
 import { SavingService } from './SavingService';
 import { v4 as uuidv4 } from 'uuid';
@@ -384,13 +384,61 @@ export class ServiceCompensationService {
             }
           }
         } else if (snap.originalStatus === 'PENDING' || snap.originalStatus === 'UNPAID') {
-          // Restore to UNPAID (scheduler will regenerate PENDING invoice)
+          // Temporarily restore to UNPAID — will be re-linked to invoice below
           await this.paymentDayRepo.update(pd.id, {
             status: PaymentDayStatus.UNPAID,
             amount: dailyRate,
             paymentId: null,
           });
         }
+      }
+
+      // Re-link originally PENDING days back to active invoice
+      const pendingSnapshots = record.daySnapshots.filter((s) => s.originalStatus === 'PENDING');
+      if (pendingSnapshots.length > 0) {
+        const activeInvoice = await this.invoiceRepo.findActiveByContractId(record.contractId);
+
+        if (activeInvoice) {
+          // Re-link restored days to the active invoice
+          for (const snap of pendingSnapshots) {
+            const snapDate = toLocalMidnightWib(new Date(snap.date));
+            const pd = await this.paymentDayRepo.findByContractAndDate(record.contractId, snapDate);
+            if (pd) {
+              await this.paymentDayRepo.update(pd.id, {
+                status: PaymentDayStatus.PENDING,
+                paymentId: activeInvoice.id,
+              });
+            }
+          }
+
+          // Expand invoice: recalculate from all linked PENDING days
+          const allLinkedDays = await this.paymentDayRepo.findByPaymentId(activeInvoice.id);
+          const pendingLinked = allLinkedDays.filter((d) => d.status === PaymentDayStatus.PENDING);
+          if (pendingLinked.length > 0) {
+            const dates = pendingLinked
+              .map((d) => d.date)
+              .sort((a, b) => a.getTime() - b.getTime());
+            const effectiveDailyRate = activeInvoice.dailyRate ?? dailyRate;
+            const newAmount = pendingLinked.length * effectiveDailyRate;
+
+            // Recalculate lateFee
+            const now = getWibToday();
+            const lateFee = await this.paymentService.calculateLateFee(
+              pendingLinked,
+              now,
+              contract.holidayScheme,
+            );
+
+            await this.invoiceRepo.update(activeInvoice.id, {
+              daysCount: pendingLinked.length,
+              amount: newAmount,
+              periodStart: dates[0],
+              periodEnd: dates[dates.length - 1],
+              lateFee,
+            });
+          }
+        }
+        // If no active invoice (was fully voided), leave as UNPAID — scheduler will pick up
       }
     }
 
@@ -514,19 +562,31 @@ export class ServiceCompensationService {
         status: PaymentStatus.VOID,
       });
     } else {
-      // Reduce invoice: recalculate daysCount, amount, and period
+      // Reduce invoice: recalculate daysCount, amount, period, and lateFee
       const newDaysCount = remainingPendingDays.length;
-      // dailyRate can be null for DP-type invoices; fall back to 0 but those won't reach here
       const effectiveDailyRate = invoice.dailyRate ?? 0;
       const newAmount = newDaysCount * effectiveDailyRate;
       const dates = remainingPendingDays
         .map((d) => d.date)
         .sort((a, b) => a.getTime() - b.getTime());
+
+      // Recalculate lateFee for remaining days
+      const contract = await this.contractRepo.findById(invoice.contractId);
+      const now = getWibToday();
+      const lateFee = contract
+        ? await this.paymentService.calculateLateFee(
+            remainingPendingDays,
+            now,
+            contract.holidayScheme,
+          )
+        : 0;
+
       await this.invoiceRepo.update(invoiceId, {
         daysCount: newDaysCount,
         amount: newAmount,
         periodStart: dates[0],
         periodEnd: dates[dates.length - 1],
+        lateFee,
       });
     }
   }
