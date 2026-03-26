@@ -27,15 +27,16 @@
 
 ## Test Suites yang Ada
 
-| File               | Suite           | Jumlah Test (approx) |
-| ------------------ | --------------- | -------------------- |
-| `auth.test.ts`     | AuthService     | ~20 tests            |
-| `customer.test.ts` | CustomerService | ~35 tests            |
-| `contract.test.ts` | ContractService | ~50 tests            |
-| `payment.test.ts`  | PaymentService  | ~70 tests            |
-| `saving.test.ts`   | SavingService   | ~25 tests            |
+| File                                 | Suite                      | Jumlah Test (approx) |
+| ------------------------------------ | -------------------------- | -------------------- |
+| `auth.test.ts`                       | AuthService                | ~20 tests            |
+| `customer.test.ts`                   | CustomerService            | ~35 tests            |
+| `contract.test.ts`                   | ContractService            | ~50 tests            |
+| `payment.test.ts`                    | PaymentService             | ~70 tests            |
+| `saving.test.ts`                     | SavingService              | ~25 tests            |
+| `ServiceCompensationService.test.ts` | ServiceCompensationService | 30 tests             |
 
-**Total: ~200 tests** saat ini.
+**Total: ~230 tests** saat ini.
 
 ---
 

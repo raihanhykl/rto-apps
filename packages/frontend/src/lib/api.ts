@@ -538,6 +538,37 @@ class ApiClient {
       method: 'POST',
     });
   }
+
+  // Service Records
+  async getServiceRecordsByContract(contractId: string) {
+    return this.request<any[]>(`/service-records/contract/${contractId}`);
+  }
+
+  async getServiceRecordById(id: string) {
+    return this.request<any>(`/service-records/${id}`);
+  }
+
+  async createServiceRecord(data: {
+    contractId: string;
+    serviceType: string;
+    replacementProvided: boolean;
+    startDate: string;
+    endDate: string;
+    notes?: string;
+    attachment?: string | null;
+  }) {
+    return this.request<any>('/service-records', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async revokeServiceRecord(id: string, reason: string) {
+    return this.request<any>(`/service-records/${id}/revoke`, {
+      method: 'PATCH',
+      body: JSON.stringify({ reason }),
+    });
+  }
 }
 
 export const api = new ApiClient();

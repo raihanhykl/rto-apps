@@ -48,6 +48,44 @@ export enum PaymentDayStatus {
   PAID = 'PAID',
   HOLIDAY = 'HOLIDAY',
   VOIDED = 'VOIDED',
+  COMPENSATED = 'COMPENSATED',
+}
+
+export enum ServiceType {
+  MINOR = 'MINOR',
+  MAJOR = 'MAJOR',
+}
+
+export enum ServiceRecordStatus {
+  ACTIVE = 'ACTIVE',
+  REVOKED = 'REVOKED',
+}
+
+export interface DaySnapshot {
+  date: string;
+  originalStatus: string;
+  shiftedToDate: string | null;
+  invoiceId: string | null;
+}
+
+export interface ServiceRecord {
+  id: string;
+  contractId: string;
+  serviceType: ServiceType;
+  replacementProvided: boolean;
+  startDate: string;
+  endDate: string;
+  compensationDays: number;
+  notes: string;
+  attachment: string | null;
+  daySnapshots: DaySnapshot[] | null;
+  status: ServiceRecordStatus;
+  revokedAt: string | null;
+  revokedBy: string | null;
+  revokeReason: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export enum SavingTransactionType {
@@ -151,6 +189,7 @@ export interface Contract {
   totalDaysPaid: number;
   workingDaysPaid: number;
   holidayDaysPaid: number;
+  compensatedDaysPaid?: number;
   ownershipProgress: number;
   gracePeriodDays: number;
   savingBalance: number;

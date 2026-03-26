@@ -32,7 +32,7 @@ import QRCode from 'qrcode';
 
 export interface CalendarDay {
   date: string; // YYYY-MM-DD
-  status: 'paid' | 'pending' | 'overdue' | 'holiday' | 'not_issued' | 'voided';
+  status: 'paid' | 'pending' | 'overdue' | 'holiday' | 'not_issued' | 'voided' | 'compensated';
   amount?: number;
 }
 
@@ -184,16 +184,17 @@ export class PaymentService {
    * - OVERDUE → ACTIVE jika endDate + grace >= today
    * - ACTIVE → OVERDUE jika endDate + grace < today
    */
-  private async syncContractFromPaymentDays(contractId: string, today?: Date): Promise<void> {
+  async syncContractFromPaymentDays(contractId: string, today?: Date): Promise<void> {
     const contract = await this.contractRepo.findById(contractId);
     if (!contract) return;
 
     // Fetch ALL PaymentDay records sorted by date ASC
     const allDays = await this.paymentDayRepo.findByContractId(contractId);
 
-    // Contiguous walk: hitung PAID + HOLIDAY berturut-turut dari awal
+    // Contiguous walk: hitung PAID + HOLIDAY + COMPENSATED berturut-turut dari awal
     let paidCount = 0;
     let holidayCount = 0;
+    let compensatedCount = 0;
     let totalAmount = 0;
     let lastContiguousDate: Date | null = null;
 
@@ -205,6 +206,10 @@ export class PaymentService {
       } else if (pd.status === PaymentDayStatus.HOLIDAY) {
         holidayCount++;
         lastContiguousDate = pd.date;
+      } else if (pd.status === PaymentDayStatus.COMPENSATED) {
+        compensatedCount++;
+        lastContiguousDate = pd.date;
+        // COMPENSATED continues walk but does NOT count toward ownership
       } else {
         break; // Gap ditemukan — stop counting
       }
@@ -220,6 +225,7 @@ export class PaymentService {
       totalDaysPaid: totalPaid,
       workingDaysPaid: paidCount,
       holidayDaysPaid: holidayCount,
+      compensatedDaysPaid: compensatedCount,
       ownershipProgress: Math.min(progress, 100),
       durationDays: totalPaid,
       totalAmount,
@@ -942,6 +948,9 @@ export class PaymentService {
           break;
         case PaymentDayStatus.VOIDED:
           result.push({ date: dateKeyStr, status: 'voided' });
+          break;
+        case PaymentDayStatus.COMPENSATED:
+          result.push({ date: dateKeyStr, status: 'compensated' });
           break;
         case PaymentDayStatus.UNPAID: {
           // String comparison (YYYY-MM-DD sortable) — fully timezone-safe

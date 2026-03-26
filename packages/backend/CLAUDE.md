@@ -55,6 +55,10 @@ Presentation (controllers, routes)
 - Menambah API endpoint → controller di `presentation/controllers/` + route di `presentation/routes/`
 - Controller TIDAK boleh berisi business logic — hanya parse request, panggil service, return response
 
+**Services yang tersedia** (lihat `src/application/CLAUDE.md` untuk detail):
+
+`AuthService`, `CustomerService`, `ContractService`, `PaymentService`, `SettingService`, `SavingService`, `ServiceCompensationService`
+
 ---
 
 ## Repository Pattern (WAJIB)
@@ -122,7 +126,7 @@ cd packages/backend && npm run build     # prisma generate + tsc
 cd packages/backend && npx tsc --noEmit  # TypeScript check saja
 
 # Testing
-cd packages/backend && npm test          # Run all 200 unit tests (Jest)
+cd packages/backend && npm test          # Run all 230 unit tests (Jest)
 cd packages/backend && npm test -- --watch   # Watch mode
 cd packages/backend && npm test -- --coverage  # Coverage report
 

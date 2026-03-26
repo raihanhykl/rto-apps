@@ -36,6 +36,7 @@
 - [Late Payment Penalty & Penalty Grace Days (2026-03-10)](#2026-03-10---late-payment-penalty--grace-period-2-hari)
 - [Remove Penalty for Old Contracts (2026-03-24)](#2026-03-24---remove-penalty-for-old-contracts)
 - [Developer Tooling Setup (2026-03-24)](#2026-03-24---developer-tooling-setup)
+- [Service Compensation (2026-03-26)](#2026-03-26---service-compensation)
 - [Development Roadmap](#development-roadmap)
 
 ---
@@ -1569,6 +1570,81 @@ Setup tooling lengkap untuk meningkatkan developer experience, code quality, dan
 ### Tests
 
 200 unit tests passing (no changes). 3 E2E spec files added (Playwright).
+
+---
+
+## Service Compensation for Bike Service (2026-03-26)
+
+### Context
+
+Ketika motor customer diservis di service center dan tidak ada motor pengganti, customer mendapat kompensasi berupa pergeseran hari bayar. Hari service tidak dihitung ke ownership progress, tetapi kontrak diperpanjang secara natural.
+
+### What Was Changed
+
+**Backend:**
+
+- Tambah `COMPENSATED` ke `PaymentDayStatus` enum — status baru untuk hari kompensasi servis
+- Tambah enum `ServiceType` (MINOR/MAJOR) dan `ServiceRecordStatus` (ACTIVE/REVOKED)
+- Buat model `ServiceRecord` dengan `daySnapshots` JSON untuk rollback sempurna
+- Buat `ServiceCompensationService` — business logic utama: apply compensation + revoke
+- Modifikasi `syncContractFromPaymentDays()` — COMPENSATED continues contiguous walk tapi tidak dihitung ownership
+- Expose `syncContractFromPaymentDays()` dan `generatePaymentDaysForPeriod()` sebagai public
+- Tambah `compensatedDaysPaid` field ke Contract entity
+- Buat `IServiceRecordRepository` interface + InMemory dan Prisma implementations
+- Buat `ServiceRecordController` dengan 4 endpoints
+- Tambah DTOs: `CreateServiceRecordDto`, `RevokeServiceRecordDto`
+- Prisma migration: `20260326_add_service_compensation`
+
+**Frontend:**
+
+- Tambah section "Riwayat Servis" di contract detail page
+- Dialog form "Tambah Record Servis" dengan conditional fields (Motor pengganti checkbox hanya untuk Major)
+- Dialog konfirmasi "Revoke Record Servis"
+- Kalender pembayaran: warna violet untuk hari COMPENSATED + legend "Kompensasi Servis"
+- Quick stat "Kompensasi" di banner (tampil jika > 0)
+- Tambah types, API functions, dan SWR hooks
+
+**Tests:**
+
+- 30 unit tests baru (ServiceCompensationService) — total 230 tests
+- E2E verified via Playwright MCP
+
+### API Endpoints
+
+| Method | Path                                        | Description           |
+| ------ | ------------------------------------------- | --------------------- |
+| POST   | `/api/service-records`                      | Create service record |
+| GET    | `/api/service-records/contract/:contractId` | List by contract      |
+| GET    | `/api/service-records/:id`                  | Get by ID             |
+| PATCH  | `/api/service-records/:id/revoke`           | Revoke service record |
+
+### Files Modified (Backend)
+
+- `src/domain/enums/index.ts` — +COMPENSATED, +ServiceType, +ServiceRecordStatus
+- `src/domain/entities/Contract.ts` — +compensatedDaysPaid
+- `src/domain/entities/ServiceRecord.ts` — NEW: interface + DaySnapshot
+- `src/domain/interfaces/IServiceRecordRepository.ts` — NEW
+- `src/infrastructure/repositories/InMemoryServiceRecordRepository.ts` — NEW
+- `src/infrastructure/repositories/PrismaServiceRecordRepository.ts` — NEW
+- `src/application/dtos/index.ts` — +CreateServiceRecordDto, +RevokeServiceRecordDto
+- `src/application/services/ServiceCompensationService.ts` — NEW: core business logic
+- `src/application/services/PaymentService.ts` — COMPENSATED in contiguous walk + calendar
+- `src/presentation/controllers/ServiceRecordController.ts` — NEW
+- `src/presentation/routes/index.ts` — +service-records routes
+- `src/index.ts` — +DI wiring
+- `prisma/schema.prisma` — +ServiceRecord model, +enums
+- `prisma/migrations/20260326_add_service_compensation/migration.sql` — NEW
+- `src/__tests__/ServiceCompensationService.test.ts` — NEW: 30 tests
+
+### Files Modified (Frontend)
+
+- `src/types/index.ts` — +ServiceRecord, +enums, +Contract.compensatedDaysPaid
+- `src/lib/api.ts` — +4 API functions
+- `src/hooks/useApi.ts` — +useServiceRecords hook
+- `src/app/(dashboard)/contracts/[id]/page.tsx` — +Riwayat Servis section + form
+- `src/components/PaymentCalendar.tsx` — +compensated status/color
+
+### Test Count: 230 (was 200)
 
 ---
 

@@ -201,6 +201,15 @@ export function useSavingBalance(contractId: string | undefined) {
   );
 }
 
+// --- Service Records ---
+export function useServiceRecords(contractId: string | null) {
+  return useSWR(
+    contractId ? `/service-records/contract/${contractId}` : null,
+    contractId ? () => api.getServiceRecordsByContract(contractId) : null,
+    { dedupingInterval: TTL.DEFAULT },
+  );
+}
+
 // ===================== INVALIDATION =====================
 
 export function useInvalidate() {

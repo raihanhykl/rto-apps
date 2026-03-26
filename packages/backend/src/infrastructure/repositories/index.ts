@@ -7,6 +7,7 @@ export { InMemoryAuditLogRepository } from './InMemoryAuditLogRepository';
 export { InMemorySettingRepository } from './InMemorySettingRepository';
 export { InMemoryPaymentDayRepository } from './InMemoryPaymentDayRepository';
 export { InMemorySavingTransactionRepository } from './InMemorySavingTransactionRepository';
+export { InMemoryServiceRecordRepository } from './InMemoryServiceRecordRepository';
 
 // Prisma (used when DATABASE_URL is set)
 export { PrismaUserRepository } from './PrismaUserRepository';
@@ -17,3 +18,4 @@ export { PrismaAuditLogRepository } from './PrismaAuditLogRepository';
 export { PrismaSettingRepository } from './PrismaSettingRepository';
 export { PrismaPaymentDayRepository } from './PrismaPaymentDayRepository';
 export { PrismaSavingTransactionRepository } from './PrismaSavingTransactionRepository';
+export { PrismaServiceRecordRepository } from './PrismaServiceRecordRepository';

@@ -7,6 +7,7 @@ import {
   PaymentStatus,
   Gender,
   HolidayScheme,
+  ServiceType,
 } from '../../domain/enums';
 
 // Auth DTOs
@@ -121,3 +122,21 @@ export const ClaimSavingDto = z.object({
   notes: z.string().optional().nullable().default(null),
 });
 export type ClaimSavingDto = z.infer<typeof ClaimSavingDto>;
+
+// ============ Service Compensation DTOs ============
+
+export const CreateServiceRecordDto = z.object({
+  contractId: z.string().min(1, 'Contract ID wajib diisi'),
+  serviceType: z.nativeEnum(ServiceType),
+  replacementProvided: z.boolean(),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Format tanggal harus YYYY-MM-DD'),
+  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Format tanggal harus YYYY-MM-DD'),
+  notes: z.string().optional().default(''),
+  attachment: z.string().optional().nullable().default(null),
+});
+export type CreateServiceRecordDtoType = z.infer<typeof CreateServiceRecordDto>;
+
+export const RevokeServiceRecordDto = z.object({
+  reason: z.string().min(1, 'Alasan revoke wajib diisi'),
+});
+export type RevokeServiceRecordDtoType = z.infer<typeof RevokeServiceRecordDto>;

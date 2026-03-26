@@ -15,6 +15,7 @@ import {
   InMemorySettingRepository,
   InMemoryPaymentDayRepository,
   InMemorySavingTransactionRepository,
+  InMemoryServiceRecordRepository,
   PrismaUserRepository,
   PrismaCustomerRepository,
   PrismaContractRepository,
@@ -23,6 +24,7 @@ import {
   PrismaSettingRepository,
   PrismaPaymentDayRepository,
   PrismaSavingTransactionRepository,
+  PrismaServiceRecordRepository,
 } from './infrastructure/repositories';
 import {
   AuthService,
@@ -34,6 +36,7 @@ import {
   AuditService,
   SettingService,
   SavingService,
+  ServiceCompensationService,
 } from './application/services';
 import { AuthController } from './presentation/controllers/AuthController';
 import { CustomerController } from './presentation/controllers/CustomerController';
@@ -44,6 +47,7 @@ import { ReportController } from './presentation/controllers/ReportController';
 import { AuditController } from './presentation/controllers/AuditController';
 import { SettingController } from './presentation/controllers/SettingController';
 import { SavingController } from './presentation/controllers/SavingController';
+import { ServiceRecordController } from './presentation/controllers/ServiceRecordController';
 import { createRoutes } from './presentation/routes';
 import { createAuthMiddleware } from './infrastructure/middleware/authMiddleware';
 import { errorHandler } from './infrastructure/middleware/errorHandler';
@@ -58,6 +62,7 @@ import { IAuditLogRepository } from './domain/interfaces/IAuditLogRepository';
 import { ISettingRepository } from './domain/interfaces/ISettingRepository';
 import { IPaymentDayRepository } from './domain/interfaces/IPaymentDayRepository';
 import { ISavingTransactionRepository } from './domain/interfaces/ISavingTransactionRepository';
+import { IServiceRecordRepository } from './domain/interfaces/IServiceRecordRepository';
 
 async function bootstrap() {
   const app = express();
@@ -77,6 +82,7 @@ async function bootstrap() {
   let settingRepo: ISettingRepository;
   let paymentDayRepo: IPaymentDayRepository;
   let savingTxRepo: ISavingTransactionRepository;
+  let serviceRecordRepo: IServiceRecordRepository;
 
   if (usePrisma) {
     const { prisma } = await import('./infrastructure/prisma/client');
@@ -91,6 +97,7 @@ async function bootstrap() {
     settingRepo = new PrismaSettingRepository(prisma);
     paymentDayRepo = new PrismaPaymentDayRepository(prisma);
     savingTxRepo = new PrismaSavingTransactionRepository(prisma);
+    serviceRecordRepo = new PrismaServiceRecordRepository(prisma);
   } else {
     console.log('Using In-Memory repositories');
     userRepo = new InMemoryUserRepository();
@@ -101,6 +108,7 @@ async function bootstrap() {
     settingRepo = new InMemorySettingRepository();
     paymentDayRepo = new InMemoryPaymentDayRepository();
     savingTxRepo = new InMemorySavingTransactionRepository();
+    serviceRecordRepo = new InMemoryServiceRecordRepository();
   }
 
   // Initialize Services
@@ -126,6 +134,16 @@ async function bootstrap() {
 
   // Wire saving service ke payment service (setter injection)
   paymentService.setSavingService(savingService);
+
+  const serviceCompensationService = new ServiceCompensationService(
+    serviceRecordRepo,
+    paymentDayRepo,
+    contractRepo,
+    invoiceRepo,
+    auditRepo,
+    paymentService,
+  );
+  serviceCompensationService.setSavingService(savingService);
 
   const dashboardService = new DashboardService(contractRepo, customerRepo, invoiceRepo, auditRepo);
   const reportService = new ReportService(contractRepo, customerRepo, invoiceRepo);
@@ -157,6 +175,7 @@ async function bootstrap() {
   const auditController = new AuditController(auditService);
   const settingController = new SettingController(settingService);
   const savingController = new SavingController(savingService);
+  const serviceRecordController = new ServiceRecordController(serviceCompensationService);
 
   // Auth Middleware
   const authMiddleware = createAuthMiddleware(authService);
@@ -172,6 +191,7 @@ async function bootstrap() {
     auditController,
     settingController,
     savingController,
+    serviceRecordController,
     authMiddleware,
   });
 

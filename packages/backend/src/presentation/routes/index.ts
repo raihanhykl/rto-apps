@@ -8,6 +8,7 @@ import { ReportController } from '../controllers/ReportController';
 import { AuditController } from '../controllers/AuditController';
 import { SettingController } from '../controllers/SettingController';
 import { SavingController } from '../controllers/SavingController';
+import { ServiceRecordController } from '../controllers/ServiceRecordController';
 import { MOTOR_DAILY_RATES } from '../../domain/enums';
 
 interface RouteControllers {
@@ -20,6 +21,7 @@ interface RouteControllers {
   auditController: AuditController;
   settingController: SettingController;
   savingController: SavingController;
+  serviceRecordController: ServiceRecordController;
   authMiddleware: any;
 }
 
@@ -178,6 +180,20 @@ export function createRoutes(controllers: RouteControllers): Router {
     '/savings/contract/:contractId/recalculate',
     authMiddleware,
     controllers.savingController.recalculateBalance,
+  );
+
+  // Service Records (Compensation)
+  router.post('/service-records', authMiddleware, controllers.serviceRecordController.create);
+  router.get(
+    '/service-records/contract/:contractId',
+    authMiddleware,
+    controllers.serviceRecordController.getByContractId,
+  );
+  router.get('/service-records/:id', authMiddleware, controllers.serviceRecordController.getById);
+  router.patch(
+    '/service-records/:id/revoke',
+    authMiddleware,
+    controllers.serviceRecordController.revoke,
   );
 
   return router;
