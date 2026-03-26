@@ -1237,6 +1237,46 @@ export class PaymentService {
     });
     if (!updated) throw new Error('Failed to update payment');
 
+    // Consolidate: merge other PENDING invoices into this one (max 1 PENDING per contract)
+    if (payment.type === InvoiceType.DAILY_BILLING || payment.type === InvoiceType.MANUAL_PAYMENT) {
+      const allPending = await this.invoiceRepo.findAllPendingByContractId(payment.contractId);
+      const otherPending = allPending.filter((inv) => inv.id !== payment.id);
+
+      if (otherPending.length > 0) {
+        for (const otherInvoice of otherPending) {
+          // Move PaymentDays from other invoice to this one
+          const otherDays = await this.paymentDayRepo.findByPaymentId(otherInvoice.id);
+          for (const pd of otherDays) {
+            if (pd.status === PaymentDayStatus.PENDING) {
+              await this.paymentDayRepo.update(pd.id, { paymentId: payment.id });
+            }
+          }
+          // Void the duplicate invoice
+          await this.invoiceRepo.update(otherInvoice.id, { status: PaymentStatus.VOID });
+        }
+
+        // Recalculate the surviving invoice
+        const allLinked = await this.paymentDayRepo.findByPaymentId(payment.id);
+        const pendingDays = allLinked.filter((d) => d.status === PaymentDayStatus.PENDING);
+        if (pendingDays.length > 0) {
+          const dates = pendingDays.map((d) => d.date).sort((a, b) => a.getTime() - b.getTime());
+          const dailyRate = payment.dailyRate ?? 0;
+          const contract = await this.contractRepo.findById(payment.contractId);
+          const lateFee = contract
+            ? await this.calculateLateFee(pendingDays, getWibToday(), contract.holidayScheme)
+            : 0;
+
+          await this.invoiceRepo.update(payment.id, {
+            daysCount: pendingDays.length,
+            amount: pendingDays.length * dailyRate,
+            periodStart: dates[0],
+            periodEnd: dates[dates.length - 1],
+            lateFee,
+          });
+        }
+      }
+    }
+
     await this.auditRepo.create({
       id: uuidv4(),
       userId: adminId,

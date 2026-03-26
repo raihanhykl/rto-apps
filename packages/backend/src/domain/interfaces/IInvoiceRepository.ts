@@ -10,6 +10,7 @@ export interface IInvoiceRepository {
   findByCustomerId(customerId: string): Promise<Invoice[]>;
   findByStatus(status: PaymentStatus): Promise<Invoice[]>;
   findActiveByContractId(contractId: string): Promise<Invoice | null>;
+  findAllPendingByContractId(contractId: string): Promise<Invoice[]>;
   search(query: string): Promise<Invoice[]>;
   create(invoice: Invoice): Promise<Invoice>;
   update(id: string, data: Partial<Invoice>): Promise<Invoice | null>;

@@ -110,6 +110,17 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
     return row ? this.toEntity(row) : null;
   }
 
+  async findAllPendingByContractId(contractId: string): Promise<Invoice[]> {
+    const rows = await this.prisma.invoice.findMany({
+      where: {
+        contractId,
+        status: 'PENDING' as any,
+        type: { in: ['DAILY_BILLING', 'MANUAL_PAYMENT'] as any },
+      },
+    });
+    return rows.map((r) => this.toEntity(r));
+  }
+
   async search(query: string): Promise<Invoice[]> {
     const rows = await this.prisma.invoice.findMany({
       where: {
