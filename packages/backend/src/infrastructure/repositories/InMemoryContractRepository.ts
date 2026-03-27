@@ -7,9 +7,9 @@ export class InMemoryContractRepository implements IContractRepository {
   private contracts: Map<string, Contract> = new Map();
 
   async findAll(): Promise<Contract[]> {
-    return Array.from(this.contracts.values()).sort(
-      (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
-    );
+    return Array.from(this.contracts.values())
+      .filter((c) => !c.isDeleted)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   }
 
   async findAllPaginated(params: PaginationParams): Promise<PaginatedResult<Contract>> {
@@ -47,8 +47,8 @@ export class InMemoryContractRepository implements IContractRepository {
     const sortBy = params.sortBy || 'createdAt';
     const sortOrder = params.sortOrder || 'desc';
     items.sort((a, b) => {
-      const aVal = (a as any)[sortBy];
-      const bVal = (b as any)[sortBy];
+      const aVal = String((a as unknown as Record<string, unknown>)[sortBy] ?? '');
+      const bVal = String((b as unknown as Record<string, unknown>)[sortBy] ?? '');
       if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1;
       if (aVal > bVal) return sortOrder === 'asc' ? 1 : -1;
       return 0;
@@ -63,6 +63,11 @@ export class InMemoryContractRepository implements IContractRepository {
 
   async findById(id: string): Promise<Contract | null> {
     return this.contracts.get(id) || null;
+  }
+
+  async findByIds(ids: string[]): Promise<Contract[]> {
+    const idSet = new Set(ids);
+    return Array.from(this.contracts.values()).filter((c) => idSet.has(c.id));
   }
 
   async findByCustomerId(customerId: string): Promise<Contract[]> {
@@ -126,5 +131,44 @@ export class InMemoryContractRepository implements IContractRepository {
       }
     }
     return count;
+  }
+
+  async atomicDecrementSavingBalance(contractId: string, amount: number): Promise<Contract | null> {
+    const contract = this.contracts.get(contractId);
+    if (!contract) return null;
+    if (contract.savingBalance < amount) return null;
+    contract.savingBalance -= amount;
+    contract.updatedAt = new Date();
+    return { ...contract };
+  }
+
+  async findFiltered(filters?: {
+    startDate?: Date;
+    endDate?: Date;
+    status?: ContractStatus;
+    motorModel?: string;
+    batteryType?: string;
+  }): Promise<Contract[]> {
+    let items = Array.from(this.contracts.values()).filter((c) => !c.isDeleted);
+
+    if (filters?.startDate) {
+      items = items.filter((c) => c.createdAt >= filters.startDate!);
+    }
+    if (filters?.endDate) {
+      const end = new Date(filters.endDate);
+      end.setHours(23, 59, 59, 999);
+      items = items.filter((c) => c.createdAt <= end);
+    }
+    if (filters?.status) {
+      items = items.filter((c) => c.status === filters.status);
+    }
+    if (filters?.motorModel) {
+      items = items.filter((c) => c.motorModel === filters.motorModel);
+    }
+    if (filters?.batteryType) {
+      items = items.filter((c) => c.batteryType === filters.batteryType);
+    }
+
+    return items.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   }
 }

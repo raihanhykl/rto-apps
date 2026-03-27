@@ -25,6 +25,7 @@ import {
 import { Contract } from '../domain/entities/Contract';
 import { Invoice } from '../domain/entities/Invoice';
 import { PaymentDay } from '../domain/entities/PaymentDay';
+import { SequenceGenerator } from '../application/utils/SequenceGenerator';
 import { v4 as uuidv4 } from 'uuid';
 
 // ============ Helper: Create test contract ============
@@ -151,6 +152,10 @@ describe('ServiceCompensationService', () => {
     auditRepo = new InMemoryAuditLogRepository();
     const settingRepo = new InMemorySettingRepository();
     const settingService = new SettingService(settingRepo, auditRepo, contractRepo);
+
+    // Reset and init centralized sequence generator for tests
+    SequenceGenerator.reset();
+    SequenceGenerator.getInstance().init(contractRepo, invoiceRepo);
 
     paymentService = new PaymentService(
       invoiceRepo,

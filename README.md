@@ -72,7 +72,7 @@ Monorepo (npm workspaces)
 └── railway.json          Railway deployment config
 ```
 
-## Running the Project (230 tests, 5 suites)
+## Running the Project (245 tests, 6 suites)
 
 ### Prerequisites
 
@@ -115,7 +115,7 @@ npm run dev
 ### Testing
 
 ```bash
-# Run all tests (230 tests, 5 suites)
+# Run all tests (245 tests, 6 suites)
 cd packages/backend && npm test
 
 # TypeScript check
@@ -153,13 +153,17 @@ cd packages/frontend && npm run build
 
 ## API Endpoints
 
-### Auth
+### Auth (JWT + httpOnly Cookie)
 
-| Method | Path             | Description      |
-| ------ | ---------------- | ---------------- |
-| POST   | /api/auth/login  | Admin login      |
-| POST   | /api/auth/logout | Admin logout     |
-| GET    | /api/auth/me     | Get current user |
+| Method | Path              | Description                        |
+| ------ | ----------------- | ---------------------------------- |
+| POST   | /api/auth/login   | Admin login (returns JWT + cookie) |
+| POST   | /api/auth/logout  | Admin logout (clears cookie)       |
+| GET    | /api/auth/me      | Get current user                   |
+| POST   | /api/auth/refresh | Refresh access token via cookie    |
+
+**Authentication**: JWT access token + httpOnly refresh token cookie. Passwords hashed with bcrypt.
+**RBAC**: 3 roles — `SUPER_ADMIN`, `ADMIN`, `VIEWER`. DELETE operations require ADMIN+, audit logs require SUPER_ADMIN.
 
 ### Dashboard
 
@@ -283,7 +287,7 @@ cd packages/backend && npx prisma db seed -- --reset --force
 ### Backend (Railway)
 
 1. Create Railway project + PostgreSQL addon
-2. Set env vars: `CORS_ORIGIN`, `NODE_ENV=production`
+2. Set env vars: `CORS_ORIGIN`, `NODE_ENV=production`, `JWT_SECRET`
 3. `railway.json` handles build + start + auto-seed
 
 ### Frontend (Vercel)
@@ -310,7 +314,12 @@ PORT=3001
 NODE_ENV=development
 CORS_ORIGIN=http://localhost:3000
 DATABASE_URL=postgresql://user:pass@localhost:5432/wedison
+JWT_SECRET=your-secret-key-here
+JWT_EXPIRES_IN=24h
+JWT_REFRESH_EXPIRES_IN=7d
 ```
+
+> **Note**: `JWT_SECRET` wajib di-set di production. `CORS_ORIGIN` tidak boleh `*` di production.
 
 **Frontend** (`packages/frontend/.env.local`):
 

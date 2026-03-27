@@ -16,6 +16,7 @@ import {
   DEFAULT_HOLIDAY_SCHEME,
   PaymentDayStatus,
 } from '../domain/enums';
+import { SequenceGenerator } from '../application/utils/SequenceGenerator';
 import { v4 as uuidv4 } from 'uuid';
 import { Contract, Invoice, PaymentDay } from '../domain/entities';
 
@@ -118,6 +119,11 @@ describe('PaymentService', () => {
     invoiceRepo = new InMemoryInvoiceRepository();
     auditRepo = new InMemoryAuditLogRepository();
     paymentDayRepo = new InMemoryPaymentDayRepository();
+
+    // Reset and init centralized sequence generator for tests
+    SequenceGenerator.reset();
+    SequenceGenerator.getInstance().init(contractRepo, invoiceRepo);
+
     paymentService = new PaymentService(invoiceRepo, contractRepo, paymentDayRepo, auditRepo);
 
     activeContract = await createActiveContract();
@@ -500,12 +506,12 @@ describe('PaymentService', () => {
       // Count working days (skip Libur Bayar Sundays)
       const endDate = new Date(fourDaysAgo);
       const firstUnpaid = new Date(endDate.getTime() + 86400000);
-      let expectedDays = 0;
+      let _expectedDays = 0;
       const cursor = new Date(firstUnpaid);
       while (cursor <= today) {
         if (cursor.getDay() !== 0)
-          expectedDays++; // simplified: all Sundays skipped for default 2 holidays/month
-        else expectedDays++; // actually non-holiday Sundays count too, just use the service logic
+          _expectedDays++; // simplified: all Sundays skipped for default 2 holidays/month
+        else _expectedDays++; // actually non-holiday Sundays count too, just use the service logic
         cursor.setDate(cursor.getDate() + 1);
       }
       // The key assertion: amount should be more than just +1 day from the original
@@ -878,7 +884,7 @@ describe('PaymentService', () => {
 
   describe('totalRevenue', () => {
     it('should return sum of paid payments', async () => {
-      const payment = await invoiceRepo.create(
+      await invoiceRepo.create(
         createInvoice({
           amount: 165000,
           status: PaymentStatus.PAID,

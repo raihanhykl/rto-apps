@@ -11,4 +11,9 @@ export interface ICustomerRepository {
   update(id: string, data: Partial<Customer>): Promise<Customer | null>;
   delete(id: string): Promise<boolean>;
   count(): Promise<number>;
+
+  /**
+   * Find customers by a list of IDs. Used to batch-load only relevant customers.
+   */
+  findByIds(ids: string[]): Promise<Customer[]>;
 }

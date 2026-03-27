@@ -1,7 +1,9 @@
 import { PrismaClient } from '@prisma/client';
 import { v4 as uuidv4 } from 'uuid';
+import bcryptjs from 'bcryptjs';
 import { customers } from './data/customers';
 import { contracts, DateTuple } from './data/contracts';
+import { users } from './data/users';
 
 const prisma = new PrismaClient();
 
@@ -156,21 +158,43 @@ const DEFAULT_SETTINGS = [
 
 // ====== Seed Functions ======
 
-async function seedAdminUser(): Promise<string> {
-  const admin = await prisma.user.upsert({
-    where: { username: 'admin' },
-    update: {},
-    create: {
-      id: uuidv4(),
-      username: 'admin',
-      password: 'admin123',
-      fullName: 'Administrator',
-      role: 'ADMIN',
-      isActive: true,
-    },
-  });
-  console.log(`  Admin user: ${admin.id} (upserted)`);
-  return admin.id;
+async function seedUsers(): Promise<string> {
+  const defaultPassword = process.env.SEED_DEFAULT_PASSWORD;
+  if (!defaultPassword) {
+    console.error('❌ SEED_DEFAULT_PASSWORD env var is required for seeding users.');
+    console.error('   Set it in your .env file or pass it inline:');
+    console.error('   SEED_DEFAULT_PASSWORD=yourpassword npx prisma db seed');
+    process.exit(1);
+  }
+
+  let firstAdminId = '';
+
+  for (const user of users) {
+    const password = process.env[user.passwordEnv] || defaultPassword;
+    const hashedPassword = bcryptjs.hashSync(password, 10);
+
+    const result = await prisma.user.upsert({
+      where: { username: user.username },
+      update: {},
+      create: {
+        id: uuidv4(),
+        username: user.username,
+        password: hashedPassword,
+        fullName: user.fullName,
+        role: user.role,
+        isActive: true,
+      },
+    });
+
+    console.log(`  User: ${result.username} (${user.role}) — upserted`);
+
+    // Return the first SUPER_ADMIN or ADMIN id for audit logs
+    if (!firstAdminId && (user.role === 'SUPER_ADMIN' || user.role === 'ADMIN')) {
+      firstAdminId = result.id;
+    }
+  }
+
+  return firstAdminId;
 }
 
 async function seedSettings() {
@@ -587,7 +611,7 @@ async function main() {
 
   // Step 1: Always upsert reference data (idempotent)
   console.log('[1/4] Reference data (idempotent):');
-  const adminId = await seedAdminUser();
+  const adminId = await seedUsers();
   await seedSettings();
 
   // Step 2: Check if data already exists

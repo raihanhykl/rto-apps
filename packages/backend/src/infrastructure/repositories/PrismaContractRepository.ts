@@ -11,9 +11,9 @@ export class PrismaContractRepository implements IContractRepository {
     return raw as Contract;
   }
 
-  // Note: findAll does NOT filter isDeleted (matches InMemory behavior)
   async findAll(): Promise<Contract[]> {
     const rows = await this.prisma.contract.findMany({
+      where: { isDeleted: false },
       orderBy: { createdAt: 'desc' },
     });
     return rows.map((r) => this.toEntity(r));
@@ -84,6 +84,14 @@ export class PrismaContractRepository implements IContractRepository {
     return row ? this.toEntity(row) : null;
   }
 
+  async findByIds(ids: string[]): Promise<Contract[]> {
+    if (ids.length === 0) return [];
+    const rows = await this.prisma.contract.findMany({
+      where: { id: { in: ids } },
+    });
+    return rows.map((r) => this.toEntity(r));
+  }
+
   async findByCustomerId(customerId: string): Promise<Contract[]> {
     const rows = await this.prisma.contract.findMany({
       where: { customerId, isDeleted: false },
@@ -152,8 +160,15 @@ export class PrismaContractRepository implements IContractRepository {
         data: updateData,
       });
       return this.toEntity(row);
-    } catch {
-      return null;
+    } catch (error: unknown) {
+      if (
+        error instanceof Error &&
+        'code' in error &&
+        (error as Record<string, unknown>).code === 'P2025'
+      ) {
+        return null;
+      }
+      throw error;
     }
   }
 
@@ -161,8 +176,15 @@ export class PrismaContractRepository implements IContractRepository {
     try {
       await this.prisma.contract.delete({ where: { id } });
       return true;
-    } catch {
-      return false;
+    } catch (error: unknown) {
+      if (
+        error instanceof Error &&
+        'code' in error &&
+        (error as Record<string, unknown>).code === 'P2025'
+      ) {
+        return false;
+      }
+      throw error;
     }
   }
 
@@ -206,5 +228,57 @@ export class PrismaContractRepository implements IContractRepository {
       data: { gracePeriodDays },
     });
     return result.count;
+  }
+
+  async atomicDecrementSavingBalance(contractId: string, amount: number): Promise<Contract | null> {
+    try {
+      const updated = await this.prisma.contract.update({
+        where: {
+          id: contractId,
+          savingBalance: { gte: amount },
+        },
+        data: {
+          savingBalance: { decrement: amount },
+        },
+      });
+      return this.toEntity(updated);
+    } catch {
+      // Prisma throws P2025 if WHERE doesn't match (no row with sufficient balance)
+      return null;
+    }
+  }
+
+  async findFiltered(filters?: {
+    startDate?: Date;
+    endDate?: Date;
+    status?: ContractStatus;
+    motorModel?: string;
+    batteryType?: string;
+  }): Promise<Contract[]> {
+    const where: Prisma.ContractWhereInput = { isDeleted: false };
+
+    if (filters?.startDate) {
+      where.createdAt = { ...(where.createdAt as object), gte: filters.startDate };
+    }
+    if (filters?.endDate) {
+      const end = new Date(filters.endDate);
+      end.setHours(23, 59, 59, 999);
+      where.createdAt = { ...(where.createdAt as object), lte: end };
+    }
+    if (filters?.status) {
+      where.status = filters.status as any;
+    }
+    if (filters?.motorModel) {
+      where.motorModel = filters.motorModel as any;
+    }
+    if (filters?.batteryType) {
+      where.batteryType = filters.batteryType as any;
+    }
+
+    const rows = await this.prisma.contract.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+    });
+    return rows.map((r) => this.toEntity(r));
   }
 }

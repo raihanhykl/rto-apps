@@ -12,7 +12,7 @@ export class ServiceRecordController {
 
   async create(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const userId = (req as any).userId || 'system';
+      const userId = req.user?.id || 'system';
       const dto = CreateServiceRecordDto.parse(req.body);
       const record = await this.serviceCompensationService.createServiceRecord(dto, userId);
       res.status(201).json(record);
@@ -23,7 +23,7 @@ export class ServiceRecordController {
 
   async revoke(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const userId = (req as any).userId || 'system';
+      const userId = req.user?.id || 'system';
       const { id } = req.params;
       const dto = RevokeServiceRecordDto.parse(req.body);
       const record = await this.serviceCompensationService.revokeServiceRecord(

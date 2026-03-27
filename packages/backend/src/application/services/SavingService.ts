@@ -2,6 +2,8 @@ import { ISavingTransactionRepository } from '../../domain/interfaces/ISavingTra
 import { IContractRepository } from '../../domain/interfaces/IContractRepository';
 import { IInvoiceRepository } from '../../domain/interfaces/IInvoiceRepository';
 import { IAuditLogRepository } from '../../domain/interfaces/IAuditLogRepository';
+import { ITransactionManager } from '../../domain/interfaces/ITransactionManager';
+import { TransactionalRepos } from '../../domain/interfaces/ITransactionManager';
 import { SavingTransaction } from '../../domain/entities/SavingTransaction';
 import {
   SavingTransactionType,
@@ -29,6 +31,7 @@ export class SavingService {
     private contractRepo: IContractRepository,
     private invoiceRepo: IInvoiceRepository,
     private auditRepo: IAuditLogRepository,
+    private txManager?: ITransactionManager,
   ) {}
 
   /**
@@ -36,6 +39,7 @@ export class SavingService {
    * amount = SAVING_PER_DAY × daysCount
    */
   async creditFromPayment(paymentId: string, adminId: string): Promise<SavingTransaction> {
+    // READS outside transaction
     const invoice = await this.invoiceRepo.findById(paymentId);
     if (!invoice) throw new Error('Invoice not found');
 
@@ -65,33 +69,51 @@ export class SavingService {
       createdAt: new Date(),
     };
 
-    const created = await this.savingTxRepo.create(tx);
+    // WRITES inside transaction
+    const writeOps = async (repos: TransactionalRepos) => {
+      const created = await repos.savingTxRepo.create(tx);
 
-    // Update denormalized balance
-    await this.contractRepo.update(contract.id, { savingBalance: balanceAfter });
+      // Update denormalized balance
+      await repos.contractRepo.update(contract.id, { savingBalance: balanceAfter });
 
-    // Audit log
-    await this.auditRepo.create({
-      id: uuidv4(),
-      userId: adminId,
-      action: AuditAction.CREATE,
-      module: 'saving',
-      entityId: created.id,
-      description: `Saving credit Rp ${savingAmount.toLocaleString('id-ID')} from ${invoice.invoiceNumber} (${daysCount} days × Rp ${SAVING_PER_DAY.toLocaleString('id-ID')})`,
-      metadata: {
-        type: 'CREDIT',
-        amount: savingAmount,
-        daysCount,
-        paymentId: invoice.id,
-        invoiceNumber: invoice.invoiceNumber,
-        balanceBefore,
-        balanceAfter,
-      },
-      ipAddress: '',
-      createdAt: new Date(),
-    });
+      // Audit log
+      await repos.auditRepo.create({
+        id: uuidv4(),
+        userId: adminId,
+        action: AuditAction.CREATE,
+        module: 'saving',
+        entityId: created.id,
+        description: `Saving credit Rp ${savingAmount.toLocaleString('id-ID')} from ${invoice.invoiceNumber} (${daysCount} days × Rp ${SAVING_PER_DAY.toLocaleString('id-ID')})`,
+        metadata: {
+          type: 'CREDIT',
+          amount: savingAmount,
+          daysCount,
+          paymentId: invoice.id,
+          invoiceNumber: invoice.invoiceNumber,
+          balanceBefore,
+          balanceAfter,
+        },
+        ipAddress: '',
+        createdAt: new Date(),
+      });
 
-    return created;
+      return created;
+    };
+
+    if (this.txManager) {
+      return this.txManager.runInTransaction(writeOps);
+    } else {
+      return writeOps({
+        contractRepo: this.contractRepo,
+        invoiceRepo: this.invoiceRepo,
+        paymentDayRepo: null as any,
+        auditRepo: this.auditRepo,
+        savingTxRepo: this.savingTxRepo,
+        serviceRecordRepo: null as any,
+        customerRepo: null as any,
+        settingRepo: null as any,
+      });
+    }
   }
 
   /**
@@ -102,6 +124,7 @@ export class SavingService {
     paymentId: string,
     adminId: string,
   ): Promise<SavingTransaction | null> {
+    // READS outside transaction
     const creditTxs = await this.savingTxRepo.findByPaymentId(paymentId);
     const creditTx = creditTxs.find((tx) => tx.type === SavingTransactionType.CREDIT);
 
@@ -136,32 +159,58 @@ export class SavingService {
       createdAt: new Date(),
     };
 
-    const created = await this.savingTxRepo.create(reversalTx);
+    // WRITES inside transaction
+    const writeOps = async (repos: TransactionalRepos) => {
+      const created = await repos.savingTxRepo.create(reversalTx);
 
-    // Update denormalized balance
-    await this.contractRepo.update(creditTx.contractId, { savingBalance: balanceAfter });
+      // Atomic decrement — re-validates balance at DB level to prevent race conditions
+      const updated = await repos.contractRepo.atomicDecrementSavingBalance(
+        creditTx.contractId,
+        creditTx.amount,
+      );
+      if (!updated) {
+        throw new Error(
+          `Insufficient saving balance for reversal (concurrent operation). Current balance may have changed.`,
+        );
+      }
 
-    // Audit log
-    await this.auditRepo.create({
-      id: uuidv4(),
-      userId: adminId,
-      action: AuditAction.UPDATE,
-      module: 'saving',
-      entityId: created.id,
-      description: `Saving reversal Rp ${creditTx.amount.toLocaleString('id-ID')} (payment revert)`,
-      metadata: {
-        type: 'REVERSAL',
-        amount: creditTx.amount,
-        originalCreditId: creditTx.id,
-        paymentId,
-        balanceBefore,
-        balanceAfter,
-      },
-      ipAddress: '',
-      createdAt: new Date(),
-    });
+      // Audit log
+      await repos.auditRepo.create({
+        id: uuidv4(),
+        userId: adminId,
+        action: AuditAction.UPDATE,
+        module: 'saving',
+        entityId: created.id,
+        description: `Saving reversal Rp ${creditTx.amount.toLocaleString('id-ID')} (payment revert)`,
+        metadata: {
+          type: 'REVERSAL',
+          amount: creditTx.amount,
+          originalCreditId: creditTx.id,
+          paymentId,
+          balanceBefore,
+          balanceAfter,
+        },
+        ipAddress: '',
+        createdAt: new Date(),
+      });
 
-    return created;
+      return created;
+    };
+
+    if (this.txManager) {
+      return this.txManager.runInTransaction(writeOps);
+    } else {
+      return writeOps({
+        contractRepo: this.contractRepo,
+        invoiceRepo: this.invoiceRepo,
+        paymentDayRepo: null as any,
+        auditRepo: this.auditRepo,
+        savingTxRepo: this.savingTxRepo,
+        serviceRecordRepo: null as any,
+        customerRepo: null as any,
+        settingRepo: null as any,
+      });
+    }
   }
 
   /**
@@ -173,6 +222,7 @@ export class SavingService {
     dto: DebitSavingInput,
     adminId: string,
   ): Promise<SavingTransaction> {
+    // READS outside transaction
     const contract = await this.contractRepo.findById(contractId);
     if (!contract) throw new Error('Contract not found');
 
@@ -210,28 +260,51 @@ export class SavingService {
       createdAt: new Date(),
     };
 
-    const created = await this.savingTxRepo.create(tx);
-    await this.contractRepo.update(contractId, { savingBalance: balanceAfter });
+    // WRITES inside transaction
+    const writeOps = async (repos: TransactionalRepos) => {
+      const created = await repos.savingTxRepo.create(tx);
 
-    await this.auditRepo.create({
-      id: uuidv4(),
-      userId: adminId,
-      action: AuditAction.UPDATE,
-      module: 'saving',
-      entityId: created.id,
-      description: `Saving debit for service: Rp ${dto.amount.toLocaleString('id-ID')} — ${dto.description}`,
-      metadata: {
-        type: 'DEBIT_SERVICE',
-        amount: dto.amount,
-        description: dto.description,
-        balanceBefore,
-        balanceAfter,
-      },
-      ipAddress: '',
-      createdAt: new Date(),
-    });
+      // Atomic decrement — re-validates balance at DB level to prevent race conditions
+      const updated = await repos.contractRepo.atomicDecrementSavingBalance(contractId, dto.amount);
+      if (!updated) {
+        throw new Error('Saldo tabungan berubah (concurrent operation). Silakan coba lagi.');
+      }
 
-    return created;
+      await repos.auditRepo.create({
+        id: uuidv4(),
+        userId: adminId,
+        action: AuditAction.UPDATE,
+        module: 'saving',
+        entityId: created.id,
+        description: `Saving debit for service: Rp ${dto.amount.toLocaleString('id-ID')} — ${dto.description}`,
+        metadata: {
+          type: 'DEBIT_SERVICE',
+          amount: dto.amount,
+          description: dto.description,
+          balanceBefore,
+          balanceAfter,
+        },
+        ipAddress: '',
+        createdAt: new Date(),
+      });
+
+      return created;
+    };
+
+    if (this.txManager) {
+      return this.txManager.runInTransaction(writeOps);
+    } else {
+      return writeOps({
+        contractRepo: this.contractRepo,
+        invoiceRepo: this.invoiceRepo,
+        paymentDayRepo: null as any,
+        auditRepo: this.auditRepo,
+        savingTxRepo: this.savingTxRepo,
+        serviceRecordRepo: null as any,
+        customerRepo: null as any,
+        settingRepo: null as any,
+      });
+    }
   }
 
   /**
@@ -243,6 +316,7 @@ export class SavingService {
     dto: DebitSavingInput,
     adminId: string,
   ): Promise<SavingTransaction> {
+    // READS outside transaction
     const contract = await this.contractRepo.findById(contractId);
     if (!contract) throw new Error('Contract not found');
 
@@ -275,28 +349,51 @@ export class SavingService {
       createdAt: new Date(),
     };
 
-    const created = await this.savingTxRepo.create(tx);
-    await this.contractRepo.update(contractId, { savingBalance: balanceAfter });
+    // WRITES inside transaction
+    const writeOps = async (repos: TransactionalRepos) => {
+      const created = await repos.savingTxRepo.create(tx);
 
-    await this.auditRepo.create({
-      id: uuidv4(),
-      userId: adminId,
-      action: AuditAction.UPDATE,
-      module: 'saving',
-      entityId: created.id,
-      description: `Saving debit for transfer: Rp ${dto.amount.toLocaleString('id-ID')} — ${dto.description}`,
-      metadata: {
-        type: 'DEBIT_TRANSFER',
-        amount: dto.amount,
-        description: dto.description,
-        balanceBefore,
-        balanceAfter,
-      },
-      ipAddress: '',
-      createdAt: new Date(),
-    });
+      // Atomic decrement — re-validates balance at DB level to prevent race conditions
+      const updated = await repos.contractRepo.atomicDecrementSavingBalance(contractId, dto.amount);
+      if (!updated) {
+        throw new Error('Saldo tabungan berubah (concurrent operation). Silakan coba lagi.');
+      }
 
-    return created;
+      await repos.auditRepo.create({
+        id: uuidv4(),
+        userId: adminId,
+        action: AuditAction.UPDATE,
+        module: 'saving',
+        entityId: created.id,
+        description: `Saving debit for transfer: Rp ${dto.amount.toLocaleString('id-ID')} — ${dto.description}`,
+        metadata: {
+          type: 'DEBIT_TRANSFER',
+          amount: dto.amount,
+          description: dto.description,
+          balanceBefore,
+          balanceAfter,
+        },
+        ipAddress: '',
+        createdAt: new Date(),
+      });
+
+      return created;
+    };
+
+    if (this.txManager) {
+      return this.txManager.runInTransaction(writeOps);
+    } else {
+      return writeOps({
+        contractRepo: this.contractRepo,
+        invoiceRepo: this.invoiceRepo,
+        paymentDayRepo: null as any,
+        auditRepo: this.auditRepo,
+        savingTxRepo: this.savingTxRepo,
+        serviceRecordRepo: null as any,
+        customerRepo: null as any,
+        settingRepo: null as any,
+      });
+    }
   }
 
   /**
@@ -309,6 +406,7 @@ export class SavingService {
     dto: ClaimSavingInput,
     adminId: string,
   ): Promise<SavingTransaction> {
+    // READS outside transaction
     const contract = await this.contractRepo.findById(contractId);
     if (!contract) throw new Error('Contract not found');
 
@@ -352,27 +450,53 @@ export class SavingService {
       createdAt: new Date(),
     };
 
-    const created = await this.savingTxRepo.create(tx);
-    await this.contractRepo.update(contractId, { savingBalance: balanceAfter });
+    // WRITES inside transaction
+    const writeOps = async (repos: TransactionalRepos) => {
+      const created = await repos.savingTxRepo.create(tx);
 
-    await this.auditRepo.create({
-      id: uuidv4(),
-      userId: adminId,
-      action: AuditAction.UPDATE,
-      module: 'saving',
-      entityId: created.id,
-      description: `Saving claim: Rp ${claimAmount.toLocaleString('id-ID')}`,
-      metadata: {
-        type: 'DEBIT_CLAIM',
-        amount: claimAmount,
-        balanceBefore,
-        balanceAfter,
-      },
-      ipAddress: '',
-      createdAt: new Date(),
-    });
+      // Atomic decrement — re-validates balance at DB level to prevent race conditions
+      const updated = await repos.contractRepo.atomicDecrementSavingBalance(
+        contractId,
+        claimAmount,
+      );
+      if (!updated) {
+        throw new Error('Saldo tabungan berubah (concurrent operation). Silakan coba lagi.');
+      }
 
-    return created;
+      await repos.auditRepo.create({
+        id: uuidv4(),
+        userId: adminId,
+        action: AuditAction.UPDATE,
+        module: 'saving',
+        entityId: created.id,
+        description: `Saving claim: Rp ${claimAmount.toLocaleString('id-ID')}`,
+        metadata: {
+          type: 'DEBIT_CLAIM',
+          amount: claimAmount,
+          balanceBefore,
+          balanceAfter,
+        },
+        ipAddress: '',
+        createdAt: new Date(),
+      });
+
+      return created;
+    };
+
+    if (this.txManager) {
+      return this.txManager.runInTransaction(writeOps);
+    } else {
+      return writeOps({
+        contractRepo: this.contractRepo,
+        invoiceRepo: this.invoiceRepo,
+        paymentDayRepo: null as any,
+        auditRepo: this.auditRepo,
+        savingTxRepo: this.savingTxRepo,
+        serviceRecordRepo: null as any,
+        customerRepo: null as any,
+        settingRepo: null as any,
+      });
+    }
   }
 
   /**
@@ -389,6 +513,14 @@ export class SavingService {
    */
   async getTransactionHistory(contractId: string): Promise<SavingTransaction[]> {
     return this.savingTxRepo.findByContractId(contractId);
+  }
+
+  async getTransactionsPaginated(
+    contractId: string,
+    page: number,
+    limit: number,
+  ): Promise<{ data: SavingTransaction[]; total: number }> {
+    return this.savingTxRepo.findPaginatedByContractId(contractId, page, limit);
   }
 
   /**

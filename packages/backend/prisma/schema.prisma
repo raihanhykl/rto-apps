@@ -113,7 +113,20 @@ model User {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  refreshTokens RefreshToken[]
+
   @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id])
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("refresh_tokens")
 }
 
 model Customer {
@@ -206,6 +219,8 @@ model Contract {
   @@index([customerId])
   @@index([status])
   @@index([isDeleted])
+  @@index([status, isDeleted])
+  @@index([createdAt])
   @@map("contracts")
 }
 
@@ -250,6 +265,9 @@ model Invoice {
   @@index([customerId])
   @@index([status])
   @@index([previousPaymentId])
+  @@index([contractId, status, type])
+  @@index([createdAt])
+  @@index([dueDate])
   @@map("invoices")
 }
 
@@ -298,7 +316,6 @@ model PaymentDay {
   @@unique([contractId, date])
   @@index([contractId, status])
   @@index([paymentId])
-  @@index([contractId, date])
   @@map("payment_days")
 }
 

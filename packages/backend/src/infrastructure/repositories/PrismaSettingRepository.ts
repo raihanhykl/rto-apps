@@ -33,8 +33,15 @@ export class PrismaSettingRepository implements ISettingRepository {
     try {
       await this.prisma.setting.delete({ where: { key } });
       return true;
-    } catch {
-      return false;
+    } catch (error: unknown) {
+      if (
+        error instanceof Error &&
+        'code' in error &&
+        (error as Record<string, unknown>).code === 'P2025'
+      ) {
+        return false;
+      }
+      throw error;
     }
   }
 }

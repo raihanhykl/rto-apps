@@ -4,7 +4,8 @@ import { PdfService } from '../../application/services/PdfService';
 import { ContractService } from '../../application/services';
 import { CustomerService } from '../../application/services';
 import { PaymentStatus } from '../../domain/enums';
-import { getWibToday, getWibDateParts } from '../../domain/utils/dateUtils';
+import { getWibDateParts } from '../../domain/utils/dateUtils';
+import { sanitizePaginationParams } from '../utils/queryParams';
 
 export class PaymentController {
   private pdfService: PdfService;
@@ -21,25 +22,18 @@ export class PaymentController {
 
   getAll = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const {
-        page,
-        limit,
-        sortBy,
-        sortOrder,
-        search,
-        status,
-        customerId,
-        invoiceType,
-        startDate,
-        endDate,
-      } = req.query;
-      if (page) {
+      const { status, customerId, invoiceType, startDate, endDate } = req.query;
+      const params = sanitizePaginationParams(req.query as Record<string, unknown>, [
+        'createdAt',
+        'invoiceNumber',
+        'amount',
+        'dueDate',
+        'status',
+        'paidAt',
+      ]);
+      if (req.query.page) {
         const result = await this.paymentService.getAllPaginated({
-          page: parseInt(page as string) || 1,
-          limit: parseInt(limit as string) || 20,
-          sortBy: sortBy as string,
-          sortOrder: sortOrder as 'asc' | 'desc',
-          search: search as string,
+          ...params,
           status: status as string,
           customerId: customerId as string,
           invoiceType: invoiceType as string,
@@ -234,7 +228,7 @@ export class PaymentController {
     try {
       const { contractId, date } = req.params;
       const { status, notes } = req.body;
-      const adminId = (req as any).user?.id || 'system';
+      const adminId = req.user?.id || 'system';
 
       const parsedDate = new Date(date + 'T00:00:00');
       if (isNaN(parsedDate.getTime())) {
@@ -261,7 +255,7 @@ export class PaymentController {
     try {
       const { id } = req.params;
       const { newDaysCount, notes } = req.body;
-      const adminId = (req as any).user?.id || 'system';
+      const adminId = req.user?.id || 'system';
 
       if (!newDaysCount || typeof newDaysCount !== 'number' || newDaysCount < 1) {
         return res.status(400).json({ error: 'newDaysCount must be a positive number' });
@@ -306,6 +300,25 @@ export class PaymentController {
         `attachment; filename=payment-${payment.invoiceNumber}.pdf`,
       );
       res.send(pdfBuffer);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getInvoicesByContract = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { id } = req.params;
+      const { page, limit, sortOrder } = sanitizePaginationParams(
+        req.query as Record<string, unknown>,
+        ['createdAt'],
+      );
+      const result = await this.paymentService.getInvoicesByContractPaginated(
+        id,
+        page,
+        limit,
+        sortOrder as 'asc' | 'desc',
+      );
+      res.json({ data: result.data, total: result.total, page, limit });
     } catch (error) {
       next(error);
     }

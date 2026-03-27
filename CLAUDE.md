@@ -219,7 +219,7 @@ chore/*   ──PR──> staging atau main
 | 6.5 MP-6E    | PENDING     | WhatsApp Reminder (depends on DOKU)                                           |
 | 6.5 MP-6H    | PENDING     | Frontend Payment Gateway UI                                                   |
 | 6.5 MP-6I    | PENDING     | Comprehensive seed data & test update                                         |
-| 7            | PENDING     | Security: JWT + bcrypt, RBAC (SUPER_ADMIN/ADMIN/VIEWER), user management      |
+| 7 (partial)  | COMPLETE    | Security: JWT + bcrypt, RBAC, refresh token, httpOnly cookie                  |
 | 8            | COMPLETE    | PostgreSQL + Prisma migration (7 Prisma repos, conditional init)              |
 | 9            | IN PROGRESS | Deployment: CI done, Railway + Vercel pending                                 |
 

@@ -1,7 +1,21 @@
 import { Request, Response, NextFunction } from 'express';
 
-export function errorHandler(err: Error, _req: Request, res: Response, _next: NextFunction) {
-  console.error('Error:', err.message);
+export function errorHandler(err: Error, req: Request, res: Response, _next: NextFunction) {
+  // Structured JSON log
+  const logEntry: Record<string, unknown> = {
+    timestamp: new Date().toISOString(),
+    level: 'error',
+    message: err.message,
+    path: req.path,
+    method: req.method,
+  };
+
+  // Include stack trace only in non-production
+  if (process.env.NODE_ENV !== 'production') {
+    logEntry.stack = err.stack;
+  }
+
+  console.error(JSON.stringify(logEntry));
 
   // Determine HTTP status based on error message patterns
   let status = 400; // Default: client error (business logic violations)

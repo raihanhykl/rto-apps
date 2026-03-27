@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Input } from '@/components/ui/input';
-import { useCustomersList, useContractsList } from '@/hooks/useApi';
+import { useCustomersList, useContractsSearch } from '@/hooks/useApi';
 import { api } from '@/lib/api';
 import {
   Search,
@@ -79,9 +79,12 @@ export function CommandPalette() {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // SWR hooks - only fetch when palette is open and query exists
+  // SWR hooks - only fetch when palette is open and query exists.
+  // Pass null to disable fetch entirely when palette is closed or query is empty.
+  const contractsQuery = open && debouncedQuery.length > 0 ? debouncedQuery : null;
   const { data: customers } = useCustomersList(open && debouncedQuery ? debouncedQuery : undefined);
-  const { data: contracts } = useContractsList();
+  const { data: contractsData } = useContractsSearch(contractsQuery, 10);
+  const contracts = contractsData?.data ?? [];
 
   const close = useCallback(() => {
     setOpen(false);

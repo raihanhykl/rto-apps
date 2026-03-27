@@ -24,9 +24,9 @@ import {
 import { Pagination } from '@/components/ui/pagination';
 import { SortableHeader } from '@/components/SortableHeader';
 import { usePagination } from '@/hooks/usePagination';
-import { usePaymentsPaginated, useContractsList, useInvalidate } from '@/hooks/useApi';
+import { usePaymentsPaginated, useContractsLookup, useInvalidate } from '@/hooks/useApi';
 import { api } from '@/lib/api';
-import { Invoice, Contract, InvoiceType } from '@/types';
+import { Invoice, InvoiceType } from '@/types';
 import { formatCurrency, formatDate, formatDateTime } from '@/lib/utils';
 import { toastSuccess, toastError } from '@/stores/toastStore';
 import {
@@ -135,7 +135,7 @@ export default function InvoicesPage() {
     if (invoicesData) pagination.updateFromResult(invoicesData);
   }, [invoicesData]);
 
-  const { data: contracts = [] as Contract[] } = useContractsList();
+  const { lookupMap: contractLookup } = useContractsLookup();
 
   const handleFilterChange = (setter: (v: string) => void) => (value: string) => {
     setter(value);
@@ -154,7 +154,7 @@ export default function InvoicesPage() {
   };
 
   const getContractNumber = (contractId: string) => {
-    return contracts.find((c) => c.id === contractId)?.contractNumber || '-';
+    return contractLookup.get(contractId) ?? '-';
   };
 
   const showQR = async (invoice: Invoice) => {

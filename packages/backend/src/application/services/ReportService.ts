@@ -42,45 +42,40 @@ export class ReportService {
   ) {}
 
   async generateReport(filters?: ReportFilters): Promise<ReportData> {
-    const [allContracts, allInvoices, customers] = await Promise.all([
-      this.contractRepo.findAll(),
-      this.invoiceRepo.findAll(),
-      this.customerRepo.findAll(),
-    ]);
+    // Step 1: Query contracts with filters at DB level (not findAll)
+    const startDate = filters?.startDate ? new Date(filters.startDate) : undefined;
+    let endDate: Date | undefined;
+    if (filters?.endDate) {
+      endDate = new Date(filters.endDate);
+      endDate.setHours(23, 59, 59, 999);
+    }
+
+    const contracts = await this.contractRepo.findFiltered({
+      startDate,
+      endDate,
+      status: filters?.status,
+      motorModel: filters?.motorModel,
+      batteryType: filters?.batteryType,
+    });
+
+    const contractIds = contracts.map((c) => c.id);
+
+    // Step 2: Query invoices filtered by date range + contract IDs at DB level
+    const hasContractFilters = !!(filters?.status || filters?.motorModel || filters?.batteryType);
+    const invoices = await this.invoiceRepo.findByDateRange(
+      startDate,
+      endDate,
+      hasContractFilters ? contractIds : undefined,
+    );
+
+    // Step 3: Only load customers that are referenced (not all customers)
+    const customerIdSet = new Set<string>();
+    contracts.forEach((c) => customerIdSet.add(c.customerId));
+    invoices.forEach((i) => customerIdSet.add(i.customerId));
+    const customers = await this.customerRepo.findByIds(Array.from(customerIdSet));
 
     const customerMap = new Map<string, Customer>();
     customers.forEach((c) => customerMap.set(c.id, c));
-
-    // Filter contracts
-    let contracts = allContracts.filter((c) => !c.isDeleted);
-    let invoices = allInvoices;
-
-    if (filters?.startDate) {
-      const start = new Date(filters.startDate);
-      contracts = contracts.filter((c) => c.createdAt >= start);
-      invoices = invoices.filter((i) => i.createdAt >= start);
-    }
-    if (filters?.endDate) {
-      const end = new Date(filters.endDate);
-      end.setHours(23, 59, 59, 999);
-      contracts = contracts.filter((c) => c.createdAt <= end);
-      invoices = invoices.filter((i) => i.createdAt <= end);
-    }
-    if (filters?.status) {
-      contracts = contracts.filter((c) => c.status === filters.status);
-    }
-    if (filters?.motorModel) {
-      contracts = contracts.filter((c) => c.motorModel === filters.motorModel);
-    }
-    if (filters?.batteryType) {
-      contracts = contracts.filter((c) => c.batteryType === filters.batteryType);
-    }
-
-    // Filter invoices to match filtered contracts
-    const contractIds = new Set(contracts.map((c) => c.id));
-    if (filters?.status || filters?.motorModel || filters?.batteryType) {
-      invoices = invoices.filter((i) => contractIds.has(i.contractId));
-    }
 
     const enrichedContracts = contracts.map((contract) => ({
       ...contract,

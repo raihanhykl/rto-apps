@@ -11,4 +11,9 @@ export interface ISavingTransactionRepository {
   ): Promise<SavingTransaction[]>;
   create(tx: SavingTransaction): Promise<SavingTransaction>;
   count(contractId: string): Promise<number>;
+  findPaginatedByContractId(
+    contractId: string,
+    page: number,
+    limit: number,
+  ): Promise<{ data: SavingTransaction[]; total: number }>;
 }
