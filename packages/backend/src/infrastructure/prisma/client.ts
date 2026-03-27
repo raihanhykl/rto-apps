@@ -22,5 +22,5 @@ if (process.env.NODE_ENV !== 'production') {
 
 // Log initialization in non-production for debugging
 if (process.env.NODE_ENV !== 'production') {
-  console.log('Prisma client initialized');
+  console.info('Prisma client initialized');
 }

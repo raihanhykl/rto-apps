@@ -1,5 +1,6 @@
-import { PrismaClient, Prisma } from '@prisma/client';
+import { PrismaClient, Prisma, $Enums } from '@prisma/client';
 import { AuditLog } from '../../domain/entities';
+import { AuditAction } from '../../domain/enums';
 import { IAuditLogRepository } from '../../domain/interfaces';
 import { PaginationParams, PaginatedResult } from '../../domain/interfaces/Pagination';
 
@@ -19,7 +20,7 @@ export class PrismaAuditLogRepository implements IAuditLogRepository {
     if (params.search) {
       where.OR = [
         { description: { contains: params.search, mode: 'insensitive' } },
-        { action: { equals: params.search as any } },
+        { action: { equals: params.search as string as $Enums.AuditAction } },
       ];
     }
     if (params.module) {
@@ -106,11 +107,11 @@ export class PrismaAuditLogRepository implements IAuditLogRepository {
     return this.prisma.auditLog.count();
   }
 
-  private toEntity(raw: any): AuditLog {
+  private toEntity(raw: Prisma.AuditLogGetPayload<object>): AuditLog {
     return {
       id: raw.id,
       userId: raw.userId,
-      action: raw.action,
+      action: raw.action as unknown as AuditAction,
       module: raw.module,
       entityId: raw.entityId,
       description: raw.description,

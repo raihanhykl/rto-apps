@@ -116,7 +116,7 @@ async function bootstrap() {
     const { prisma } = await import('./infrastructure/prisma/client');
     prismaClient = prisma;
     await prisma.$connect();
-    console.log('Connected to PostgreSQL');
+    console.info('Connected to PostgreSQL');
 
     userRepo = new PrismaUserRepository(prisma);
     customerRepo = new PrismaCustomerRepository(prisma);
@@ -129,7 +129,7 @@ async function bootstrap() {
     serviceRecordRepo = new PrismaServiceRecordRepository(prisma);
     refreshTokenRepo = new PrismaRefreshTokenRepository(prisma);
   } else {
-    console.log('Using In-Memory repositories');
+    console.info('Using In-Memory repositories');
     userRepo = new InMemoryUserRepository();
     customerRepo = new InMemoryCustomerRepository();
     contractRepo = new InMemoryContractRepository();
@@ -307,27 +307,27 @@ async function bootstrap() {
   app.use(errorHandler);
 
   const server = app.listen(config.port, () => {
-    console.log(`WEDISON RTO Backend running on port ${config.port}`);
-    console.log(`Environment: ${config.nodeEnv}`);
-    console.log(`Database: ${usePrisma ? 'PostgreSQL (Prisma)' : 'In-Memory'}`);
-    console.log(`API: http://localhost:${config.port}/api`);
+    console.info(`WEDISON RTO Backend running on port ${config.port}`);
+    console.info(`Environment: ${config.nodeEnv}`);
+    console.info(`Database: ${usePrisma ? 'PostgreSQL (Prisma)' : 'In-Memory'}`);
+    console.info(`API: http://localhost:${config.port}/api`);
     if (config.nodeEnv !== 'production') {
-      console.log(`Default admin: admin / admin123`);
+      console.info(`Default admin: admin / admin123`);
     }
-    console.log(`API Docs: http://localhost:${config.port}/api-docs`);
+    console.info(`API Docs: http://localhost:${config.port}/api-docs`);
   });
 
   // Graceful shutdown (handles both Prisma and InMemory modes)
   const shutdown = async () => {
-    console.log('Shutting down gracefully...');
+    console.info('Shutting down gracefully...');
     scheduler.stop();
     server.close(async () => {
       if (usePrisma) {
         const { prisma } = await import('./infrastructure/prisma/client');
         await prisma.$disconnect();
-        console.log('Prisma client disconnected');
+        console.info('Prisma client disconnected');
       }
-      console.log('Shutdown complete');
+      console.info('Shutdown complete');
       process.exit(0);
     });
     // Force shutdown after 30s

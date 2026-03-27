@@ -9,8 +9,6 @@ import {
   ContractStatus,
   PaymentStatus,
   InvoiceType,
-  DPScheme,
-  HolidayScheme,
 } from '../domain/enums';
 import { Contract } from '../domain/entities/Contract';
 import { Invoice } from '../domain/entities/Invoice';

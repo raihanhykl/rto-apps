@@ -1,11 +1,13 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 import { User } from '../../domain/entities';
 import { IUserRepository } from '../../domain/interfaces';
+
+type PrismaUser = Prisma.UserGetPayload<object>;
 
 export class PrismaUserRepository implements IUserRepository {
   constructor(private prisma: PrismaClient) {}
 
-  private toEntity(raw: any): User {
+  private toEntity(raw: PrismaUser): User {
     return raw as User;
   }
 
@@ -42,7 +44,7 @@ export class PrismaUserRepository implements IUserRepository {
 
   async update(id: string, data: Partial<User>): Promise<User | null> {
     try {
-      const { id: _id, ...updateData } = data as any;
+      const { id: _id, ...updateData } = data;
       const row = await this.prisma.user.update({
         where: { id },
         data: updateData,

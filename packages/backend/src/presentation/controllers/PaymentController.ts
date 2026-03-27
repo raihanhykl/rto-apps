@@ -4,7 +4,7 @@ import { PdfService } from '../../application/services/PdfService';
 import { ContractService } from '../../application/services';
 import { CustomerService } from '../../application/services';
 import { PaymentStatus } from '../../domain/enums';
-import { getWibToday, getWibDateParts } from '../../domain/utils/dateUtils';
+import { getWibDateParts } from '../../domain/utils/dateUtils';
 import { sanitizePaginationParams } from '../utils/queryParams';
 
 export class PaymentController {
@@ -228,7 +228,7 @@ export class PaymentController {
     try {
       const { contractId, date } = req.params;
       const { status, notes } = req.body;
-      const adminId = (req as any).user?.id || 'system';
+      const adminId = req.user?.id || 'system';
 
       const parsedDate = new Date(date + 'T00:00:00');
       if (isNaN(parsedDate.getTime())) {
@@ -255,7 +255,7 @@ export class PaymentController {
     try {
       const { id } = req.params;
       const { newDaysCount, notes } = req.body;
-      const adminId = (req as any).user?.id || 'system';
+      const adminId = req.user?.id || 'system';
 
       if (!newDaysCount || typeof newDaysCount !== 'number' || newDaysCount < 1) {
         return res.status(400).json({ error: 'newDaysCount must be a positive number' });

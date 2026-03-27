@@ -206,7 +206,7 @@ export async function seedDummyData(
   const existingCount = await customerRepo.count();
   if (existingCount > 0) return;
 
-  console.log('🌱 Seeding dummy data...');
+  console.info('🌱 Seeding dummy data...');
 
   // Create customers
   const customers: Customer[] = [];
@@ -625,7 +625,7 @@ export async function seedDummyData(
     });
   }
 
-  console.log(
+  console.info(
     `✅ Seeded: ${customers.length} customers, ${contractScenarios.length} contracts with DP + RTO model`,
   );
 }

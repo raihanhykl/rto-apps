@@ -47,8 +47,8 @@ export class InMemoryContractRepository implements IContractRepository {
     const sortBy = params.sortBy || 'createdAt';
     const sortOrder = params.sortOrder || 'desc';
     items.sort((a, b) => {
-      const aVal = (a as any)[sortBy];
-      const bVal = (b as any)[sortBy];
+      const aVal = String((a as unknown as Record<string, unknown>)[sortBy] ?? '');
+      const bVal = String((b as unknown as Record<string, unknown>)[sortBy] ?? '');
       if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1;
       if (aVal > bVal) return sortOrder === 'asc' ? 1 : -1;
       return 0;

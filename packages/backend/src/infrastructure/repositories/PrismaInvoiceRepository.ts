@@ -1,7 +1,7 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 import { Invoice } from '../../domain/entities';
 import { IInvoiceRepository } from '../../domain/interfaces';
-import { PaymentStatus, InvoiceType } from '../../domain/enums';
+import { PaymentStatus } from '../../domain/enums';
 import { PaginationParams, PaginatedResult } from '../../domain/interfaces/Pagination';
 
 export class PrismaInvoiceRepository implements IInvoiceRepository {

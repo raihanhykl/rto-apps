@@ -1,6 +1,7 @@
 'use client';
 
 import * as Sentry from '@sentry/nextjs';
+import Link from 'next/link';
 import { useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 
@@ -29,7 +30,7 @@ export default function DashboardError({
       <div className="flex gap-2">
         <Button onClick={reset}>Coba Lagi</Button>
         <Button variant="outline" asChild>
-          <a href="/">Kembali ke Dashboard</a>
+          <Link href="/">Kembali ke Dashboard</Link>
         </Button>
       </div>
     </div>

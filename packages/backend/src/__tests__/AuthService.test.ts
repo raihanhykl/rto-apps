@@ -201,7 +201,7 @@ describe('AuthService', () => {
       await authService.seedDefaultAdmin();
       const admin = await userRepo.findByUsername('admin');
       // Create a token that expired 1 hour ago
-      const expiredToken = jwt.sign(
+      const _expiredToken = jwt.sign(
         { userId: admin!.id, role: admin!.role, iat: Math.floor(Date.now() / 1000) - 7200 },
         TEST_JWT_SECRET,
         { expiresIn: '1h' },

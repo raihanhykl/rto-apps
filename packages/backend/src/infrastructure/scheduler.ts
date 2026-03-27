@@ -42,7 +42,7 @@ export class Scheduler {
     if (this.isStarted) return;
     this.isStarted = true;
 
-    console.log('⏰ Scheduler started (cron: every day at 00:01 WIB)');
+    console.info('⏰ Scheduler started (cron: every day at 00:01 WIB)');
 
     // Run immediately on startup
     this.runDailyTasks().catch((err) => console.error('Scheduler initial run error:', err));
@@ -68,7 +68,7 @@ export class Scheduler {
       this.task = null;
     }
     this.isStarted = false;
-    console.log('⏰ Scheduler stopped');
+    console.info('⏰ Scheduler stopped');
   }
 
   /**
@@ -146,7 +146,7 @@ export class Scheduler {
     // Acquire distributed lock (multi-instance)
     const lockAcquired = await this.acquireAdvisoryLock();
     if (!lockAcquired) {
-      console.log('⏰ Another instance is running daily tasks, skipping');
+      console.info('⏰ Another instance is running daily tasks, skipping');
       return;
     }
 
@@ -154,7 +154,7 @@ export class Scheduler {
 
     try {
       const now = new Date();
-      console.log(`⏰ Running daily tasks at ${now.toISOString()}`);
+      console.info(`⏰ Running daily tasks at ${now.toISOString()}`);
       const errors: Array<{ step: string; error: unknown }> = [];
 
       // 0. Extend PaymentDay records 30 days ahead
@@ -169,7 +169,7 @@ export class Scheduler {
       try {
         const rolledOver = await this.paymentService.rolloverExpiredPayments();
         if (rolledOver > 0) {
-          console.log(`  📋 Rolled over ${rolledOver} expired payments`);
+          console.info(`  📋 Rolled over ${rolledOver} expired payments`);
         }
       } catch (error) {
         console.error('Scheduler: rolloverExpiredPayments failed:', error);
@@ -179,7 +179,7 @@ export class Scheduler {
       // 2. Generate new daily payments
       try {
         const generated = await this.paymentService.generateDailyPayments();
-        console.log(`  📋 Generated ${generated} daily payments`);
+        console.info(`  📋 Generated ${generated} daily payments`);
       } catch (error) {
         console.error('Scheduler: generateDailyPayments failed:', error);
         errors.push({ step: 'generateDailyPayments', error });
@@ -189,7 +189,7 @@ export class Scheduler {
       try {
         const overdueCount = await this.contractService.checkAndUpdateOverdueContracts();
         if (overdueCount > 0) {
-          console.log(`  ⚠️  Marked ${overdueCount} contracts as OVERDUE`);
+          console.info(`  ⚠️  Marked ${overdueCount} contracts as OVERDUE`);
         }
       } catch (error) {
         console.error('Scheduler: checkAndUpdateOverdueContracts failed:', error);
@@ -205,7 +205,7 @@ export class Scheduler {
           errors.map((e) => e.step),
         );
       } else {
-        console.log('⏰ Daily tasks completed successfully');
+        console.info('⏰ Daily tasks completed successfully');
       }
     } finally {
       this.isJobRunning = false;

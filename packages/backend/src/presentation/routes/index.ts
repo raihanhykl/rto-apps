@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, RequestHandler } from 'express';
 import rateLimit from 'express-rate-limit';
 import { AuthController } from '../controllers/AuthController';
 import { CustomerController } from '../controllers/CustomerController';
@@ -27,7 +27,7 @@ interface RouteControllers {
   savingController: SavingController;
   serviceRecordController: ServiceRecordController;
   scheduler: Scheduler;
-  authMiddleware: any;
+  authMiddleware: RequestHandler;
   authService: AuthService;
 }
 

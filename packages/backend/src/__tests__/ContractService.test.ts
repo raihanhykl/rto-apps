@@ -14,7 +14,6 @@ import {
   HolidayScheme,
   DEFAULT_OWNERSHIP_TARGET_DAYS,
   DEFAULT_GRACE_PERIOD_DAYS,
-  DEFAULT_HOLIDAY_SCHEME,
   MOTOR_DAILY_RATES,
   DP_AMOUNTS,
 } from '../domain/enums';

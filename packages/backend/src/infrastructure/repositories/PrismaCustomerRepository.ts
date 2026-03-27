@@ -1,4 +1,4 @@
-import { PrismaClient, Prisma } from '@prisma/client';
+import { PrismaClient, Prisma, $Enums } from '@prisma/client';
 import { Customer } from '../../domain/entities';
 import { ICustomerRepository } from '../../domain/interfaces';
 import { PaginationParams, PaginatedResult } from '../../domain/interfaces/Pagination';
@@ -6,8 +6,8 @@ import { PaginationParams, PaginatedResult } from '../../domain/interfaces/Pagin
 export class PrismaCustomerRepository implements ICustomerRepository {
   constructor(private prisma: PrismaClient) {}
 
-  private toEntity(raw: any): Customer {
-    return raw as Customer;
+  private toEntity(raw: Prisma.CustomerGetPayload<object>): Customer {
+    return raw as unknown as Customer;
   }
 
   async findAll(): Promise<Customer[]> {
@@ -30,7 +30,7 @@ export class PrismaCustomerRepository implements ICustomerRepository {
       ];
     }
     if (params.gender && params.gender !== 'ALL') {
-      where.gender = params.gender as any;
+      where.gender = params.gender as string as $Enums.Gender;
     }
 
     const page = params.page || 1;
@@ -116,7 +116,7 @@ export class PrismaCustomerRepository implements ICustomerRepository {
 
   async update(id: string, data: Partial<Customer>): Promise<Customer | null> {
     try {
-      const { id: _id, ...updateData } = data as any;
+      const { id: _id, ...updateData } = data;
       const row = await this.prisma.customer.update({
         where: { id },
         data: updateData,

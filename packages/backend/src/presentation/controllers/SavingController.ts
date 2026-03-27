@@ -32,7 +32,7 @@ export class SavingController {
   debitForService = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { contractId } = req.params;
-      const adminId = (req as any).userId || 'system';
+      const adminId = req.user?.id || 'system';
       const dto = DebitSavingDto.parse(req.body);
       const result = await this.savingService.debitForService(contractId, dto, adminId);
       res.json(result);
@@ -44,7 +44,7 @@ export class SavingController {
   debitForTransfer = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { contractId } = req.params;
-      const adminId = (req as any).userId || 'system';
+      const adminId = req.user?.id || 'system';
       const dto = DebitSavingDto.parse(req.body);
       const result = await this.savingService.debitForTransfer(contractId, dto, adminId);
       res.json(result);
@@ -56,7 +56,7 @@ export class SavingController {
   claimSaving = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { contractId } = req.params;
-      const adminId = (req as any).userId || 'system';
+      const adminId = req.user?.id || 'system';
       const dto = ClaimSavingDto.parse(req.body);
       const result = await this.savingService.claimSaving(contractId, dto, adminId);
       res.json(result);
@@ -68,7 +68,7 @@ export class SavingController {
   recalculateBalance = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { contractId } = req.params;
-      const adminId = (req as any).userId || 'system';
+      const adminId = req.user?.id || 'system';
       const balance = await this.savingService.recalculateBalance(contractId, adminId);
       res.json({ balance });
     } catch (error) {
