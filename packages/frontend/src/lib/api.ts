@@ -2,22 +2,29 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
 
 class ApiClient {
   private token: string | null = null;
+  private refreshing: Promise<boolean> | null = null;
 
   setToken(token: string | null) {
     this.token = token;
-    if (token) {
-      if (typeof window !== 'undefined') localStorage.setItem('token', token);
-    } else {
-      if (typeof window !== 'undefined') localStorage.removeItem('token');
-    }
   }
 
   getToken(): string | null {
-    if (this.token) return this.token;
-    if (typeof window !== 'undefined') {
-      this.token = localStorage.getItem('token');
-    }
     return this.token;
+  }
+
+  private async tryRefresh(): Promise<boolean> {
+    try {
+      const res = await fetch(`${API_BASE}/auth/refresh`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      if (!res.ok) return false;
+      const data = await res.json();
+      this.token = data.token;
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   private async request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -34,10 +41,49 @@ class ApiClient {
     const res = await fetch(`${API_BASE}${path}`, {
       ...options,
       headers,
+      credentials: 'include',
     });
 
-    if (res.status === 401) {
-      this.setToken(null);
+    if (res.status === 401 && path !== '/auth/login' && path !== '/auth/refresh') {
+      // Attempt token refresh (deduplicate concurrent refreshes)
+      if (!this.refreshing) {
+        this.refreshing = this.tryRefresh().finally(() => {
+          this.refreshing = null;
+        });
+      }
+      const refreshed = await this.refreshing;
+
+      if (refreshed) {
+        // Retry original request with new token
+        const retryHeaders: Record<string, string> = {
+          'Content-Type': 'application/json',
+          ...((options.headers as Record<string, string>) || {}),
+          Authorization: `Bearer ${this.token}`,
+        };
+        const retryRes = await fetch(`${API_BASE}${path}`, {
+          ...options,
+          headers: retryHeaders,
+          credentials: 'include',
+        });
+
+        if (retryRes.ok) {
+          return this.parseResponse<T>(retryRes);
+        }
+
+        if (retryRes.status === 401) {
+          this.token = null;
+          if (typeof window !== 'undefined') {
+            window.location.href = '/login';
+          }
+          throw new Error('Unauthorized');
+        }
+
+        const data = await retryRes.json().catch(() => ({ error: 'Request failed' }));
+        throw new Error(data.error || 'Request failed');
+      }
+
+      // Refresh failed — redirect to login
+      this.token = null;
       if (typeof window !== 'undefined') {
         window.location.href = '/login';
       }
@@ -49,7 +95,10 @@ class ApiClient {
       throw new Error(data.error || 'Request failed');
     }
 
-    // Handle download responses
+    return this.parseResponse<T>(res);
+  }
+
+  private async parseResponse<T>(res: Response): Promise<T> {
     const contentType = res.headers.get('content-type');
     if (contentType?.includes('text/csv') || contentType?.includes('text/tab-separated-values')) {
       return (await res.text()) as unknown as T;
@@ -57,20 +106,30 @@ class ApiClient {
     if (contentType?.includes('application/pdf')) {
       return (await res.blob()) as unknown as T;
     }
-
     return res.json();
   }
 
   // Auth
   async login(username: string, password: string) {
-    return this.request<{ token: string; user: any }>('/auth/login', {
+    const result = await this.request<{ token: string; user: any }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ username, password }),
     });
+    // Store access token in memory
+    this.token = result.token;
+    return result;
   }
 
   async logout() {
-    return this.request('/auth/logout', { method: 'POST' });
+    try {
+      await this.request('/auth/logout', { method: 'POST' });
+    } finally {
+      this.token = null;
+    }
+  }
+
+  async refreshToken(): Promise<boolean> {
+    return this.tryRefresh();
   }
 
   async getMe() {

@@ -7,9 +7,9 @@ export class InMemoryContractRepository implements IContractRepository {
   private contracts: Map<string, Contract> = new Map();
 
   async findAll(): Promise<Contract[]> {
-    return Array.from(this.contracts.values()).sort(
-      (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
-    );
+    return Array.from(this.contracts.values())
+      .filter((c) => !c.isDeleted)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   }
 
   async findAllPaginated(params: PaginationParams): Promise<PaginatedResult<Contract>> {

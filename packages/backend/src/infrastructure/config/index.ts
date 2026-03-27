@@ -12,9 +12,22 @@ const envSchema = z.object({
     .refine((val) => !isNaN(Number(val)) && Number(val) > 0 && Number(val) <= 65535, {
       message: 'PORT must be a valid number between 1 and 65535',
     }),
-  CORS_ORIGIN: z.string().optional().default('http://localhost:3000'),
+  CORS_ORIGIN: z
+    .string()
+    .optional()
+    .default('http://localhost:3000')
+    .refine(
+      (val) => {
+        if (process.env.NODE_ENV === 'production' && val === '*') return false;
+        return true;
+      },
+      { message: 'CORS_ORIGIN cannot be wildcard (*) in production' },
+    ),
   NODE_ENV: z.enum(['development', 'production', 'test']).optional().default('development'),
   DATABASE_URL: z.string().optional().default(''),
+  JWT_SECRET: z.string().optional().default('dev-secret-change-in-production'),
+  JWT_EXPIRES_IN: z.string().optional().default('15m'),
+  JWT_REFRESH_EXPIRES_IN: z.string().optional().default('7d'),
 });
 
 // Parse and validate env vars
@@ -33,9 +46,18 @@ if (env.NODE_ENV === 'production' && !env.DATABASE_URL) {
   process.exit(1);
 }
 
+// In production, JWT_SECRET must be explicitly set — crash early
+if (env.NODE_ENV === 'production' && env.JWT_SECRET === 'dev-secret-change-in-production') {
+  console.error('FATAL: JWT_SECRET must be set to a secure value in production');
+  process.exit(1);
+}
+
 export const config = {
   port: parseInt(env.PORT, 10),
   corsOrigin: env.CORS_ORIGIN,
   nodeEnv: env.NODE_ENV,
   databaseUrl: env.DATABASE_URL,
+  jwtSecret: env.JWT_SECRET,
+  jwtExpiresIn: env.JWT_EXPIRES_IN,
+  jwtRefreshExpiresIn: env.JWT_REFRESH_EXPIRES_IN,
 };

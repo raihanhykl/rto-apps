@@ -5,6 +5,7 @@ initSentry();
 
 import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import { config } from './infrastructure/config';
@@ -18,6 +19,7 @@ import {
   InMemoryPaymentDayRepository,
   InMemorySavingTransactionRepository,
   InMemoryServiceRecordRepository,
+  InMemoryRefreshTokenRepository,
   PrismaUserRepository,
   PrismaCustomerRepository,
   PrismaContractRepository,
@@ -27,6 +29,7 @@ import {
   PrismaPaymentDayRepository,
   PrismaSavingTransactionRepository,
   PrismaServiceRecordRepository,
+  PrismaRefreshTokenRepository,
 } from './infrastructure/repositories';
 import {
   AuthService,
@@ -65,6 +68,7 @@ import { ISettingRepository } from './domain/interfaces/ISettingRepository';
 import { IPaymentDayRepository } from './domain/interfaces/IPaymentDayRepository';
 import { ISavingTransactionRepository } from './domain/interfaces/ISavingTransactionRepository';
 import { IServiceRecordRepository } from './domain/interfaces/IServiceRecordRepository';
+import { IRefreshTokenRepository } from './domain/interfaces/IRefreshTokenRepository';
 import { SequenceGenerator } from './application/utils/SequenceGenerator';
 import { PrismaClient } from '@prisma/client';
 import { ITransactionManager } from './domain/interfaces/ITransactionManager';
@@ -78,6 +82,7 @@ async function bootstrap() {
   // Security headers
   app.use(helmet());
   app.use(cors({ origin: config.corsOrigin, credentials: true }));
+  app.use(cookieParser());
   app.use(express.json({ limit: '1mb' }));
 
   // Rate limiting
@@ -105,6 +110,7 @@ async function bootstrap() {
   let paymentDayRepo: IPaymentDayRepository;
   let savingTxRepo: ISavingTransactionRepository;
   let serviceRecordRepo: IServiceRecordRepository;
+  let refreshTokenRepo: IRefreshTokenRepository;
 
   if (usePrisma) {
     const { prisma } = await import('./infrastructure/prisma/client');
@@ -121,6 +127,7 @@ async function bootstrap() {
     paymentDayRepo = new PrismaPaymentDayRepository(prisma);
     savingTxRepo = new PrismaSavingTransactionRepository(prisma);
     serviceRecordRepo = new PrismaServiceRecordRepository(prisma);
+    refreshTokenRepo = new PrismaRefreshTokenRepository(prisma);
   } else {
     console.log('Using In-Memory repositories');
     userRepo = new InMemoryUserRepository();
@@ -132,6 +139,7 @@ async function bootstrap() {
     paymentDayRepo = new InMemoryPaymentDayRepository();
     savingTxRepo = new InMemorySavingTransactionRepository();
     serviceRecordRepo = new InMemoryServiceRecordRepository();
+    refreshTokenRepo = new InMemoryRefreshTokenRepository();
   }
 
   // Initialize Transaction Manager
@@ -156,7 +164,14 @@ async function bootstrap() {
   sequenceGenerator.init(contractRepo, invoiceRepo);
 
   // Initialize Services
-  const authService = new AuthService(userRepo, auditRepo);
+  const authService = new AuthService(
+    userRepo,
+    auditRepo,
+    config.jwtSecret,
+    config.jwtExpiresIn,
+    refreshTokenRepo,
+    config.jwtRefreshExpiresIn,
+  );
   const settingService = new SettingService(settingRepo, auditRepo, contractRepo);
   const customerService = new CustomerService(customerRepo, auditRepo, contractRepo);
   const contractService = new ContractService(
@@ -247,6 +262,7 @@ async function bootstrap() {
     serviceRecordController,
     scheduler,
     authMiddleware,
+    authService,
   });
 
   app.use('/api', routes);

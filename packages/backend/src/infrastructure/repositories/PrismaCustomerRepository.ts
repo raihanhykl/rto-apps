@@ -122,8 +122,15 @@ export class PrismaCustomerRepository implements ICustomerRepository {
         data: updateData,
       });
       return this.toEntity(row);
-    } catch {
-      return null;
+    } catch (error: unknown) {
+      if (
+        error instanceof Error &&
+        'code' in error &&
+        (error as Record<string, unknown>).code === 'P2025'
+      ) {
+        return null;
+      }
+      throw error;
     }
   }
 
@@ -131,8 +138,15 @@ export class PrismaCustomerRepository implements ICustomerRepository {
     try {
       await this.prisma.customer.delete({ where: { id } });
       return true;
-    } catch {
-      return false;
+    } catch (error: unknown) {
+      if (
+        error instanceof Error &&
+        'code' in error &&
+        (error as Record<string, unknown>).code === 'P2025'
+      ) {
+        return false;
+      }
+      throw error;
     }
   }
 

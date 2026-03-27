@@ -129,8 +129,15 @@ export class PrismaPaymentDayRepository implements IPaymentDayRepository {
         data: updateData,
       });
       return this.toEntity(row);
-    } catch {
-      return null;
+    } catch (error: unknown) {
+      if (
+        error instanceof Error &&
+        'code' in error &&
+        (error as Record<string, unknown>).code === 'P2025'
+      ) {
+        return null;
+      }
+      throw error;
     }
   }
 
@@ -150,8 +157,15 @@ export class PrismaPaymentDayRepository implements IPaymentDayRepository {
         data: updateData,
       });
       return this.toEntity(row);
-    } catch {
-      return null;
+    } catch (error: unknown) {
+      if (
+        error instanceof Error &&
+        'code' in error &&
+        (error as Record<string, unknown>).code === 'P2025'
+      ) {
+        return null;
+      }
+      throw error;
     }
   }
 

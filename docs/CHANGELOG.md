@@ -37,6 +37,7 @@
 - [Remove Penalty for Old Contracts (2026-03-24)](#2026-03-24---remove-penalty-for-old-contracts)
 - [Developer Tooling Setup (2026-03-24)](#2026-03-24---developer-tooling-setup)
 - [Service Compensation (2026-03-26)](#2026-03-26---service-compensation)
+- [Security Overhaul + Medium Fixes (2026-03-27)](#2026-03-27---security-overhaul--medium-fixes)
 - [Development Roadmap](#development-roadmap)
 
 ---
@@ -1648,6 +1649,89 @@ Ketika motor customer diservis di service center dan tidak ada motor pengganti, 
 
 ---
 
+## 2026-03-27 - Security Overhaul + Medium Fixes
+
+### Context
+
+Audit keamanan dan robustness kode menghasilkan beberapa temuan prioritas tinggi dan medium. Implementasi mencakup bcrypt password hashing, JWT authentication, RBAC, refresh token dengan httpOnly cookie, dan perbaikan infrastructure (error handling, CORS, isDeleted filter).
+
+### What was changed
+
+**C5: Password Hashing dengan bcrypt**
+
+- `AuthService` sekarang hash password dengan `bcrypt` (cost factor 10) saat `seedAdmin()` dan `login()`
+- Seed script (`prisma/seed.ts`) hash password admin sebelum insert
+- Dependencies: `bcryptjs` + `@types/bcryptjs`
+
+**H3: JWT Token System**
+
+- Menggantikan in-memory `tokenStore` Map dengan JWT (`jsonwebtoken`)
+- Access token berisi `userId`, `username`, `role` dengan expiry configurable (`JWT_EXPIRES_IN`, default 24h)
+- `authMiddleware` verifikasi JWT signature dan expiry
+- Dependencies: `jsonwebtoken` + `@types/jsonwebtoken`
+
+**H4: RBAC Middleware + Route Protection**
+
+- `requireRole(...roles)` middleware di `authMiddleware.ts`
+- Route protection: DELETE operations require `SUPER_ADMIN` atau `ADMIN`, audit logs require `SUPER_ADMIN`
+- `UserRole` enum sudah ada di domain (SUPER_ADMIN, ADMIN, VIEWER)
+
+**M7+M8: Refresh Token + httpOnly Cookie + Frontend Auth Overhaul**
+
+- Prisma model `RefreshToken` dengan relasi ke User
+- `IRefreshTokenRepository` interface + `PrismaRefreshTokenRepository` + `InMemoryRefreshTokenRepository`
+- `AuthService`: `generateRefreshToken()`, `refreshAccessToken()`, `revokeRefreshToken()`
+- Endpoint `POST /api/auth/refresh` — refresh access token via httpOnly cookie
+- Backend: set/clear `refreshToken` httpOnly cookie pada login/refresh/logout
+- Frontend: hapus localStorage token, gunakan cookie-based auth (`credentials: 'include'`)
+- `authStore` simplified — tidak lagi simpan token, hanya user state
+- `api.ts`: intercept 401, auto-refresh via `/auth/refresh`, retry original request
+
+**M5: Repository Error Handling — P2025-only Catch**
+
+- 11 methods di 6 Prisma repository files: catch hanya `PrismaClientKnownRequestError` dengan code `P2025` (record not found), re-throw error lainnya
+- Files: PrismaContractRepository, PrismaCustomerRepository, PrismaInvoiceRepository, PrismaPaymentDayRepository, PrismaSettingRepository, PrismaUserRepository
+
+**M6: findAll() isDeleted Filter**
+
+- `PrismaContractRepository.findAll()` dan `InMemoryContractRepository.findAll()` sekarang filter `isDeleted: false` by default
+- Mencegah soft-deleted contracts muncul di listing
+
+**M11: CORS Wildcard Validation**
+
+- `src/infrastructure/config/index.ts`: validasi `CORS_ORIGIN !== '*'` di production (`NODE_ENV === 'production'`)
+- Throw error saat startup jika CORS wildcard digunakan di production
+
+### Files modified
+
+| File                                                                             | Perubahan                                       |
+| -------------------------------------------------------------------------------- | ----------------------------------------------- |
+| `packages/backend/package.json`                                                  | +bcryptjs, +jsonwebtoken, +@types               |
+| `packages/backend/prisma/schema.prisma`                                          | +RefreshToken model                             |
+| `packages/backend/prisma/seed.ts`                                                | bcrypt hash password                            |
+| `packages/backend/src/application/services/AuthService.ts`                       | bcrypt + JWT + refresh token                    |
+| `packages/backend/src/__tests__/AuthService.test.ts`                             | +45 tests (bcrypt, JWT, refresh, RBAC)          |
+| `packages/backend/src/domain/interfaces/index.ts`                                | +IRefreshTokenRepository export                 |
+| `packages/backend/src/infrastructure/config/index.ts`                            | +JWT config, CORS validation                    |
+| `packages/backend/src/infrastructure/repositories/PrismaUserRepository.ts`       | P2025-only catch                                |
+| `packages/backend/src/infrastructure/repositories/PrismaContractRepository.ts`   | P2025-only catch, isDeleted filter              |
+| `packages/backend/src/infrastructure/repositories/PrismaCustomerRepository.ts`   | P2025-only catch                                |
+| `packages/backend/src/infrastructure/repositories/PrismaInvoiceRepository.ts`    | P2025-only catch                                |
+| `packages/backend/src/infrastructure/repositories/PrismaPaymentDayRepository.ts` | P2025-only catch                                |
+| `packages/backend/src/infrastructure/repositories/PrismaSettingRepository.ts`    | P2025-only catch                                |
+| `packages/backend/src/infrastructure/repositories/InMemoryContractRepository.ts` | isDeleted filter                                |
+| `packages/backend/src/infrastructure/repositories/index.ts`                      | +refresh token repo exports                     |
+| `packages/backend/src/index.ts`                                                  | DI wiring for refresh token repo, cookie-parser |
+| `packages/backend/src/presentation/routes/index.ts`                              | +requireRole middleware, +/auth/refresh route   |
+| `packages/frontend/src/lib/api.ts`                                               | cookie-based auth, auto-refresh on 401          |
+| `packages/frontend/src/stores/authStore.ts`                                      | remove localStorage token, cookie-based         |
+
+### Test count
+
+245 tests (6 suites) — naik dari 230 (tambah 15 tests AuthService: bcrypt, JWT, refresh token)
+
+---
+
 ## Development Roadmap
 
 > Prinsip: Fungsionalitas dulu → Polish & UX → Infrastruktur & Produksi.
@@ -1669,15 +1753,15 @@ Ketika motor customer diservis di service center dan tidak ada motor pengganti, 
 
 ### Pending Phases
 
-| Phase         | Status  | Description                                             |
-| ------------- | ------- | ------------------------------------------------------- |
-| 6.5 MP-6D     | PENDING | DOKU Payment Gateway integration                        |
-| 6.5 MP-6E     | PENDING | WhatsApp Reminder (depends on MP-6D)                    |
-| 6.5 MP-6H     | PENDING | Frontend Payment Gateway UI (depends on MP-6D)          |
-| 6.5 MP-6I     | PENDING | Seed Data & Tests Update                                |
-| 7             | PENDING | Security: JWT + bcrypt, RBAC, User Management, Sessions |
-| 8 (remaining) | PENDING | File upload (KTP images), error monitoring, DB backup   |
-| 9 (remaining) | PENDING | Production deployment (Railway + Vercel), SSL, domain   |
+| Phase         | Status   | Description                                                  |
+| ------------- | -------- | ------------------------------------------------------------ |
+| 6.5 MP-6D     | PENDING  | DOKU Payment Gateway integration                             |
+| 6.5 MP-6E     | PENDING  | WhatsApp Reminder (depends on MP-6D)                         |
+| 6.5 MP-6H     | PENDING  | Frontend Payment Gateway UI (depends on MP-6D)               |
+| 6.5 MP-6I     | PENDING  | Seed Data & Tests Update                                     |
+| 7 (partial)   | COMPLETE | Security: JWT + bcrypt, RBAC, Refresh Token, httpOnly Cookie |
+| 8 (remaining) | PENDING  | File upload (KTP images), error monitoring, DB backup        |
+| 9 (remaining) | PENDING  | Production deployment (Railway + Vercel), SSL, domain        |
 
 ### Phase 7: Security & Authentication (Detail)
 

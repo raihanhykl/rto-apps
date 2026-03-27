@@ -198,8 +198,15 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
         data: updateData,
       });
       return this.toEntity(row);
-    } catch {
-      return null;
+    } catch (error: unknown) {
+      if (
+        error instanceof Error &&
+        'code' in error &&
+        (error as Record<string, unknown>).code === 'P2025'
+      ) {
+        return null;
+      }
+      throw error;
     }
   }
 
@@ -207,8 +214,15 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
     try {
       await this.prisma.invoice.delete({ where: { id } });
       return true;
-    } catch {
-      return false;
+    } catch (error: unknown) {
+      if (
+        error instanceof Error &&
+        'code' in error &&
+        (error as Record<string, unknown>).code === 'P2025'
+      ) {
+        return false;
+      }
+      throw error;
     }
   }
 

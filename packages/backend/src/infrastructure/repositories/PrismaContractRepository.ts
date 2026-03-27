@@ -11,9 +11,9 @@ export class PrismaContractRepository implements IContractRepository {
     return raw as Contract;
   }
 
-  // Note: findAll does NOT filter isDeleted (matches InMemory behavior)
   async findAll(): Promise<Contract[]> {
     const rows = await this.prisma.contract.findMany({
+      where: { isDeleted: false },
       orderBy: { createdAt: 'desc' },
     });
     return rows.map((r) => this.toEntity(r));
@@ -160,8 +160,15 @@ export class PrismaContractRepository implements IContractRepository {
         data: updateData,
       });
       return this.toEntity(row);
-    } catch {
-      return null;
+    } catch (error: unknown) {
+      if (
+        error instanceof Error &&
+        'code' in error &&
+        (error as Record<string, unknown>).code === 'P2025'
+      ) {
+        return null;
+      }
+      throw error;
     }
   }
 
@@ -169,8 +176,15 @@ export class PrismaContractRepository implements IContractRepository {
     try {
       await this.prisma.contract.delete({ where: { id } });
       return true;
-    } catch {
-      return false;
+    } catch (error: unknown) {
+      if (
+        error instanceof Error &&
+        'code' in error &&
+        (error as Record<string, unknown>).code === 'P2025'
+      ) {
+        return false;
+      }
+      throw error;
     }
   }
 
