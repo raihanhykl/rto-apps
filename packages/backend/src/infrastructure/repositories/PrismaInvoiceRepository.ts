@@ -85,6 +85,33 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
     return rows.map((r) => this.toEntity(r));
   }
 
+  async findByContractIds(contractIds: string[]): Promise<Invoice[]> {
+    if (contractIds.length === 0) return [];
+    const rows = await this.prisma.invoice.findMany({
+      where: { contractId: { in: contractIds } },
+      orderBy: { createdAt: 'desc' },
+    });
+    return rows.map((r) => this.toEntity(r));
+  }
+
+  async findActiveByContractIds(contractIds: string[]): Promise<Map<string, Invoice>> {
+    if (contractIds.length === 0) return new Map();
+    const rows = await this.prisma.invoice.findMany({
+      where: {
+        contractId: { in: contractIds },
+        status: 'PENDING' as any,
+        type: { in: ['DAILY_BILLING', 'MANUAL_PAYMENT'] as any },
+      },
+    });
+    const result = new Map<string, Invoice>();
+    for (const row of rows) {
+      if (!result.has(row.contractId)) {
+        result.set(row.contractId, this.toEntity(row));
+      }
+    }
+    return result;
+  }
+
   async findByCustomerId(customerId: string): Promise<Invoice[]> {
     const rows = await this.prisma.invoice.findMany({
       where: { customerId },
@@ -219,5 +246,87 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
       }
     }
     return max;
+  }
+
+  async getRevenueByMonth(months: number): Promise<Array<{ month: string; revenue: number }>> {
+    const now = new Date();
+    const wibStr = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+    const [yearStr, monthStr] = wibStr.split('-');
+    const year = parseInt(yearStr, 10);
+    const month = parseInt(monthStr, 10);
+
+    // Calculate start date (N months ago, first of month)
+    const startDate = new Date(year, month - 1 - (months - 1), 1);
+
+    // Fetch only PAID invoices in the date range (much smaller than findAll)
+    const rows = await this.prisma.invoice.findMany({
+      where: {
+        status: 'PAID' as any,
+        paidAt: { gte: startDate },
+      },
+      select: {
+        amount: true,
+        lateFee: true,
+        paidAt: true,
+      },
+    });
+
+    // Group by month in WIB timezone (NOT UTC!)
+    const monthMap = new Map<string, number>();
+    for (const r of rows) {
+      if (!r.paidAt) continue;
+      const pd = new Date(r.paidAt);
+      const wibPd = pd.toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+      const monthKey = wibPd.slice(0, 7); // "YYYY-MM"
+      monthMap.set(monthKey, (monthMap.get(monthKey) || 0) + r.amount + r.lateFee);
+    }
+
+    // Build result array for last N months (chronological order)
+    const result: Array<{ month: string; revenue: number }> = [];
+    for (let i = months - 1; i >= 0; i--) {
+      const d = new Date(year, month - 1 - i, 1);
+      const dWib = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+      const monthKey = dWib.slice(0, 7);
+      result.push({ month: monthKey, revenue: monthMap.get(monthKey) || 0 });
+    }
+
+    return result;
+  }
+
+  async findByDateRange(
+    startDate?: Date,
+    endDate?: Date,
+    contractIds?: string[],
+  ): Promise<Invoice[]> {
+    const where: Prisma.InvoiceWhereInput = {};
+    if (startDate || endDate) {
+      where.createdAt = {};
+      if (startDate) (where.createdAt as Prisma.DateTimeFilter).gte = startDate;
+      if (endDate) (where.createdAt as Prisma.DateTimeFilter).lte = endDate;
+    }
+    if (contractIds && contractIds.length > 0) {
+      where.contractId = { in: contractIds };
+    }
+    const rows = await this.prisma.invoice.findMany({ where, orderBy: { createdAt: 'desc' } });
+    return rows.map((r) => this.toEntity(r));
+  }
+
+  async findPaginatedByContractId(
+    contractId: string,
+    page: number,
+    limit: number,
+    sortOrder: 'asc' | 'desc' = 'desc',
+  ): Promise<{ data: Invoice[]; total: number }> {
+    const where = { contractId };
+    const [rows, total] = await Promise.all([
+      this.prisma.invoice.findMany({
+        where,
+        orderBy: { createdAt: sortOrder },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.invoice.count({ where }),
+    ]);
+    return { data: rows.map((r) => this.toEntity(r)), total };
   }
 }

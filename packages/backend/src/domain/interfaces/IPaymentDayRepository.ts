@@ -4,6 +4,7 @@ import { PaymentDayStatus } from '../enums';
 export interface IPaymentDayRepository {
   findById(id: string): Promise<PaymentDay | null>;
   findByContractId(contractId: string): Promise<PaymentDay[]>;
+  findByContractIds(contractIds: string[]): Promise<PaymentDay[]>;
   findByContractAndDateRange(
     contractId: string,
     startDate: Date,

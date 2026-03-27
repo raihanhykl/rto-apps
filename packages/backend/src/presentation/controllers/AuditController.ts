@@ -1,19 +1,22 @@
 import { Request, Response, NextFunction } from 'express';
 import { AuditService } from '../../application/services';
+import { sanitizePaginationParams } from '../utils/queryParams';
 
 export class AuditController {
   constructor(private auditService: AuditService) {}
 
   getAll = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { page, limit, sortBy, sortOrder, search, module, userId } = req.query;
-      if (page) {
+      const { module, userId } = req.query;
+      const params = sanitizePaginationParams(req.query as Record<string, unknown>, [
+        'createdAt',
+        'action',
+        'module',
+        'userId',
+      ]);
+      if (req.query.page) {
         const result = await this.auditService.getAllPaginated({
-          page: parseInt(page as string) || 1,
-          limit: parseInt(limit as string) || 20,
-          sortBy: sortBy as string,
-          sortOrder: sortOrder as 'asc' | 'desc',
-          search: search as string,
+          ...params,
           module: module as string,
         });
         return res.json(result);
@@ -34,7 +37,7 @@ export class AuditController {
 
   getRecent = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const limit = parseInt(req.query.limit as string) || 50;
+      const limit = Math.max(1, Math.min(100, parseInt(req.query.limit as string) || 50));
       const logs = await this.auditService.getRecent(limit);
       res.json(logs);
     } catch (error) {

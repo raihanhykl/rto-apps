@@ -26,6 +26,15 @@ export class PrismaPaymentDayRepository implements IPaymentDayRepository {
     return rows.map((r) => this.toEntity(r));
   }
 
+  async findByContractIds(contractIds: string[]): Promise<PaymentDay[]> {
+    if (contractIds.length === 0) return [];
+    const rows = await this.prisma.paymentDay.findMany({
+      where: { contractId: { in: contractIds } },
+      orderBy: { date: 'asc' },
+    });
+    return rows.map((r) => this.toEntity(r));
+  }
+
   async findByContractAndDateRange(
     contractId: string,
     startDate: Date,

@@ -18,6 +18,7 @@ import {
   MOTOR_DAILY_RATES,
   DP_AMOUNTS,
 } from '../domain/enums';
+import { SequenceGenerator } from '../application/utils/SequenceGenerator';
 import { v4 as uuidv4 } from 'uuid';
 
 describe('ContractService', () => {
@@ -36,6 +37,10 @@ describe('ContractService', () => {
     invoiceRepo = new InMemoryInvoiceRepository();
     auditRepo = new InMemoryAuditLogRepository();
     paymentDayRepo = new InMemoryPaymentDayRepository();
+    // Reset and init centralized sequence generator for tests
+    SequenceGenerator.reset();
+    SequenceGenerator.getInstance().init(contractRepo, invoiceRepo);
+
     contractService = new ContractService(
       contractRepo,
       customerRepo,

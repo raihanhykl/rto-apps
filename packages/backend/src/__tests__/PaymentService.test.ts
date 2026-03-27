@@ -16,6 +16,7 @@ import {
   DEFAULT_HOLIDAY_SCHEME,
   PaymentDayStatus,
 } from '../domain/enums';
+import { SequenceGenerator } from '../application/utils/SequenceGenerator';
 import { v4 as uuidv4 } from 'uuid';
 import { Contract, Invoice, PaymentDay } from '../domain/entities';
 
@@ -118,6 +119,11 @@ describe('PaymentService', () => {
     invoiceRepo = new InMemoryInvoiceRepository();
     auditRepo = new InMemoryAuditLogRepository();
     paymentDayRepo = new InMemoryPaymentDayRepository();
+
+    // Reset and init centralized sequence generator for tests
+    SequenceGenerator.reset();
+    SequenceGenerator.getInstance().init(contractRepo, invoiceRepo);
+
     paymentService = new PaymentService(invoiceRepo, contractRepo, paymentDayRepo, auditRepo);
 
     activeContract = await createActiveContract();

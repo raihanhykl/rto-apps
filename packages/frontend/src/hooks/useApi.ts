@@ -1,7 +1,7 @@
 'use client';
 
 import useSWR, { useSWRConfig } from 'swr';
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { api } from '@/lib/api';
 
 // --- TTL Constants (dedupingInterval in ms) ---
@@ -79,6 +79,17 @@ export function useContractsPaginated(params: {
   });
 }
 
+/**
+ * Search contracts with an optional search query.
+ * Pass null as `query` to disable fetching (e.g. when CommandPalette is closed).
+ */
+export function useContractsSearch(query: string | null, limit = 10) {
+  const key = query !== null ? buildKey('/contracts', { search: query, limit }) : null;
+  return useSWR(key, () => api.getContractsPaginated({ search: query ?? undefined, limit }), {
+    dedupingInterval: TTL.DEFAULT,
+  });
+}
+
 export function useContractDetail(id: string | undefined) {
   return useSWR(id ? `/contracts/${id}/detail` : null, () => api.getContractDetail(id!), {
     dedupingInterval: TTL.DEFAULT,
@@ -97,6 +108,26 @@ export function useContractsList() {
   return useSWR('/contracts', () => api.getContracts(), {
     dedupingInterval: TTL.DEFAULT,
   });
+}
+
+/**
+ * Fetch contracts with a bounded limit for lookup purposes (e.g. contractId → contractNumber mapping).
+ * Uses paginated endpoint with limit=200 to avoid unbounded fetches.
+ * Returns a Map<contractId, contractNumber> for O(1) lookup.
+ */
+export function useContractsLookup() {
+  const { data, ...rest } = useSWR(
+    '/contracts?page=1&limit=200',
+    () => api.getContractsPaginated({ page: 1, limit: 200 }),
+    { dedupingInterval: TTL.MEDIUM },
+  );
+
+  const lookupMap = useMemo<Map<string, string>>(() => {
+    const contracts: Array<{ id: string; contractNumber: string }> = data?.data ?? [];
+    return new Map(contracts.map((c) => [c.id, c.contractNumber]));
+  }, [data]);
+
+  return { lookupMap, ...rest };
 }
 
 // --- Payments (unified billing + invoice) ---

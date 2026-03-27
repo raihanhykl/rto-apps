@@ -87,4 +87,9 @@ export class InMemoryCustomerRepository implements ICustomerRepository {
   async count(): Promise<number> {
     return Array.from(this.customers.values()).filter((c) => !c.isDeleted).length;
   }
+
+  async findByIds(ids: string[]): Promise<Customer[]> {
+    const idSet = new Set(ids);
+    return Array.from(this.customers.values()).filter((c) => idSet.has(c.id));
+  }
 }

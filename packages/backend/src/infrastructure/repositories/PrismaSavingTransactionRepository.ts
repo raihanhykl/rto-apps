@@ -67,4 +67,22 @@ export class PrismaSavingTransactionRepository implements ISavingTransactionRepo
   async count(contractId: string): Promise<number> {
     return this.prisma.savingTransaction.count({ where: { contractId } });
   }
+
+  async findPaginatedByContractId(
+    contractId: string,
+    page: number,
+    limit: number,
+  ): Promise<{ data: SavingTransaction[]; total: number }> {
+    const where = { contractId };
+    const [rows, total] = await Promise.all([
+      this.prisma.savingTransaction.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.savingTransaction.count({ where }),
+    ]);
+    return { data: rows.map((r) => this.toEntity(r)), total };
+  }
 }

@@ -139,4 +139,12 @@ export class PrismaCustomerRepository implements ICustomerRepository {
   async count(): Promise<number> {
     return this.prisma.customer.count({ where: { isDeleted: false } });
   }
+
+  async findByIds(ids: string[]): Promise<Customer[]> {
+    if (ids.length === 0) return [];
+    const rows = await this.prisma.customer.findMany({
+      where: { id: { in: ids } },
+    });
+    return rows.map((r) => this.toEntity(r));
+  }
 }

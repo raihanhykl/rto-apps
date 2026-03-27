@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { SavingService } from '../../application/services/SavingService';
 import { DebitSavingDto, ClaimSavingDto } from '../../application/dtos';
+import { sanitizePaginationParams } from '../utils/queryParams';
 
 export class SavingController {
   constructor(private savingService: SavingService) {}
@@ -70,6 +71,19 @@ export class SavingController {
       const adminId = (req as any).userId || 'system';
       const balance = await this.savingService.recalculateBalance(contractId, adminId);
       res.json({ balance });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getSavingsByContract = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { id } = req.params;
+      const { page, limit } = sanitizePaginationParams(req.query as Record<string, unknown>, [
+        'createdAt',
+      ]);
+      const result = await this.savingService.getTransactionsPaginated(id, page, limit);
+      res.json({ data: result.data, total: result.total, page, limit });
     } catch (error) {
       next(error);
     }

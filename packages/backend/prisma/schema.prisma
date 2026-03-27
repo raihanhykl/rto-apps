@@ -206,6 +206,8 @@ model Contract {
   @@index([customerId])
   @@index([status])
   @@index([isDeleted])
+  @@index([status, isDeleted])
+  @@index([createdAt])
   @@map("contracts")
 }
 
@@ -250,6 +252,9 @@ model Invoice {
   @@index([customerId])
   @@index([status])
   @@index([previousPaymentId])
+  @@index([contractId, status, type])
+  @@index([createdAt])
+  @@index([dueDate])
   @@map("invoices")
 }
 
@@ -298,7 +303,6 @@ model PaymentDay {
   @@unique([contractId, date])
   @@index([contractId, status])
   @@index([paymentId])
-  @@index([contractId, date])
   @@map("payment_days")
 }
 

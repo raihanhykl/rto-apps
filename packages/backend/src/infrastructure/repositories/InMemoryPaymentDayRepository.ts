@@ -19,6 +19,13 @@ export class InMemoryPaymentDayRepository implements IPaymentDayRepository {
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }
 
+  async findByContractIds(contractIds: string[]): Promise<PaymentDay[]> {
+    const idSet = new Set(contractIds);
+    return Array.from(this.data.values())
+      .filter((pd) => idSet.has(pd.contractId))
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  }
+
   async findByContractAndDateRange(
     contractId: string,
     startDate: Date,

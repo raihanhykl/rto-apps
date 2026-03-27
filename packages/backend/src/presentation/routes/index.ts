@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import { AuthController } from '../controllers/AuthController';
 import { CustomerController } from '../controllers/CustomerController';
 import { ContractController } from '../controllers/ContractController';
@@ -27,12 +28,18 @@ interface RouteControllers {
   authMiddleware: any;
 }
 
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { error: 'Terlalu banyak percobaan login, coba lagi setelah 15 menit' },
+});
+
 export function createRoutes(controllers: RouteControllers): Router {
   const router = Router();
   const { authMiddleware } = controllers;
 
   // Auth routes (no auth required for login)
-  router.post('/auth/login', controllers.authController.login);
+  router.post('/auth/login', loginLimiter, controllers.authController.login);
   router.post('/auth/logout', authMiddleware, controllers.authController.logout);
   router.get('/auth/me', authMiddleware, controllers.authController.me);
 
@@ -59,6 +66,16 @@ export function createRoutes(controllers: RouteControllers): Router {
     controllers.contractController.getByCustomerId,
   );
   router.get('/contracts/:id/detail', authMiddleware, controllers.contractController.getDetailById);
+  router.get(
+    '/contracts/:id/invoices',
+    authMiddleware,
+    controllers.paymentController.getInvoicesByContract,
+  );
+  router.get(
+    '/contracts/:id/savings',
+    authMiddleware,
+    controllers.savingController.getSavingsByContract,
+  );
   router.get('/contracts/:id', authMiddleware, controllers.contractController.getById);
   router.post('/contracts', authMiddleware, controllers.contractController.create);
   router.post('/contracts/:id/extend', authMiddleware, controllers.contractController.extend);

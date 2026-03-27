@@ -40,4 +40,18 @@ export class InMemorySavingTransactionRepository implements ISavingTransactionRe
   async count(contractId: string): Promise<number> {
     return Array.from(this.data.values()).filter((tx) => tx.contractId === contractId).length;
   }
+
+  async findPaginatedByContractId(
+    contractId: string,
+    page: number,
+    limit: number,
+  ): Promise<{ data: SavingTransaction[]; total: number }> {
+    const filtered = Array.from(this.data.values())
+      .filter((tx) => tx.contractId === contractId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .map((tx) => ({ ...tx }));
+    const total = filtered.length;
+    const data = filtered.slice((page - 1) * limit, page * limit);
+    return { data, total };
+  }
 }

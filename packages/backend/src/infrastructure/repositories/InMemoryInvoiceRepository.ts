@@ -2,6 +2,7 @@ import { Invoice } from '../../domain/entities';
 import { IInvoiceRepository } from '../../domain/interfaces';
 import { PaymentStatus, InvoiceType } from '../../domain/enums';
 import { PaginationParams, PaginatedResult } from '../../domain/interfaces/Pagination';
+import { getWibParts, getWibToday } from '../../domain/utils/dateUtils';
 
 export class InMemoryInvoiceRepository implements IInvoiceRepository {
   private invoices: Map<string, Invoice> = new Map();
@@ -61,6 +62,29 @@ export class InMemoryInvoiceRepository implements IInvoiceRepository {
     return Array.from(this.invoices.values())
       .filter((i) => i.contractId === contractId)
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
+
+  async findByContractIds(contractIds: string[]): Promise<Invoice[]> {
+    const idSet = new Set(contractIds);
+    return Array.from(this.invoices.values())
+      .filter((i) => idSet.has(i.contractId))
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
+
+  async findActiveByContractIds(contractIds: string[]): Promise<Map<string, Invoice>> {
+    const result = new Map<string, Invoice>();
+    const idSet = new Set(contractIds);
+    for (const inv of this.invoices.values()) {
+      if (
+        idSet.has(inv.contractId) &&
+        inv.status === PaymentStatus.PENDING &&
+        (inv.type === InvoiceType.DAILY_BILLING || inv.type === InvoiceType.MANUAL_PAYMENT) &&
+        !result.has(inv.contractId)
+      ) {
+        result.set(inv.contractId, inv);
+      }
+    }
+    return result;
   }
 
   async findByCustomerId(customerId: string): Promise<Invoice[]> {
@@ -139,5 +163,71 @@ export class InMemoryInvoiceRepository implements IInvoiceRepository {
       }
     }
     return max;
+  }
+
+  async getRevenueByMonth(months: number): Promise<Array<{ month: string; revenue: number }>> {
+    const nowParts = getWibParts(getWibToday());
+    const result: Array<{ month: string; revenue: number }> = [];
+
+    const paidInvoices = Array.from(this.invoices.values()).filter(
+      (inv) => inv.status === PaymentStatus.PAID,
+    );
+
+    for (let i = months - 1; i >= 0; i--) {
+      const d = new Date(nowParts.year, nowParts.month - 1 - i, 1);
+      const wibD = getWibParts(d);
+      const monthKey = `${wibD.year}-${String(wibD.month).padStart(2, '0')}`;
+
+      const revenue = paidInvoices
+        .filter((inv) => {
+          if (!inv.paidAt) return false;
+          const pd = inv.paidAt instanceof Date ? inv.paidAt : new Date(inv.paidAt);
+          const wibPd = getWibParts(pd);
+          return `${wibPd.year}-${String(wibPd.month).padStart(2, '0')}` === monthKey;
+        })
+        .reduce((sum, inv) => sum + inv.amount + (inv.lateFee || 0), 0);
+
+      result.push({ month: monthKey, revenue });
+    }
+    return result;
+  }
+
+  async findByDateRange(
+    startDate?: Date,
+    endDate?: Date,
+    contractIds?: string[],
+  ): Promise<Invoice[]> {
+    let items = Array.from(this.invoices.values());
+
+    if (startDate) {
+      items = items.filter((i) => i.createdAt >= startDate);
+    }
+    if (endDate) {
+      items = items.filter((i) => i.createdAt <= endDate);
+    }
+    if (contractIds && contractIds.length > 0) {
+      const idSet = new Set(contractIds);
+      items = items.filter((i) => idSet.has(i.contractId));
+    }
+
+    return items.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
+
+  async findPaginatedByContractId(
+    contractId: string,
+    page: number,
+    limit: number,
+    sortOrder: 'asc' | 'desc' = 'desc',
+  ): Promise<{ data: Invoice[]; total: number }> {
+    const filtered = Array.from(this.invoices.values())
+      .filter((inv) => inv.contractId === contractId)
+      .sort((a, b) =>
+        sortOrder === 'desc'
+          ? b.createdAt.getTime() - a.createdAt.getTime()
+          : a.createdAt.getTime() - b.createdAt.getTime(),
+      );
+    const total = filtered.length;
+    const data = filtered.slice((page - 1) * limit, page * limit);
+    return { data, total };
   }
 }
