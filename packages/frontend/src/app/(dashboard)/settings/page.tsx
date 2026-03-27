@@ -147,7 +147,7 @@ export default function SettingsPage() {
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
             Job harian berjalan otomatis setiap jam 00:01 WIB. Gunakan tombol di bawah untuk
-            menjalankan secara manual (idempotent — aman dijalankan berulang kali).
+            menjalankan secara manual.
           </p>
           <div className="flex items-center gap-4">
             <Button onClick={handleRunDailyTasks} disabled={jobRunning || cooldown}>
