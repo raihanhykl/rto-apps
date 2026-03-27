@@ -192,6 +192,7 @@ async function bootstrap() {
     settingController,
     savingController,
     serviceRecordController,
+    scheduler,
     authMiddleware,
   });
 

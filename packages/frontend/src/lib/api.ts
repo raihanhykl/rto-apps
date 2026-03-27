@@ -569,6 +569,22 @@ class ApiClient {
       body: JSON.stringify({ reason }),
     });
   }
+
+  // Scheduler
+  async runDailyTasks() {
+    return this.request<{ success: boolean; message: string }>('/scheduler/run-daily-tasks', {
+      method: 'POST',
+    });
+  }
+
+  async getSchedulerStatus() {
+    return this.request<{
+      isStarted: boolean;
+      isJobRunning: boolean;
+      lastRunAt: string | null;
+      lastRunResult: 'success' | 'error' | null;
+    }>('/scheduler/status');
+  }
 }
 
 export const api = new ApiClient();
