@@ -59,6 +59,8 @@ export class PrismaSavingTransactionRepository implements ISavingTransactionRepo
         daysCount: tx.daysCount,
         description: tx.description,
         photo: tx.photo,
+        partsReplaced: tx.partsReplaced,
+        partsRepaired: tx.partsRepaired,
         createdBy: tx.createdBy,
         notes: tx.notes,
       },

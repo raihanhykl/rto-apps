@@ -4,6 +4,7 @@ import bcryptjs from 'bcryptjs';
 import { customers } from './data/customers';
 import { contracts, DateTuple } from './data/contracts';
 import { users } from './data/users';
+import { savingDebits, SavingDebitSeed } from './data/savingDebits';
 
 const prisma = new PrismaClient();
 
@@ -109,6 +110,7 @@ function countCalendarDays(
 // ====== Constants ======
 const OWN_TARGET = 1278;
 const GRACE_DAYS = 7;
+const SAVING_PER_DAY = 5000;
 
 const RATES: Record<string, number> = {
   ATHENA_REGULAR: 58000,
@@ -211,6 +213,7 @@ async function seedSettings() {
 async function resetData() {
   console.log('\n[RESET] Deleting existing data...');
   const counts = {
+    serviceRecords: await prisma.serviceRecord.deleteMany({}),
     savingTransactions: await prisma.savingTransaction.deleteMany({}),
     paymentDays: await prisma.paymentDay.deleteMany({}),
     auditLogs: await prisma.auditLog.deleteMany({}),
@@ -219,7 +222,7 @@ async function resetData() {
     customers: await prisma.customer.deleteMany({}),
   };
   console.log(
-    `  Deleted: ${counts.savingTransactions.count} saving txns, ${counts.paymentDays.count} payment days, ${counts.auditLogs.count} audit logs, ${counts.invoices.count} payments, ${counts.contracts.count} contracts, ${counts.customers.count} customers`,
+    `  Deleted: ${counts.serviceRecords.count} service records, ${counts.savingTransactions.count} saving txns, ${counts.paymentDays.count} payment days, ${counts.auditLogs.count} audit logs, ${counts.invoices.count} payments, ${counts.contracts.count} contracts, ${counts.customers.count} customers`,
   );
 }
 
@@ -260,6 +263,131 @@ async function seedCustomers(): Promise<number> {
 
   console.log(`  Customers: ${created} created, ${skipped} skipped (already exist)`);
   return created;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function buildSavingTransactions(
+  allPayments: any[],
+  adminId: string,
+): { txs: any[]; balanceMap: Map<string, number> } {
+  const allSavingTxs: any[] = [];
+  const balanceMap = new Map<string, number>();
+
+  // Build contractNumber -> contractId lookup
+  const contractNumberToId = new Map<string, string>();
+  for (const c of contracts) {
+    contractNumberToId.set(c.contractNumber, c.id);
+  }
+
+  // Group qualifying payments by contractId (DAILY_BILLING + PAID + !holiday + daysCount>0)
+  const paymentsByContract = new Map<string, any[]>();
+  for (const pmt of allPayments) {
+    if (pmt.type !== 'DAILY_BILLING') continue;
+    if (pmt.status !== 'PAID') continue;
+    if (pmt.isHoliday) continue;
+    if (!pmt.daysCount || pmt.daysCount <= 0) continue;
+    const arr = paymentsByContract.get(pmt.contractId) || [];
+    arr.push(pmt);
+    paymentsByContract.set(pmt.contractId, arr);
+  }
+
+  // Group debits by contractId
+  const debitsByContract = new Map<string, SavingDebitSeed[]>();
+  for (const d of savingDebits) {
+    const contractId = contractNumberToId.get(d.contractNumber);
+    if (!contractId) {
+      console.warn(`  ⚠ Saving debit: contract ${d.contractNumber} not found, skipping`);
+      continue;
+    }
+    const arr = debitsByContract.get(contractId) || [];
+    arr.push(d);
+    debitsByContract.set(contractId, arr);
+  }
+
+  // Process each contract
+  for (const row of contracts) {
+    const credits: any[] = [];
+    const debits: any[] = [];
+
+    // Generate CREDIT from paid working-day invoices
+    const pmts = paymentsByContract.get(row.id) || [];
+    for (const pmt of pmts) {
+      credits.push({
+        id: uuidv4(),
+        contractId: row.id,
+        type: 'CREDIT',
+        amount: SAVING_PER_DAY * pmt.daysCount,
+        balanceBefore: 0, // placeholder — calculated below
+        balanceAfter: 0,
+        paymentId: pmt.id,
+        daysCount: pmt.daysCount,
+        description: null,
+        photo: null,
+        partsReplaced: null,
+        partsRepaired: null,
+        createdBy: adminId,
+        notes: null,
+        createdAt: pmt.paidAt,
+      });
+    }
+
+    // Generate DEBIT from finance data
+    const dbs = debitsByContract.get(row.id) || [];
+    for (const d of dbs) {
+      debits.push({
+        id: uuidv4(),
+        contractId: row.id,
+        type: d.type,
+        amount: d.amount,
+        balanceBefore: 0,
+        balanceAfter: 0,
+        paymentId: null,
+        daysCount: null,
+        description: d.description,
+        photo: null,
+        partsReplaced: d.pergantian || null,
+        partsRepaired: d.perbaikan || null,
+        createdBy: adminId,
+        notes: d.notes || null,
+        createdAt: toDate(d.date),
+      });
+    }
+
+    // Skip if no transactions for this contract
+    if (credits.length === 0 && debits.length === 0) continue;
+
+    // Merge and sort chronologically (CREDIT before DEBIT on same date)
+    const merged = [...credits, ...debits].sort((a, b) => {
+      const diff = a.createdAt.getTime() - b.createdAt.getTime();
+      if (diff !== 0) return diff;
+      return a.type === 'CREDIT' ? -1 : 1;
+    });
+
+    // Calculate running balance
+    let balance = 0;
+    for (const tx of merged) {
+      tx.balanceBefore = balance;
+      if (tx.type === 'CREDIT') {
+        balance += tx.amount;
+      } else {
+        balance -= tx.amount;
+      }
+      tx.balanceAfter = balance;
+
+      if (balance < 0) {
+        throw new Error(
+          `Saving balance negative for contract ${row.contractNumber} ` +
+            `at ${tx.createdAt.toISOString().slice(0, 10)}: ` +
+            `${tx.type} Rp ${tx.amount} -> balance Rp ${balance}`,
+        );
+      }
+    }
+
+    allSavingTxs.push(...merged);
+    balanceMap.set(row.id, balance);
+  }
+
+  return { txs: allSavingTxs, balanceMap };
 }
 
 async function seedContracts(adminId: string): Promise<{
@@ -591,10 +719,41 @@ async function seedContracts(adminId: string): Promise<{
     });
   }
 
+  // ====== Saving Transactions ======
+  const { txs: allSavingTxs, balanceMap: savingBalances } = buildSavingTransactions(
+    allPayments,
+    adminId,
+  );
+
+  for (let i = 0; i < allSavingTxs.length; i += BATCH) {
+    await prisma.savingTransaction.createMany({ data: allSavingTxs.slice(i, i + BATCH) });
+  }
+
+  // Update denormalized savingBalance on contracts
+  for (const [contractId, balance] of savingBalances) {
+    await prisma.contract.update({
+      where: { id: contractId },
+      data: { savingBalance: balance },
+    });
+  }
+
+  // Verification: CREDIT total should match workingDaysPaid × SAVING_PER_DAY
+  const totalCredit = allSavingTxs
+    .filter((t) => t.type === 'CREDIT')
+    .reduce((sum: number, t: any) => sum + t.amount, 0);
+  const totalDebit = allSavingTxs
+    .filter((t) => t.type !== 'CREDIT')
+    .reduce((sum: number, t: any) => sum + t.amount, 0);
+  const netBalance = Array.from(savingBalances.values()).reduce((sum, b) => sum + b, 0);
+
   console.log(`  Contracts: ${contractsCreated} created`);
   console.log(`  Payments: ${allPayments.length} (DP + daily)`);
   console.log(`  Payment days: ${allPaymentDays.length}`);
   console.log(`  Audit logs: ${allAuditLogs.length}`);
+  console.log(`  Saving transactions: ${allSavingTxs.length} (${savingBalances.size} contracts)`);
+  console.log(
+    `    Credits: Rp ${totalCredit.toLocaleString('id-ID')} | Debits: Rp ${totalDebit.toLocaleString('id-ID')} | Net: Rp ${netBalance.toLocaleString('id-ID')}`,
+  );
 
   return {
     contractCount: contractsCreated,

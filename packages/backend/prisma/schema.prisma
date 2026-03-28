@@ -334,6 +334,8 @@ model SavingTransaction {
   // Detail transaksi (untuk DEBIT)
   description   String?                // "Service rem + ganti kampas", "Biaya balik nama STNK", dll.
   photo         String?                // URL foto bukti (nota servis, kwitansi, dll.)
+  partsReplaced String?                @map("parts_replaced")  // Part yang diganti (comma-separated)
+  partsRepaired String?                @map("parts_repaired")  // Part yang diperbaiki (comma-separated)
 
   // Admin & audit
   createdBy     String                 @map("created_by")     // Admin user ID yang melakukan transaksi

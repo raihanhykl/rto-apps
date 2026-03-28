@@ -11,6 +11,8 @@ export interface SavingTransaction {
   daysCount: number | null;
   description: string | null;
   photo: string | null;
+  partsReplaced: string | null;
+  partsRepaired: string | null;
   createdBy: string;
   notes: string | null;
   createdAt: Date;

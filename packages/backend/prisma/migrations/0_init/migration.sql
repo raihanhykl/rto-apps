@@ -1,6 +1,3 @@
-warn The configuration property `package.json#prisma` is deprecated and will be removed in Prisma 7. Please migrate to a Prisma config file (e.g., `prisma.config.ts`).
-For more information, see: https://pris.ly/prisma-config
-
 -- CreateSchema
 CREATE SCHEMA IF NOT EXISTS "public";
 
@@ -309,14 +306,4 @@ ALTER TABLE "saving_transactions" ADD CONSTRAINT "saving_transactions_contract_i
 
 -- AddForeignKey
 ALTER TABLE "saving_transactions" ADD CONSTRAINT "saving_transactions_payment_id_fkey" FOREIGN KEY ("payment_id") REFERENCES "invoices"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-┌─────────────────────────────────────────────────────────┐
-│  Update available 6.19.2 -> 7.5.0                       │
-│                                                         │
-│  This is a major update - please follow the guide at    │
-│  https://pris.ly/d/major-version-upgrade                │
-│                                                         │
-│  Run the following to update                            │
-│    npm i --save-dev prisma@latest                       │
-│    npm i @prisma/client@latest                          │
-└─────────────────────────────────────────────────────────┘
 
