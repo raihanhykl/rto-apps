@@ -133,7 +133,8 @@ describe('PaymentService', () => {
 
   describe('generateDailyPayments', () => {
     it('should generate a payment for an active contract with billing started', async () => {
-      const today = new Date();
+      // Use fixed non-holiday date (Tue Mar 10, 2026) to avoid date-dependent failures
+      const today = new Date(2026, 2, 10);
       today.setHours(0, 0, 0, 0);
 
       // Create contract with billingStartDate = today to test single-day billing
@@ -177,13 +178,18 @@ describe('PaymentService', () => {
     });
 
     it('should NOT generate new payment if active payment already exists', async () => {
-      const today = new Date();
+      // Use fixed non-holiday date to avoid date-dependent failures
+      const today = new Date(2026, 2, 10);
       today.setHours(0, 0, 0, 0);
 
+      const testContract = await createActiveContract({
+        billingStartDate: today,
+      });
+
       await paymentService.generateDailyPayments(today);
       await paymentService.generateDailyPayments(today);
 
-      const payments = await invoiceRepo.findByContractId(activeContract.id);
+      const payments = await invoiceRepo.findByContractId(testContract.id);
       expect(payments.length).toBe(1);
     });
 
@@ -359,7 +365,8 @@ describe('PaymentService', () => {
     });
 
     it('should credit days to contract when payment is paid', async () => {
-      const today = new Date();
+      // Use fixed non-holiday date (Tue Mar 10, 2026) to avoid date-dependent failures
+      const today = new Date(2026, 2, 10);
       today.setHours(0, 0, 0, 0);
 
       // Create contract with billingStartDate = today to test single-day credit
