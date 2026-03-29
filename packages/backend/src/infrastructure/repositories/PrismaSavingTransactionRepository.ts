@@ -35,6 +35,13 @@ export class PrismaSavingTransactionRepository implements ISavingTransactionRepo
     return raws.map((r) => this.toEntity(r));
   }
 
+  async findByServiceRecordId(serviceRecordId: string): Promise<SavingTransaction | null> {
+    const raw = await this.prisma.savingTransaction.findFirst({
+      where: { serviceRecordId },
+    });
+    return raw ? this.toEntity(raw) : null;
+  }
+
   async findByContractAndType(
     contractId: string,
     type: SavingTransactionType,
@@ -56,11 +63,10 @@ export class PrismaSavingTransactionRepository implements ISavingTransactionRepo
         balanceBefore: tx.balanceBefore,
         balanceAfter: tx.balanceAfter,
         paymentId: tx.paymentId,
+        serviceRecordId: tx.serviceRecordId,
         daysCount: tx.daysCount,
         description: tx.description,
         photo: tx.photo,
-        partsReplaced: tx.partsReplaced,
-        partsRepaired: tx.partsRepaired,
         createdBy: tx.createdBy,
         notes: tx.notes,
       },

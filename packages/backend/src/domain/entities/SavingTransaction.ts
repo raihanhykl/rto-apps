@@ -9,10 +9,9 @@ export interface SavingTransaction {
   balanceAfter: number;
   paymentId: string | null;
   daysCount: number | null;
+  serviceRecordId: string | null;
   description: string | null;
   photo: string | null;
-  partsReplaced: string | null;
-  partsRepaired: string | null;
   createdBy: string;
   notes: string | null;
   createdAt: Date;

@@ -615,6 +615,9 @@ class ApiClient {
     endDate: string;
     notes?: string;
     attachment?: string | null;
+    serviceCost?: number;
+    partsReplaced?: string | null;
+    partsRepaired?: string | null;
   }) {
     return this.request<any>('/service-records', {
       method: 'POST',

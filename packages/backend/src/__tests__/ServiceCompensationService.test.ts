@@ -1,5 +1,6 @@
 import { ServiceCompensationService } from '../application/services/ServiceCompensationService';
 import { PaymentService } from '../application/services/PaymentService';
+import { SavingService } from '../application/services/SavingService';
 import { SettingService } from '../application/services/SettingService';
 import { InMemoryServiceRecordRepository } from '../infrastructure/repositories/InMemoryServiceRecordRepository';
 import { InMemoryPaymentDayRepository } from '../infrastructure/repositories/InMemoryPaymentDayRepository';
@@ -7,6 +8,7 @@ import { InMemoryContractRepository } from '../infrastructure/repositories/InMem
 import { InMemoryInvoiceRepository } from '../infrastructure/repositories/InMemoryInvoiceRepository';
 import { InMemoryAuditLogRepository } from '../infrastructure/repositories/InMemoryAuditLogRepository';
 import { InMemorySettingRepository } from '../infrastructure/repositories/InMemorySettingRepository';
+import { InMemorySavingTransactionRepository } from '../infrastructure/repositories/InMemorySavingTransactionRepository';
 import {
   ServiceType,
   ServiceRecordStatus,
@@ -18,6 +20,7 @@ import {
   HolidayScheme,
   PaymentStatus,
   InvoiceType,
+  SavingTransactionType,
   DEFAULT_OWNERSHIP_TARGET_DAYS,
   DEFAULT_GRACE_PERIOD_DAYS,
   DEFAULT_HOLIDAY_SCHEME,
@@ -136,11 +139,13 @@ function createTestPaymentDay(
 describe('ServiceCompensationService', () => {
   let service: ServiceCompensationService;
   let paymentService: PaymentService;
+  let savingService: SavingService;
   let serviceRecordRepo: InMemoryServiceRecordRepository;
   let paymentDayRepo: InMemoryPaymentDayRepository;
   let contractRepo: InMemoryContractRepository;
   let invoiceRepo: InMemoryInvoiceRepository;
   let auditRepo: InMemoryAuditLogRepository;
+  let savingTxRepo: InMemorySavingTransactionRepository;
 
   const adminId = 'admin-1';
 
@@ -150,6 +155,7 @@ describe('ServiceCompensationService', () => {
     contractRepo = new InMemoryContractRepository();
     invoiceRepo = new InMemoryInvoiceRepository();
     auditRepo = new InMemoryAuditLogRepository();
+    savingTxRepo = new InMemorySavingTransactionRepository();
     const settingRepo = new InMemorySettingRepository();
     const settingService = new SettingService(settingRepo, auditRepo, contractRepo);
 
@@ -165,6 +171,8 @@ describe('ServiceCompensationService', () => {
       settingService,
     );
 
+    savingService = new SavingService(savingTxRepo, contractRepo, invoiceRepo, auditRepo);
+
     service = new ServiceCompensationService(
       serviceRecordRepo,
       paymentDayRepo,
@@ -173,6 +181,9 @@ describe('ServiceCompensationService', () => {
       auditRepo,
       paymentService,
     );
+
+    // Link saving service to service compensation service
+    service.setSavingService(savingService);
   });
 
   // ============ createServiceRecord ============
@@ -734,6 +745,179 @@ describe('ServiceCompensationService', () => {
       expect(record.compensationDays).toBe(1);
     });
 
+    it('should auto-debit saving when serviceCost > 0 on MINOR record', async () => {
+      const contract = createTestContract({ savingBalance: 500000 });
+      await contractRepo.create(contract);
+
+      const record = await service.createServiceRecord(
+        {
+          contractId: contract.id,
+          serviceType: ServiceType.MINOR,
+          replacementProvided: false,
+          startDate: '2026-01-05',
+          endDate: '2026-01-07',
+          serviceCost: 150000,
+          partsReplaced: 'Kampas rem depan',
+          partsRepaired: null,
+        },
+        adminId,
+      );
+
+      // Assert: saving transaction was created and linked to service record
+      const savingTx = await savingTxRepo.findByServiceRecordId(record.id);
+      expect(savingTx).not.toBeNull();
+      expect(savingTx!.type).toBe(SavingTransactionType.DEBIT_SERVICE);
+      expect(savingTx!.amount).toBe(150000);
+      expect(savingTx!.serviceRecordId).toBe(record.id);
+
+      // Assert: service record has serviceCost and parts fields
+      expect(record.serviceCost).toBe(150000);
+      expect(record.partsReplaced).toBe('Kampas rem depan');
+
+      // Assert: contract saving balance reduced
+      const updatedContract = await contractRepo.findById(contract.id);
+      expect(updatedContract!.savingBalance).toBe(350000);
+    });
+
+    it('should NOT debit saving when serviceCost is 0', async () => {
+      const contract = createTestContract({ savingBalance: 500000 });
+      await contractRepo.create(contract);
+
+      const record = await service.createServiceRecord(
+        {
+          contractId: contract.id,
+          serviceType: ServiceType.MINOR,
+          replacementProvided: false,
+          startDate: '2026-01-05',
+          endDate: '2026-01-07',
+          serviceCost: 0,
+        },
+        adminId,
+      );
+
+      // Assert: no saving transaction linked to this service record
+      const savingTx = await savingTxRepo.findByServiceRecordId(record.id);
+      expect(savingTx).toBeNull();
+
+      // Assert: saving balance unchanged
+      const updatedContract = await contractRepo.findById(contract.id);
+      expect(updatedContract!.savingBalance).toBe(500000);
+    });
+
+    it('should NOT debit saving when serviceCost not provided', async () => {
+      const contract = createTestContract({ savingBalance: 500000 });
+      await contractRepo.create(contract);
+
+      const record = await service.createServiceRecord(
+        {
+          contractId: contract.id,
+          serviceType: ServiceType.MINOR,
+          replacementProvided: false,
+          startDate: '2026-01-05',
+          endDate: '2026-01-07',
+        },
+        adminId,
+      );
+
+      // Assert: no saving transaction
+      const savingTx = await savingTxRepo.findByServiceRecordId(record.id);
+      expect(savingTx).toBeNull();
+    });
+
+    it('should auto-debit saving on MAJOR+no replacement with serviceCost > 0', async () => {
+      const contract = createTestContract({
+        savingBalance: 500000,
+        holidayScheme: HolidayScheme.NEW_CONTRACT,
+        billingStartDate: new Date('2026-01-02'),
+      });
+      await contractRepo.create(contract);
+
+      // Create UNPAID PaymentDays for service period
+      for (const dateStr of ['2026-01-05', '2026-01-06', '2026-01-07']) {
+        const pd = createTestPaymentDay(contract.id, new Date(dateStr), PaymentDayStatus.UNPAID);
+        await paymentDayRepo.create(pd);
+      }
+
+      const record = await service.createServiceRecord(
+        {
+          contractId: contract.id,
+          serviceType: ServiceType.MAJOR,
+          replacementProvided: false,
+          startDate: '2026-01-05',
+          endDate: '2026-01-07',
+          serviceCost: 200000,
+        },
+        adminId,
+      );
+
+      // Assert: saving transaction linked to service record
+      const savingTx = await savingTxRepo.findByServiceRecordId(record.id);
+      expect(savingTx).not.toBeNull();
+      expect(savingTx!.amount).toBe(200000);
+      expect(savingTx!.serviceRecordId).toBe(record.id);
+
+      // Assert: compensation also applied
+      expect(record.compensationDays).toBe(3);
+    });
+
+    it('should debit min(serviceCost, savingBalance) when serviceCost > savingBalance (partial debit)', async () => {
+      const contract = createTestContract({ savingBalance: 80000 });
+      await contractRepo.create(contract);
+
+      const record = await service.createServiceRecord(
+        {
+          contractId: contract.id,
+          serviceType: ServiceType.MINOR,
+          replacementProvided: false,
+          startDate: '2026-01-05',
+          endDate: '2026-01-07',
+          serviceCost: 200000,
+        },
+        adminId,
+      );
+
+      // Assert: only savingBalance amount debited, not full serviceCost
+      const savingTx = await savingTxRepo.findByServiceRecordId(record.id);
+      expect(savingTx).not.toBeNull();
+      expect(savingTx!.amount).toBe(80000); // min(200000, 80000)
+      expect(savingTx!.serviceRecordId).toBe(record.id);
+
+      // Assert: saving balance drained to 0
+      const updatedContract = await contractRepo.findById(contract.id);
+      expect(updatedContract!.savingBalance).toBe(0);
+
+      // Assert: service record still has full serviceCost
+      expect(record.serviceCost).toBe(200000);
+    });
+
+    it('should NOT debit saving when savingBalance is 0 even if serviceCost > 0', async () => {
+      const contract = createTestContract({ savingBalance: 0 });
+      await contractRepo.create(contract);
+
+      const record = await service.createServiceRecord(
+        {
+          contractId: contract.id,
+          serviceType: ServiceType.MINOR,
+          replacementProvided: false,
+          startDate: '2026-01-05',
+          endDate: '2026-01-07',
+          serviceCost: 150000,
+        },
+        adminId,
+      );
+
+      // Assert: no saving transaction created (debitAmount = min(150000, 0) = 0)
+      const savingTx = await savingTxRepo.findByServiceRecordId(record.id);
+      expect(savingTx).toBeNull();
+
+      // Assert: saving balance unchanged
+      const updatedContract = await contractRepo.findById(contract.id);
+      expect(updatedContract!.savingBalance).toBe(0);
+
+      // Assert: service record still has serviceCost recorded
+      expect(record.serviceCost).toBe(150000);
+    });
+
     it('should set service record fields correctly', async () => {
       // Arrange
       const contract = createTestContract();
@@ -1016,6 +1200,78 @@ describe('ServiceCompensationService', () => {
       const invoiceAfterRevoke = await invoiceRepo.findById(invoice.id);
       expect(invoiceAfterRevoke?.daysCount).toBe(5);
       expect(invoiceAfterRevoke?.amount).toBe(290000); // 5 * 58000
+    });
+
+    it('should auto-reverse linked saving debit when service record is revoked', async () => {
+      // Arrange: create service record with linked saving debit
+      const contract = createTestContract({ savingBalance: 500000 });
+      await contractRepo.create(contract);
+
+      const record = await service.createServiceRecord(
+        {
+          contractId: contract.id,
+          serviceType: ServiceType.MINOR,
+          replacementProvided: false,
+          startDate: '2026-01-05',
+          endDate: '2026-01-07',
+          serviceCost: 200000,
+        },
+        adminId,
+      );
+
+      // Verify saving balance after debit
+      const afterDebit = await contractRepo.findById(contract.id);
+      expect(afterDebit!.savingBalance).toBe(300000);
+
+      // Verify saving debit exists
+      const debitTx = await savingTxRepo.findByServiceRecordId(record.id);
+      expect(debitTx).not.toBeNull();
+
+      // Act: revoke service record
+      await service.revokeServiceRecord(record.id, 'Motor sudah kembali', adminId);
+
+      // Assert: saving balance restored
+      const afterRevoke = await contractRepo.findById(contract.id);
+      expect(afterRevoke!.savingBalance).toBe(500000);
+
+      // Assert: reversal transaction created
+      const allTxs = await savingTxRepo.findByContractId(contract.id);
+      const reversalTx = allTxs.find((tx) => tx.type === SavingTransactionType.REVERSAL);
+      expect(reversalTx).toBeDefined();
+      expect(reversalTx!.amount).toBe(200000);
+      expect(reversalTx!.serviceRecordId).toBe(record.id);
+    });
+
+    it('should revoke without error when no linked saving debit exists', async () => {
+      // Arrange: create service record WITHOUT saving debit
+      const contract = createTestContract();
+      await contractRepo.create(contract);
+
+      const record = await service.createServiceRecord(
+        {
+          contractId: contract.id,
+          serviceType: ServiceType.MINOR,
+          replacementProvided: false,
+          startDate: '2026-01-05',
+          endDate: '2026-01-07',
+          // serviceCost not set (defaults to 0, no debit)
+        },
+        adminId,
+      );
+
+      // Act: revoke should NOT throw even without linked saving
+      const revoked = await service.revokeServiceRecord(
+        record.id,
+        'Dibatalkan tanpa saving',
+        adminId,
+      );
+
+      // Assert: revoke succeeded
+      expect(revoked.status).toBe(ServiceRecordStatus.REVOKED);
+
+      // Assert: no saving transactions at all
+      const allTxs = await savingTxRepo.findByContractId(contract.id);
+      expect(allTxs.length).toBe(0);
     });
 
     it('should recalculate lateFee when reducing invoice during compensation', async () => {
@@ -1426,6 +1682,9 @@ describe('ServiceCompensationService', () => {
         startDate: new Date('2026-01-05'),
         endDate: new Date('2026-01-05'),
         compensationDays: 0,
+        serviceCost: 0,
+        partsReplaced: null,
+        partsRepaired: null,
         notes: 'First record',
         attachment: null,
         daySnapshots: null,
@@ -1446,6 +1705,9 @@ describe('ServiceCompensationService', () => {
         startDate: new Date('2026-01-10'),
         endDate: new Date('2026-01-10'),
         compensationDays: 0,
+        serviceCost: 0,
+        partsReplaced: null,
+        partsRepaired: null,
         notes: 'Second record',
         attachment: null,
         daySnapshots: null,

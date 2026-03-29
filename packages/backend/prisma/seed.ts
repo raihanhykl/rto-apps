@@ -4,7 +4,31 @@ import bcryptjs from 'bcryptjs';
 import { customers } from './data/customers';
 import { contracts, DateTuple } from './data/contracts';
 import { users } from './data/users';
-import { savingDebits, SavingDebitSeed } from './data/savingDebits';
+// Graceful import — jika file serviceRecords tidak ada atau kosong, seed tetap jalan
+import type { ServiceRecordSeed } from './data/serviceRecords';
+let serviceRecordSeeds: ServiceRecordSeed[] = [];
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const mod = require('./data/serviceRecords');
+  serviceRecordSeeds = mod.serviceRecords || [];
+} catch {
+  // File tidak ada atau error → skip service records
+}
+
+// Service imports untuk seeding ServiceRecords via business logic
+import { PrismaServiceRecordRepository } from '../src/infrastructure/repositories/PrismaServiceRecordRepository';
+import { PrismaPaymentDayRepository } from '../src/infrastructure/repositories/PrismaPaymentDayRepository';
+import { PrismaContractRepository } from '../src/infrastructure/repositories/PrismaContractRepository';
+import { PrismaInvoiceRepository } from '../src/infrastructure/repositories/PrismaInvoiceRepository';
+import { PrismaAuditLogRepository } from '../src/infrastructure/repositories/PrismaAuditLogRepository';
+import { PrismaSettingRepository } from '../src/infrastructure/repositories/PrismaSettingRepository';
+import { PrismaSavingTransactionRepository } from '../src/infrastructure/repositories/PrismaSavingTransactionRepository';
+import { PrismaTransactionManager } from '../src/infrastructure/transactions/PrismaTransactionManager';
+import { SettingService } from '../src/application/services/SettingService';
+import { PaymentService } from '../src/application/services/PaymentService';
+import { SavingService } from '../src/application/services/SavingService';
+import { ServiceCompensationService } from '../src/application/services/ServiceCompensationService';
+import { ServiceType } from '../src/domain/enums';
 
 const prisma = new PrismaClient();
 
@@ -273,12 +297,6 @@ function buildSavingTransactions(
   const allSavingTxs: any[] = [];
   const balanceMap = new Map<string, number>();
 
-  // Build contractNumber -> contractId lookup
-  const contractNumberToId = new Map<string, string>();
-  for (const c of contracts) {
-    contractNumberToId.set(c.contractNumber, c.id);
-  }
-
   // Group qualifying payments by contractId (DAILY_BILLING + PAID + !holiday + daysCount>0)
   const paymentsByContract = new Map<string, any[]>();
   for (const pmt of allPayments) {
@@ -291,103 +309,112 @@ function buildSavingTransactions(
     paymentsByContract.set(pmt.contractId, arr);
   }
 
-  // Group debits by contractId
-  const debitsByContract = new Map<string, SavingDebitSeed[]>();
-  for (const d of savingDebits) {
-    const contractId = contractNumberToId.get(d.contractNumber);
-    if (!contractId) {
-      console.warn(`  ⚠ Saving debit: contract ${d.contractNumber} not found, skipping`);
-      continue;
-    }
-    const arr = debitsByContract.get(contractId) || [];
-    arr.push(d);
-    debitsByContract.set(contractId, arr);
-  }
-
-  // Process each contract
+  // Process each contract — only CREDITs (debits come from seedServiceRecords)
   for (const row of contracts) {
-    const credits: any[] = [];
-    const debits: any[] = [];
-
-    // Generate CREDIT from paid working-day invoices
     const pmts = paymentsByContract.get(row.id) || [];
+    if (pmts.length === 0) continue;
+
+    let balance = 0;
     for (const pmt of pmts) {
-      credits.push({
+      const amount = SAVING_PER_DAY * pmt.daysCount;
+      allSavingTxs.push({
         id: uuidv4(),
         contractId: row.id,
         type: 'CREDIT',
-        amount: SAVING_PER_DAY * pmt.daysCount,
-        balanceBefore: 0, // placeholder — calculated below
-        balanceAfter: 0,
+        amount,
+        balanceBefore: balance,
+        balanceAfter: balance + amount,
         paymentId: pmt.id,
+        serviceRecordId: null,
         daysCount: pmt.daysCount,
         description: null,
         photo: null,
-        partsReplaced: null,
-        partsRepaired: null,
         createdBy: adminId,
         notes: null,
         createdAt: pmt.paidAt,
       });
+      balance += amount;
     }
 
-    // Generate DEBIT from finance data
-    const dbs = debitsByContract.get(row.id) || [];
-    for (const d of dbs) {
-      debits.push({
-        id: uuidv4(),
-        contractId: row.id,
-        type: d.type,
-        amount: d.amount,
-        balanceBefore: 0,
-        balanceAfter: 0,
-        paymentId: null,
-        daysCount: null,
-        description: d.description,
-        photo: null,
-        partsReplaced: d.pergantian || null,
-        partsRepaired: d.perbaikan || null,
-        createdBy: adminId,
-        notes: d.notes || null,
-        createdAt: toDate(d.date),
-      });
-    }
-
-    // Skip if no transactions for this contract
-    if (credits.length === 0 && debits.length === 0) continue;
-
-    // Merge and sort chronologically (CREDIT before DEBIT on same date)
-    const merged = [...credits, ...debits].sort((a, b) => {
-      const diff = a.createdAt.getTime() - b.createdAt.getTime();
-      if (diff !== 0) return diff;
-      return a.type === 'CREDIT' ? -1 : 1;
-    });
-
-    // Calculate running balance
-    let balance = 0;
-    for (const tx of merged) {
-      tx.balanceBefore = balance;
-      if (tx.type === 'CREDIT') {
-        balance += tx.amount;
-      } else {
-        balance -= tx.amount;
-      }
-      tx.balanceAfter = balance;
-
-      if (balance < 0) {
-        throw new Error(
-          `Saving balance negative for contract ${row.contractNumber} ` +
-            `at ${tx.createdAt.toISOString().slice(0, 10)}: ` +
-            `${tx.type} Rp ${tx.amount} -> balance Rp ${balance}`,
-        );
-      }
-    }
-
-    allSavingTxs.push(...merged);
     balanceMap.set(row.id, balance);
   }
 
   return { txs: allSavingTxs, balanceMap };
+}
+
+// Helper: DateTuple → "YYYY-MM-DD" string (ServiceCompensationService expects string format)
+function toDateString(dt: [number, number, number]): string {
+  return `${dt[0]}-${String(dt[1]).padStart(2, '0')}-${String(dt[2]).padStart(2, '0')}`;
+}
+
+async function seedServiceRecords(
+  adminId: string,
+  service: ServiceCompensationService,
+): Promise<{ created: number; skipped: number }> {
+  if (serviceRecordSeeds.length === 0) {
+    console.log('  ⏭ No service record seed data, skipping');
+    return { created: 0, skipped: 0 };
+  }
+
+  // Build contractNumber → contractId lookup
+  const allContracts = await prisma.contract.findMany({
+    select: { id: true, contractNumber: true },
+  });
+  const contractLookup = new Map(allContracts.map((c) => [c.contractNumber, c.id]));
+
+  // Build existing service record lookup: "contractId|startDate" → already exists
+  // Use getFullYear/getMonth/getDate to avoid timezone shift from toISOString()
+  const existingRecords = await prisma.serviceRecord.findMany({
+    select: { contractId: true, startDate: true },
+  });
+  const dateToKey = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const existingKeys = new Set(
+    existingRecords.map((r) => `${r.contractId}|${dateToKey(r.startDate)}`),
+  );
+
+  let created = 0;
+  let skipped = 0;
+  for (const sr of serviceRecordSeeds) {
+    const contractId = contractLookup.get(sr.contractNumber);
+    if (!contractId) {
+      console.warn(`  ⚠ Service record: contract ${sr.contractNumber} not found, skipping`);
+      skipped++;
+      continue;
+    }
+
+    // Incremental check: skip jika sudah ada record untuk kontrak + tanggal ini
+    const key = `${contractId}|${toDateString(sr.startDate)}`;
+    if (existingKeys.has(key)) {
+      skipped++;
+      continue;
+    }
+
+    try {
+      await service.createServiceRecord(
+        {
+          contractId,
+          serviceType: sr.serviceType === 'MAJOR' ? ServiceType.MAJOR : ServiceType.MINOR,
+          replacementProvided: sr.replacementProvided,
+          startDate: toDateString(sr.startDate),
+          endDate: toDateString(sr.endDate),
+          serviceCost: sr.serviceCost,
+          partsReplaced: sr.partsReplaced || null,
+          partsRepaired: sr.partsRepaired || null,
+          notes: sr.notes,
+        },
+        adminId,
+      );
+      created++;
+      existingKeys.add(key); // Prevent duplicate within same seed run
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`  ⚠ Service record for ${sr.contractNumber}: ${msg}`);
+    }
+  }
+
+  console.log(`  Service records: ${created} created, ${skipped} skipped (already exist)`);
+  return { created, skipped };
 }
 
 async function seedContracts(adminId: string): Promise<{
@@ -773,39 +800,76 @@ async function main() {
   const adminId = await seedUsers();
   await seedSettings();
 
-  // Step 2: Check if data already exists
-  const existingContracts = await prisma.contract.count();
-  if (existingContracts > 0 && !RESET) {
-    console.log(`\n[SKIP] Database already has ${existingContracts} contracts.`);
-    console.log('  To re-seed, run with --reset flag:');
-    console.log('  npx ts-node prisma/seed.ts --reset');
-    console.log('\n  Reference data (admin + settings) was updated.');
-    return;
-  }
-
-  // Step 3: Reset if requested
+  // Step 2: Reset if requested, then seed incrementally
   if (RESET) {
     await resetData();
   }
 
-  // Step 4: Seed master data + derived data
-  console.log('\n[2/4] Seeding customers:');
+  console.log('\n[2/5] Seeding customers:');
   await seedCustomers();
 
-  console.log('\n[3/4] Seeding contracts + payment history:');
+  console.log('\n[3/5] Seeding contracts + payment history:');
   const { paymentCount } = await seedContracts(adminId);
+
+  // Step 3: Seed service records (incremental — per-entry check)
+  console.log('\n[4/5] Seeding service records:');
+
+  // Wire up services for service record seeding
+  const txManager = new PrismaTransactionManager(prisma);
+  const serviceRecordRepo = new PrismaServiceRecordRepository(prisma);
+  const paymentDayRepo = new PrismaPaymentDayRepository(prisma);
+  const contractRepo = new PrismaContractRepository(prisma);
+  const invoiceRepo = new PrismaInvoiceRepository(prisma);
+  const auditRepo = new PrismaAuditLogRepository(prisma);
+  const settingRepo = new PrismaSettingRepository(prisma);
+  const savingTxRepo = new PrismaSavingTransactionRepository(prisma);
+
+  const settingService = new SettingService(settingRepo, auditRepo, contractRepo);
+  const paymentService = new PaymentService(
+    invoiceRepo,
+    contractRepo,
+    paymentDayRepo,
+    auditRepo,
+    settingService,
+    txManager,
+  );
+  const savingService = new SavingService(
+    savingTxRepo,
+    contractRepo,
+    invoiceRepo,
+    auditRepo,
+    txManager,
+  );
+  paymentService.setSavingService(savingService);
+
+  const serviceCompensationService = new ServiceCompensationService(
+    serviceRecordRepo,
+    paymentDayRepo,
+    contractRepo,
+    invoiceRepo,
+    auditRepo,
+    paymentService,
+    txManager,
+  );
+  serviceCompensationService.setSavingService(savingService);
+
+  const { created: serviceRecordCount } = await seedServiceRecords(
+    adminId,
+    serviceCompensationService,
+  );
 
   // Summary
   const activeCount = contracts.filter((c) => c.status === 'ACTIVE').length;
   const repossessedCount = contracts.filter((c) => c.status === 'REPOSSESSED').length;
   const cancelledCount = contracts.filter((c) => c.status === 'CANCELLED').length;
 
-  console.log('\n[4/4] Summary:');
+  console.log('\n[5/5] Summary:');
   console.log(`  ${customers.length} customers in data file`);
   console.log(
     `  ${contracts.length} contracts (${activeCount} active, ${repossessedCount} repossessed, ${cancelledCount} cancelled)`,
   );
   console.log(`  ${paymentCount} payments`);
+  console.log(`  ${serviceRecordCount} service records`);
   console.log('\nSeed complete!');
 }
 

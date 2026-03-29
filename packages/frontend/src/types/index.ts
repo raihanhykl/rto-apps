@@ -86,6 +86,9 @@ export interface ServiceRecord {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+  serviceCost: number;
+  partsReplaced?: string | null;
+  partsRepaired?: string | null;
 }
 
 export enum SavingTransactionType {
@@ -242,6 +245,7 @@ export interface SavingTransaction {
   photo: string | null;
   createdBy: string;
   notes: string | null;
+  serviceRecordId?: string | null;
   createdAt: string;
 }
 

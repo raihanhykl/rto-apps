@@ -15,6 +15,9 @@ export interface ServiceRecord {
   startDate: Date;
   endDate: Date;
   compensationDays: number;
+  serviceCost: number;
+  partsReplaced: string | null;
+  partsRepaired: string | null;
   notes: string;
   attachment: string | null;
 

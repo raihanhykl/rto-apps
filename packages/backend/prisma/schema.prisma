@@ -328,14 +328,13 @@ model SavingTransaction {
   balanceAfter  Int                    @map("balance_after")
 
   // Referensi sumber transaksi
-  paymentId     String?                @map("payment_id")     // FK ke Invoice (untuk CREDIT / REVERSAL)
-  daysCount     Int?                   @map("days_count")     // Jumlah hari yang menghasilkan saving (untuk CREDIT)
+  paymentId       String?                @map("payment_id")     // FK ke Invoice (untuk CREDIT / REVERSAL)
+  serviceRecordId String?                @map("service_record_id") // FK ke ServiceRecord (untuk DEBIT_SERVICE yang linked)
+  daysCount       Int?                   @map("days_count")     // Jumlah hari yang menghasilkan saving (untuk CREDIT)
 
   // Detail transaksi (untuk DEBIT)
   description   String?                // "Service rem + ganti kampas", "Biaya balik nama STNK", dll.
   photo         String?                // URL foto bukti (nota servis, kwitansi, dll.)
-  partsReplaced String?                @map("parts_replaced")  // Part yang diganti (comma-separated)
-  partsRepaired String?                @map("parts_repaired")  // Part yang diperbaiki (comma-separated)
 
   // Admin & audit
   createdBy     String                 @map("created_by")     // Admin user ID yang melakukan transaksi
@@ -346,9 +345,11 @@ model SavingTransaction {
   // Relations
   contract      Contract               @relation(fields: [contractId], references: [id])
   payment       Invoice?               @relation(fields: [paymentId], references: [id])
+  serviceRecord ServiceRecord?         @relation(fields: [serviceRecordId], references: [id])
 
   @@index([contractId])
   @@index([paymentId])
+  @@index([serviceRecordId])
   @@index([type])
   @@map("saving_transactions")
 }
@@ -361,6 +362,9 @@ model ServiceRecord {
   startDate           DateTime            @map("start_date")
   endDate             DateTime            @map("end_date")
   compensationDays    Int                 @default(0) @map("compensation_days")
+  serviceCost         Int                 @default(0) @map("service_cost")
+  partsReplaced       String?             @map("parts_replaced")
+  partsRepaired       String?             @map("parts_repaired")
   notes               String              @default("")
   attachment          String?
 
@@ -375,7 +379,8 @@ model ServiceRecord {
   createdAt           DateTime            @default(now()) @map("created_at")
   updatedAt           DateTime            @updatedAt @map("updated_at")
 
-  contract Contract @relation(fields: [contractId], references: [id])
+  contract           Contract              @relation(fields: [contractId], references: [id])
+  savingTransactions SavingTransaction[]
 
   @@index([contractId])
   @@index([status])

@@ -38,6 +38,8 @@
 - [Developer Tooling Setup (2026-03-24)](#2026-03-24---developer-tooling-setup)
 - [Service Compensation (2026-03-26)](#2026-03-26---service-compensation)
 - [Security Overhaul + Medium Fixes (2026-03-27)](#2026-03-27---security-overhaul--medium-fixes)
+- [Linked Savings-Service Flow (2026-03-29)](#2026-03-29---linked-savings-service-flow)
+- [Service Cost Direct on ServiceRecord (2026-03-29)](#2026-03-29---service-cost-direct-on-servicerecord)
 - [Development Roadmap](#development-roadmap)
 
 ---
@@ -1729,6 +1731,119 @@ Audit keamanan dan robustness kode menghasilkan beberapa temuan prioritas tinggi
 ### Test count
 
 245 tests (6 suites) — naik dari 230 (tambah 15 tests AuthService: bcrypt, JWT, refresh token)
+
+---
+
+## 2026-03-29 - Linked Savings-Service Flow
+
+### Context
+
+Ada redundansi UX antara Dana Sisihan (Savings) dan Riwayat Servis (Service History). Saat admin mencatat servis motor, mereka sering juga perlu debit dana sisihan — tapi sebelumnya ini adalah 2 operasi terpisah di 2 section berbeda. Perubahan ini menghubungkan keduanya dalam satu flow tanpa mengorbankan separation of concerns di backend.
+
+### What was changed
+
+**Schema: FK `serviceRecordId` pada SavingTransaction**
+
+- Tambah field `serviceRecordId` (nullable FK ke ServiceRecord) di model `SavingTransaction`
+- Tambah reverse relation `savingTransactions` di model `ServiceRecord`
+- Migration: `link-saving-to-service-record`
+
+**Backend: Linked Flow pada Service Creation**
+
+- `ServiceCompensationService.createServiceRecord()` sekarang menerima optional saving debit fields (`useSaving`, `savingAmount`, `savingDescription`, dll.)
+- Jika `useSaving=true`, otomatis panggil `SavingService.debitForService()` dengan `serviceRecordId` = ID record yang baru dibuat
+- `SavingService.debitForService()` sekarang menerima `serviceRecordId`, `partsReplaced`, `partsRepaired`
+
+**Backend: Auto-Reverse pada Revoke**
+
+- `SavingService.reverseServiceDebit(serviceRecordId)` — method baru untuk reverse debit by serviceRecordId
+- `ServiceCompensationService.revokeServiceRecord()` otomatis panggil `reverseServiceDebit()` setelah revoke berhasil
+
+**Repository: `findByServiceRecordId`**
+
+- Tambah method `findByServiceRecordId()` di `ISavingTransactionRepository`, `InMemorySavingTransactionRepository`, `PrismaSavingTransactionRepository`
+
+**DTO: Extended `CreateServiceRecordDto`**
+
+- Tambah 7 optional fields: `useSaving`, `savingAmount`, `savingDescription`, `savingPhoto`, `savingNotes`, `savingPartsReplaced`, `savingPartsRepaired`
+
+**Frontend: Enhanced Service Dialog**
+
+- Dialog "Tambah Record Servis" sekarang punya checkbox "Gunakan Dana Sisihan"
+- Saat dicentang: muncul form nominal, deskripsi, foto nota, pergantian part, perbaikan part
+- Preview saldo sebelum/sesudah real-time
+- Badge "Dana Sisihan: Rp XXX" di riwayat servis untuk record yang punya linked saving
+- Warning di dialog revoke jika ada linked saving yang akan di-reverse
+- Badge "(Terkait Servis)" di riwayat transaksi saving
+
+**Seed & Tests**
+
+- Seed script diupdate untuk include `serviceRecordId: null` pada semua SavingTransaction records
+- 9 test baru: 3 di SavingService (serviceRecordId link, reverseServiceDebit), 6 di ServiceCompensationService (linked create, auto-reverse revoke)
+
+### 3 Jenis Debit Tetap Berfungsi
+
+| Tipe             | Flow                                                            | Syarat                   |
+| ---------------- | --------------------------------------------------------------- | ------------------------ |
+| `DEBIT_SERVICE`  | Linked (via dialog servis) ATAU standalone (via section saving) | ACTIVE/OVERDUE/COMPLETED |
+| `DEBIT_TRANSFER` | Standalone (section saving)                                     | COMPLETED only           |
+| `DEBIT_CLAIM`    | Standalone (section saving)                                     | COMPLETED only           |
+
+### Files modified
+
+| File                                                                 | Perubahan                                      |
+| -------------------------------------------------------------------- | ---------------------------------------------- |
+| `prisma/schema.prisma`                                               | FK serviceRecordId, reverse relation           |
+| `prisma/seed.ts`                                                     | serviceRecordId: null pada saving records      |
+| `domain/entities/SavingTransaction.ts`                               | +serviceRecordId field                         |
+| `domain/interfaces/ISavingTransactionRepository.ts`                  | +findByServiceRecordId                         |
+| `infrastructure/repositories/InMemorySavingTransactionRepository.ts` | Implement method baru                          |
+| `infrastructure/repositories/PrismaSavingTransactionRepository.ts`   | Implement method baru                          |
+| `application/services/SavingService.ts`                              | +serviceRecordId support, +reverseServiceDebit |
+| `application/services/ServiceCompensationService.ts`                 | Linked saving debit + auto-reverse             |
+| `application/dtos/index.ts`                                          | Extended CreateServiceRecordDto                |
+| `__tests__/SavingService.test.ts`                                    | +3 tests                                       |
+| `__tests__/ServiceCompensationService.test.ts`                       | +6 tests                                       |
+| `frontend/src/types/index.ts`                                        | +serviceRecordId                               |
+| `frontend/src/lib/api.ts`                                            | Updated createServiceRecord type               |
+| `frontend/src/app/(dashboard)/contracts/[id]/page.tsx`               | Enhanced dialog + badges                       |
+
+### Test count
+
+254 tests (6 suites) — naik dari 245 (+9 tests: 3 SavingService, 6 ServiceCompensation)
+
+---
+
+## 2026-03-29 - Service Cost Direct on ServiceRecord
+
+### Context
+
+Revisi dari linked flow sebelumnya. Checkbox "Gunakan Dana Sisihan" masih terasa redundan (admin tetap 2 langkah mental). Revisi ini memindahkan biaya servis dan informasi parts langsung ke ServiceRecord — jika ada biaya, otomatis potong saving tanpa perlu checkbox.
+
+### What was changed
+
+**Schema Migration:**
+
+- `ServiceRecord` +3 field: `serviceCost` (Int, default 0), `partsReplaced` (String?), `partsRepaired` (String?)
+- `SavingTransaction` -2 field: `partsReplaced`, `partsRepaired` (pindah ke ServiceRecord)
+
+**Backend Logic:**
+
+- `createServiceRecord()` DTO disederhanakan: hapus 7 field `useSaving*`/`saving*`, ganti 3 field `serviceCost`, `partsReplaced`, `partsRepaired`
+- Auto-debit: jika `serviceCost > 0` → debit `min(serviceCost, savingBalance)` dari saving
+- Jika `serviceCost > savingBalance` → saving jadi 0, customer bayar sisanya
+- Revoke tetap auto-reverse saving debit
+
+**Frontend:**
+
+- Dialog servis: hapus checkbox + sub-form (7 state), ganti dengan 3 field langsung (biaya, pergantian part, perbaikan part)
+- Preview auto-debit: "Dipotong saving: Rp X" + warning jika biaya > saldo
+- Section saving: hapus tombol "Gunakan untuk Servis", pertahankan Claim + Transfer (disabled saat belum COMPLETED)
+- Riwayat servis: tampilkan biaya, pergantian part, perbaikan part per record
+
+### Test count
+
+256 tests — naik dari 254 (+2: partial debit, zero balance)
 
 ---
 
