@@ -16,7 +16,12 @@ test.describe('Customers', () => {
   test('should display customers list', async ({ page }) => {
     await page.goto('/customers');
     // Should see customer heading or table in main content
-    await expect(page.locator('main').getByText(/customer/i).first()).toBeVisible({
+    await expect(
+      page
+        .locator('main')
+        .getByText(/customer/i)
+        .first(),
+    ).toBeVisible({
       timeout: 10000,
     });
   });

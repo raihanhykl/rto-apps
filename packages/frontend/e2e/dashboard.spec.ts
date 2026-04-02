@@ -16,7 +16,12 @@ test.describe('Dashboard', () => {
 
   test('should display dashboard stats', async ({ page }) => {
     // Already on dashboard from login, wait for stats to load in main content area
-    await expect(page.locator('main').getByText(/customer/i).first()).toBeVisible({
+    await expect(
+      page
+        .locator('main')
+        .getByText(/customer/i)
+        .first(),
+    ).toBeVisible({
       timeout: 10000,
     });
   });
