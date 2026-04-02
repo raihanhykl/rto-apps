@@ -48,6 +48,47 @@ export enum PaymentDayStatus {
   PAID = 'PAID',
   HOLIDAY = 'HOLIDAY',
   VOIDED = 'VOIDED',
+  COMPENSATED = 'COMPENSATED',
+}
+
+export enum ServiceType {
+  MINOR = 'MINOR',
+  MAJOR = 'MAJOR',
+}
+
+export enum ServiceRecordStatus {
+  ACTIVE = 'ACTIVE',
+  REVOKED = 'REVOKED',
+}
+
+export interface DaySnapshot {
+  date: string;
+  originalStatus: string;
+  shiftedToDate: string | null;
+  invoiceId: string | null;
+}
+
+export interface ServiceRecord {
+  id: string;
+  contractId: string;
+  serviceType: ServiceType;
+  replacementProvided: boolean;
+  startDate: string;
+  endDate: string;
+  compensationDays: number;
+  notes: string;
+  attachment: string | null;
+  daySnapshots: DaySnapshot[] | null;
+  status: ServiceRecordStatus;
+  revokedAt: string | null;
+  revokedBy: string | null;
+  revokeReason: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  serviceCost: number;
+  partsReplaced?: string | null;
+  partsRepaired?: string | null;
 }
 
 export enum SavingTransactionType {
@@ -59,21 +100,21 @@ export enum SavingTransactionType {
 }
 
 export const MOTOR_DAILY_RATES: Record<string, number> = {
-  'ATHENA_REGULAR': 58000,
-  'ATHENA_EXTENDED': 63000,
-  'VICTORY_REGULAR': 58000,
-  'VICTORY_EXTENDED': 63000,
-  'EDPOWER_REGULAR': 83000,
-  'EDPOWER_EXTENDED': 83000,
+  ATHENA_REGULAR: 58000,
+  ATHENA_EXTENDED: 63000,
+  VICTORY_REGULAR: 58000,
+  VICTORY_EXTENDED: 63000,
+  EDPOWER_REGULAR: 83000,
+  EDPOWER_EXTENDED: 83000,
 };
 
 export const DP_AMOUNTS: Record<string, number> = {
-  'ATHENA_REGULAR': 530000,
-  'ATHENA_EXTENDED': 580000,
-  'VICTORY_REGULAR': 530000,
-  'VICTORY_EXTENDED': 580000,
-  'EDPOWER_REGULAR': 780000,
-  'EDPOWER_EXTENDED': 780000,
+  ATHENA_REGULAR: 530000,
+  ATHENA_EXTENDED: 580000,
+  VICTORY_REGULAR: 530000,
+  VICTORY_EXTENDED: 580000,
+  EDPOWER_REGULAR: 780000,
+  EDPOWER_EXTENDED: 780000,
 };
 
 export interface User {
@@ -151,6 +192,7 @@ export interface Contract {
   totalDaysPaid: number;
   workingDaysPaid: number;
   holidayDaysPaid: number;
+  compensatedDaysPaid?: number;
   ownershipProgress: number;
   gracePeriodDays: number;
   savingBalance: number;
@@ -203,6 +245,7 @@ export interface SavingTransaction {
   photo: string | null;
   createdBy: string;
   notes: string | null;
+  serviceRecordId?: string | null;
   createdAt: string;
 }
 

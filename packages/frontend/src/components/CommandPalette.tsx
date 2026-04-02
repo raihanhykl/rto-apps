@@ -1,10 +1,10 @@
-"use client";
+'use client';
 
-import { useState, useEffect, useCallback, useRef } from "react";
-import { useRouter } from "next/navigation";
-import { Input } from "@/components/ui/input";
-import { useCustomersList, useContractsList } from "@/hooks/useApi";
-import { api } from "@/lib/api";
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
+import { Input } from '@/components/ui/input';
+import { useCustomersList, useContractsSearch } from '@/hooks/useApi';
+import { api } from '@/lib/api';
 import {
   Search,
   Users,
@@ -14,10 +14,10 @@ import {
   Settings,
   ClipboardList,
   BarChart3,
-} from "lucide-react";
+} from 'lucide-react';
 
 interface SearchResult {
-  type: "page" | "customer" | "contract" | "payment";
+  type: 'page' | 'customer' | 'contract' | 'payment';
   id: string;
   title: string;
   subtitle?: string;
@@ -25,64 +25,87 @@ interface SearchResult {
 }
 
 const PAGES: SearchResult[] = [
-  { type: "page", id: "dashboard", title: "Dashboard", href: "/", subtitle: "Overview" },
-  { type: "page", id: "customers", title: "Customers", href: "/customers", subtitle: "Kelola customer" },
-  { type: "page", id: "contracts", title: "Contracts", href: "/contracts", subtitle: "Kelola kontrak" },
-  { type: "page", id: "invoices", title: "Tagihan", href: "/invoices", subtitle: "Daftar tagihan" },
-  { type: "page", id: "reports", title: "Reports", href: "/reports", subtitle: "Laporan" },
-  { type: "page", id: "audit", title: "Audit Log", href: "/audit", subtitle: "Riwayat aktivitas" },
-  { type: "page", id: "settings", title: "Settings", href: "/settings", subtitle: "Pengaturan" },
+  { type: 'page', id: 'dashboard', title: 'Dashboard', href: '/', subtitle: 'Overview' },
+  {
+    type: 'page',
+    id: 'customers',
+    title: 'Customers',
+    href: '/customers',
+    subtitle: 'Kelola customer',
+  },
+  {
+    type: 'page',
+    id: 'contracts',
+    title: 'Contracts',
+    href: '/contracts',
+    subtitle: 'Kelola kontrak',
+  },
+  { type: 'page', id: 'invoices', title: 'Tagihan', href: '/invoices', subtitle: 'Daftar tagihan' },
+  { type: 'page', id: 'reports', title: 'Reports', href: '/reports', subtitle: 'Laporan' },
+  { type: 'page', id: 'audit', title: 'Audit Log', href: '/audit', subtitle: 'Riwayat aktivitas' },
+  { type: 'page', id: 'settings', title: 'Settings', href: '/settings', subtitle: 'Pengaturan' },
 ];
 
 const getIcon = (result: SearchResult) => {
-  if (result.type === "customer") return Users;
-  if (result.type === "contract") return FileText;
-  if (result.type === "payment") return Receipt;
+  if (result.type === 'customer') return Users;
+  if (result.type === 'contract') return FileText;
+  if (result.type === 'payment') return Receipt;
   switch (result.id) {
-    case "dashboard": return LayoutDashboard;
-    case "customers": return Users;
-    case "contracts": return FileText;
-    case "invoices": return Receipt;
-    case "reports": return BarChart3;
-    case "audit": return ClipboardList;
-    case "settings": return Settings;
-    default: return Search;
+    case 'dashboard':
+      return LayoutDashboard;
+    case 'customers':
+      return Users;
+    case 'contracts':
+      return FileText;
+    case 'invoices':
+      return Receipt;
+    case 'reports':
+      return BarChart3;
+    case 'audit':
+      return ClipboardList;
+    case 'settings':
+      return Settings;
+    default:
+      return Search;
   }
 };
 
 export function CommandPalette() {
   const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [paymentResults, setPaymentResults] = useState<SearchResult[]>([]);
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // SWR hooks - only fetch when palette is open and query exists
+  // SWR hooks - only fetch when palette is open and query exists.
+  // Pass null to disable fetch entirely when palette is closed or query is empty.
+  const contractsQuery = open && debouncedQuery.length > 0 ? debouncedQuery : null;
   const { data: customers } = useCustomersList(open && debouncedQuery ? debouncedQuery : undefined);
-  const { data: contracts } = useContractsList();
+  const { data: contractsData } = useContractsSearch(contractsQuery, 10);
+  const contracts = contractsData?.data ?? [];
 
   const close = useCallback(() => {
     setOpen(false);
-    setQuery("");
-    setDebouncedQuery("");
+    setQuery('');
+    setDebouncedQuery('');
     setSelectedIndex(0);
     setPaymentResults([]);
   }, []);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
         e.preventDefault();
         setOpen((prev) => !prev);
       }
-      if (e.key === "Escape" && open) {
+      if (e.key === 'Escape' && open) {
         close();
       }
     };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
   }, [open, close]);
 
   useEffect(() => {
@@ -94,7 +117,7 @@ export function CommandPalette() {
   // Debounce query for API search
   useEffect(() => {
     if (!query.trim()) {
-      setDebouncedQuery("");
+      setDebouncedQuery('');
       setPaymentResults([]);
       return;
     }
@@ -110,17 +133,18 @@ export function CommandPalette() {
     }
 
     const q = debouncedQuery.toUpperCase();
-    if (q.startsWith("PMT") || debouncedQuery.length >= 3) {
-      api.searchPayments(debouncedQuery)
+    if (q.startsWith('PMT') || debouncedQuery.length >= 3) {
+      api
+        .searchPayments(debouncedQuery)
         .then((results: any[]) => {
           setPaymentResults(
             results.slice(0, 5).map((p: any) => ({
-              type: "payment" as const,
+              type: 'payment' as const,
               id: p.id,
               title: p.invoiceNumber,
-              subtitle: `${p.status} — Rp ${(p.amount || 0).toLocaleString("id-ID")}`,
+              subtitle: `${p.status} — Rp ${(p.amount || 0).toLocaleString('id-ID')}`,
               href: `/invoices?search=${encodeURIComponent(p.invoiceNumber)}`,
-            }))
+            })),
           );
         })
         .catch(() => setPaymentResults([]));
@@ -135,13 +159,13 @@ export function CommandPalette() {
 
     const q = debouncedQuery.toLowerCase();
     const items: SearchResult[] = PAGES.filter(
-      (p) => p.title.toLowerCase().includes(q) || (p.subtitle || "").toLowerCase().includes(q)
+      (p) => p.title.toLowerCase().includes(q) || (p.subtitle || '').toLowerCase().includes(q),
     );
 
     if (customers) {
       (customers as any[]).slice(0, 5).forEach((c: any) => {
         items.push({
-          type: "customer",
+          type: 'customer',
           id: c.id,
           title: c.fullName,
           subtitle: c.phone,
@@ -152,14 +176,14 @@ export function CommandPalette() {
 
     if (contracts) {
       (contracts as any[])
-        .filter((c: any) =>
-          c.contractNumber.toLowerCase().includes(q) ||
-          c.motorModel.toLowerCase().includes(q)
+        .filter(
+          (c: any) =>
+            c.contractNumber.toLowerCase().includes(q) || c.motorModel.toLowerCase().includes(q),
         )
         .slice(0, 5)
         .forEach((c: any) => {
           items.push({
-            type: "contract",
+            type: 'contract',
             id: c.id,
             title: c.contractNumber,
             subtitle: `${c.motorModel} - ${c.status}`,
@@ -180,13 +204,13 @@ export function CommandPalette() {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "ArrowDown") {
+    if (e.key === 'ArrowDown') {
       e.preventDefault();
       setSelectedIndex((i) => Math.min(i + 1, results.length - 1));
-    } else if (e.key === "ArrowUp") {
+    } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setSelectedIndex((i) => Math.max(i - 1, 0));
-    } else if (e.key === "Enter" && results[selectedIndex]) {
+    } else if (e.key === 'Enter' && results[selectedIndex]) {
       navigate(results[selectedIndex]);
     }
   };
@@ -221,7 +245,9 @@ export function CommandPalette() {
                 <button
                   key={`${result.type}-${result.id}`}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left text-sm transition-colors ${
-                    index === selectedIndex ? "bg-accent text-accent-foreground" : "hover:bg-accent/50"
+                    index === selectedIndex
+                      ? 'bg-accent text-accent-foreground'
+                      : 'hover:bg-accent/50'
                   }`}
                   onClick={() => navigate(result)}
                   onMouseEnter={() => setSelectedIndex(index)}
@@ -233,7 +259,9 @@ export function CommandPalette() {
                       <p className="text-xs text-muted-foreground truncate">{result.subtitle}</p>
                     )}
                   </div>
-                  <span className="text-xs text-muted-foreground capitalize shrink-0">{result.type}</span>
+                  <span className="text-xs text-muted-foreground capitalize shrink-0">
+                    {result.type}
+                  </span>
                 </button>
               );
             })

@@ -12,10 +12,37 @@
     "dev:frontend": "npm run dev --workspace=packages/frontend",
     "build": "npm run build --workspaces",
     "test": "npm run test --workspaces",
-    "lint": "npm run lint --workspaces"
+    "lint": "npm run lint --workspaces",
+    "lint:backend": "eslint packages/backend/src/",
+    "lint:frontend": "npm run lint --workspace=packages/frontend",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "prepare": "husky || true"
+  },
+  "lint-staged": {
+    "packages/backend/src/**/*.ts": [
+      "prettier --write",
+      "eslint --fix"
+    ],
+    "packages/frontend/src/**/*.{ts,tsx}": [
+      "prettier --write"
+    ],
+    "packages/frontend/e2e/**/*.ts": [
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml}": [
+      "prettier --write"
+    ]
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.4",
     "concurrently": "^8.2.2",
-    "typescript": "^5.3.3"
+    "eslint": "^9.39.4",
+    "eslint-config-prettier": "^10.1.8",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
+    "prettier": "^3.8.1",
+    "typescript": "^5.3.3",
+    "typescript-eslint": "^8.57.2"
   }
 }

@@ -7,3 +7,6 @@ export type { ISettingRepository } from './ISettingRepository';
 export type { PaginationParams, PaginatedResult } from './Pagination';
 export type { IPaymentDayRepository } from './IPaymentDayRepository';
 export type { ISavingTransactionRepository } from './ISavingTransactionRepository';
+export type { IServiceRecordRepository } from './IServiceRecordRepository';
+export type { ITransactionManager, TransactionalRepos } from './ITransactionManager';
+export type { IRefreshTokenRepository, RefreshTokenRecord } from './IRefreshTokenRepository';

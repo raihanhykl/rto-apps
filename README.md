@@ -4,13 +4,13 @@ Internal Rent-To-Own (RTO) management system for WEDISON electric motorcycles. A
 
 ## Motor Models & Rates
 
-| Motor + Battery | Daily Rate | DP Amount |
-|----------------|-----------|-----------|
-| Athena Regular Battery | Rp 58.000/hari | Rp 530.000 |
-| Athena Extended Battery | Rp 63.000/hari | Rp 580.000 |
-| Victory Regular Battery | Rp 58.000/hari | Rp 530.000 |
+| Motor + Battery          | Daily Rate     | DP Amount  |
+| ------------------------ | -------------- | ---------- |
+| Athena Regular Battery   | Rp 58.000/hari | Rp 530.000 |
+| Athena Extended Battery  | Rp 63.000/hari | Rp 580.000 |
+| Victory Regular Battery  | Rp 58.000/hari | Rp 530.000 |
 | Victory Extended Battery | Rp 63.000/hari | Rp 580.000 |
-| EdPower | Rp 83.000/hari | Rp 780.000 |
+| EdPower                  | Rp 83.000/hari | Rp 780.000 |
 
 - **Ownership Target**: 1.278 hari kerja
 - **Payment**: Tagihan harian otomatis (PMT-xxx) dengan rollover
@@ -20,19 +20,24 @@ Internal Rent-To-Own (RTO) management system for WEDISON electric motorcycles. A
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Frontend | Next.js 16 (App Router), TypeScript, Tailwind CSS v4, ShadCN UI |
-| State | Zustand |
-| Data Fetching | SWR (stale-while-revalidate) |
-| Forms | React Hook Form + Zod |
-| Backend | Express.js, TypeScript, Clean Architecture |
-| Scheduler | node-cron (daily billing at 00:01 WIB) |
-| Database | PostgreSQL + Prisma v6 (production), In-Memory (dev/test) |
-| Testing | Jest + ts-jest |
-| Monorepo | npm workspaces |
-| CI/CD | GitHub Actions |
-| Deployment | Railway (backend) + Vercel (frontend) |
+| Layer            | Technology                                                      |
+| ---------------- | --------------------------------------------------------------- |
+| Frontend         | Next.js 16 (App Router), TypeScript, Tailwind CSS v4, ShadCN UI |
+| State            | Zustand                                                         |
+| Data Fetching    | SWR (stale-while-revalidate)                                    |
+| Forms            | React Hook Form + Zod                                           |
+| Backend          | Express.js, TypeScript, Clean Architecture                      |
+| Scheduler        | node-cron (daily billing at 00:01 WIB)                          |
+| Database         | PostgreSQL + Prisma v6 (production), In-Memory (dev/test)       |
+| Unit Testing     | Jest + ts-jest                                                  |
+| E2E Testing      | Playwright                                                      |
+| Linting          | ESLint 9 (flat config) + Prettier                               |
+| Git Hooks        | Husky + lint-staged                                             |
+| API Docs         | Swagger/OpenAPI (swagger-ui-express)                            |
+| Error Monitoring | Sentry (@sentry/node + @sentry/nextjs)                          |
+| Monorepo         | npm workspaces                                                  |
+| CI/CD            | GitHub Actions (lint → test → e2e)                              |
+| Deployment       | Railway (backend) + Vercel (frontend)                           |
 
 ## Architecture
 
@@ -67,9 +72,10 @@ Monorepo (npm workspaces)
 └── railway.json          Railway deployment config
 ```
 
-## Running the Project (127 tests, 4 suites)
+## Running the Project (245 tests, 6 suites)
 
 ### Prerequisites
+
 - Node.js 22+
 - npm 10+
 - PostgreSQL (for production mode, optional for development)
@@ -109,7 +115,7 @@ npm run dev
 ### Testing
 
 ```bash
-# Run all tests (127 tests, 4 suites)
+# Run all tests (245 tests, 6 suites)
 cd packages/backend && npm test
 
 # TypeScript check
@@ -130,113 +136,138 @@ cd packages/frontend && npm run build
 
 ## Database Schema
 
-6 models with full relations:
+8 models with full relations:
 
-| Model | Description |
-|-------|-------------|
-| User | Admin users (username, password, role) |
-| Customer | Customer data (KTP, contact, guarantor, spouse, documents) |
-| Contract | RTO contracts (motor, battery, DP, ownership tracking) |
-| Invoice | Unified payment records — PMT-xxx (DP, daily, manual, holiday) |
-| AuditLog | All mutation operations logged |
-| Setting | Configurable system settings |
+| Model         | Description                                                    |
+| ------------- | -------------------------------------------------------------- |
+| User          | Admin users (username, password, role)                         |
+| Customer      | Customer data (KTP, contact, guarantor, spouse, documents)     |
+| Contract      | RTO contracts (motor, battery, DP, ownership tracking)         |
+| Invoice       | Unified payment records — PMT-xxx (DP, daily, manual, holiday) |
+| PaymentDay    | Per-date payment status records per contract                   |
+| ServiceRecord | Bike service records with day snapshots for compensation       |
+| AuditLog      | All mutation operations logged                                 |
+| Setting       | Configurable system settings                                   |
 
-9 enums: MotorModel, BatteryType, ContractStatus, PaymentStatus, InvoiceType, DPScheme, Gender, AuditAction, UserRole
+13 enums: MotorModel, BatteryType, ContractStatus, PaymentStatus, InvoiceType, DPScheme, PaymentDayStatus, HolidayScheme, ServiceType, ServiceRecordStatus, Gender, AuditAction, UserRole
 
 ## API Endpoints
 
-### Auth
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | /api/auth/login | Admin login |
-| POST | /api/auth/logout | Admin logout |
-| GET | /api/auth/me | Get current user |
+### Auth (JWT + httpOnly Cookie)
+
+| Method | Path              | Description                        |
+| ------ | ----------------- | ---------------------------------- |
+| POST   | /api/auth/login   | Admin login (returns JWT + cookie) |
+| POST   | /api/auth/logout  | Admin logout (clears cookie)       |
+| GET    | /api/auth/me      | Get current user                   |
+| POST   | /api/auth/refresh | Refresh access token via cookie    |
+
+**Authentication**: JWT access token + httpOnly refresh token cookie. Passwords hashed with bcrypt.
+**RBAC**: 3 roles — `SUPER_ADMIN`, `ADMIN`, `VIEWER`. DELETE operations require ADMIN+, audit logs require SUPER_ADMIN.
 
 ### Dashboard
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | /api/dashboard/stats | Dashboard statistics + chart data |
+
+| Method | Path                 | Description                       |
+| ------ | -------------------- | --------------------------------- |
+| GET    | /api/dashboard/stats | Dashboard statistics + chart data |
 
 ### Customers
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | /api/customers | List customers (paginated) |
-| POST | /api/customers | Create customer |
-| GET | /api/customers/:id | Get customer detail |
-| PUT | /api/customers/:id | Update customer |
-| DELETE | /api/customers/:id | Soft delete customer |
+
+| Method | Path               | Description                |
+| ------ | ------------------ | -------------------------- |
+| GET    | /api/customers     | List customers (paginated) |
+| POST   | /api/customers     | Create customer            |
+| GET    | /api/customers/:id | Get customer detail        |
+| PUT    | /api/customers/:id | Update customer            |
+| DELETE | /api/customers/:id | Soft delete customer       |
 
 ### Contracts
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | /api/contracts | List contracts (paginated) |
-| POST | /api/contracts | Create contract (with DP invoices) |
-| GET | /api/contracts/:id/detail | Contract + customer + invoices detail |
-| PUT | /api/contracts/:id | Edit contract (notes, grace period, ownership target, unit details) |
-| DELETE | /api/contracts/:id | Soft delete contract |
-| PATCH | /api/contracts/:id/status | Update contract status |
-| PATCH | /api/contracts/:id/cancel | Cancel contract (with reason) |
-| PATCH | /api/contracts/:id/repossess | Repossess motor |
-| PATCH | /api/contracts/:id/receive-unit | Mark unit received (requires DP paid + BAST) |
-| POST | /api/contracts/:id/pay-billing | Bayar tagihan manual (1-7 hari) |
-| GET | /api/contracts/overdue-warnings | Get overdue/near-overdue contracts |
-| GET | /api/contracts/customer/:customerId | Contracts by customer |
+
+| Method | Path                                | Description                                                         |
+| ------ | ----------------------------------- | ------------------------------------------------------------------- |
+| GET    | /api/contracts                      | List contracts (paginated)                                          |
+| POST   | /api/contracts                      | Create contract (with DP invoices)                                  |
+| GET    | /api/contracts/:id/detail           | Contract + customer + invoices detail                               |
+| PUT    | /api/contracts/:id                  | Edit contract (notes, grace period, ownership target, unit details) |
+| DELETE | /api/contracts/:id                  | Soft delete contract                                                |
+| PATCH  | /api/contracts/:id/status           | Update contract status                                              |
+| PATCH  | /api/contracts/:id/cancel           | Cancel contract (with reason)                                       |
+| PATCH  | /api/contracts/:id/repossess        | Repossess motor                                                     |
+| PATCH  | /api/contracts/:id/receive-unit     | Mark unit received (requires DP paid + BAST)                        |
+| POST   | /api/contracts/:id/pay-billing      | Bayar tagihan manual (1-7 hari)                                     |
+| GET    | /api/contracts/overdue-warnings     | Get overdue/near-overdue contracts                                  |
+| GET    | /api/contracts/customer/:customerId | Contracts by customer                                               |
 
 ### Payments (Unified — replaces Invoices + Billings)
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | /api/payments | List payments (paginated, filterable) |
-| GET | /api/payments/:id | Get payment detail |
-| GET | /api/payments/:id/qr | Generate QR code |
-| GET | /api/payments/:id/pdf | Download payment as PDF |
-| POST | /api/payments/:id/pay | Pay payment (PENDING → PAID) |
-| POST | /api/payments/:id/simulate | Simulate payment (dev) |
-| PATCH | /api/payments/:id/void | Void payment |
-| PATCH | /api/payments/:id/mark-paid | Manual mark as paid |
-| PATCH | /api/payments/:id/revert | Revert payment to PENDING |
-| PATCH | /api/payments/:id/cancel | Cancel payment (reactivate previous if merged) |
-| POST | /api/payments/bulk-pay | Bulk mark payments as paid |
-| GET | /api/payments/contract/:contractId | All payments for contract |
-| GET | /api/payments/contract/:contractId/active | Active (PENDING) payment |
-| GET | /api/payments/contract/:contractId/calendar | Calendar data |
-| POST | /api/payments/contract/:contractId/manual | Create manual payment (1-7 days) |
-| PATCH | /api/payments/contract/:contractId/day/:date | Admin correction — ubah status PaymentDay |
-| POST | /api/payments/:id/reduce | Partial payment — kurangi hari dalam invoice |
+
+| Method | Path                                         | Description                                    |
+| ------ | -------------------------------------------- | ---------------------------------------------- |
+| GET    | /api/payments                                | List payments (paginated, filterable)          |
+| GET    | /api/payments/:id                            | Get payment detail                             |
+| GET    | /api/payments/:id/qr                         | Generate QR code                               |
+| GET    | /api/payments/:id/pdf                        | Download payment as PDF                        |
+| POST   | /api/payments/:id/pay                        | Pay payment (PENDING → PAID)                   |
+| POST   | /api/payments/:id/simulate                   | Simulate payment (dev)                         |
+| PATCH  | /api/payments/:id/void                       | Void payment                                   |
+| PATCH  | /api/payments/:id/mark-paid                  | Manual mark as paid                            |
+| PATCH  | /api/payments/:id/revert                     | Revert payment to PENDING                      |
+| PATCH  | /api/payments/:id/cancel                     | Cancel payment (reactivate previous if merged) |
+| POST   | /api/payments/bulk-pay                       | Bulk mark payments as paid                     |
+| GET    | /api/payments/contract/:contractId           | All payments for contract                      |
+| GET    | /api/payments/contract/:contractId/active    | Active (PENDING) payment                       |
+| GET    | /api/payments/contract/:contractId/calendar  | Calendar data                                  |
+| POST   | /api/payments/contract/:contractId/manual    | Create manual payment (1-7 days)               |
+| PATCH  | /api/payments/contract/:contractId/day/:date | Admin correction — ubah status PaymentDay      |
+| POST   | /api/payments/:id/reduce                     | Partial payment — kurangi hari dalam invoice   |
 
 ### Reports & Export
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | /api/reports | Get report data (supports filters) |
-| GET | /api/reports/export/json | Export report as JSON |
-| GET | /api/reports/export/csv | Export report as CSV |
-| GET | /api/reports/export/xlsv | Export report as Excel (TSV) |
+
+| Method | Path                     | Description                        |
+| ------ | ------------------------ | ---------------------------------- |
+| GET    | /api/reports             | Get report data (supports filters) |
+| GET    | /api/reports/export/json | Export report as JSON              |
+| GET    | /api/reports/export/csv  | Export report as CSV               |
+| GET    | /api/reports/export/xlsv | Export report as Excel (TSV)       |
 
 ### Settings & Audit
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | /api/settings | Get all settings |
-| PUT | /api/settings | Update settings |
-| GET | /api/settings/rates | Get motor daily rates |
-| GET | /api/audit-logs | Get audit logs (paginated) |
+
+| Method | Path                | Description                |
+| ------ | ------------------- | -------------------------- |
+| GET    | /api/settings       | Get all settings           |
+| PUT    | /api/settings       | Update settings            |
+| GET    | /api/settings/rates | Get motor daily rates      |
+| GET    | /api/audit-logs     | Get audit logs (paginated) |
 
 ### Saving (Tabungan per Kontrak)
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | /api/savings/contract/:contractId | Get saving data (balance + transactions) |
-| GET | /api/savings/contract/:contractId/balance | Get saving balance only |
-| POST | /api/savings/contract/:contractId/debit-service | Debit saving untuk biaya servis motor |
-| POST | /api/savings/contract/:contractId/debit-transfer | Debit saving untuk biaya balik nama STNK/BPKB |
-| POST | /api/savings/contract/:contractId/claim | Claim sisa saving oleh customer |
-| POST | /api/savings/contract/:contractId/recalculate | Recalculate saving balance dari transaksi |
+
+| Method | Path                                             | Description                                   |
+| ------ | ------------------------------------------------ | --------------------------------------------- |
+| GET    | /api/savings/contract/:contractId                | Get saving data (balance + transactions)      |
+| GET    | /api/savings/contract/:contractId/balance        | Get saving balance only                       |
+| POST   | /api/savings/contract/:contractId/debit-service  | Debit saving untuk biaya servis motor         |
+| POST   | /api/savings/contract/:contractId/debit-transfer | Debit saving untuk biaya balik nama STNK/BPKB |
+| POST   | /api/savings/contract/:contractId/claim          | Claim sisa saving oleh customer               |
+| POST   | /api/savings/contract/:contractId/recalculate    | Recalculate saving balance dari transaksi     |
+
+### Service Records (Kompensasi Servis)
+
+| Method | Path                                      | Description                             |
+| ------ | ----------------------------------------- | --------------------------------------- |
+| POST   | /api/service-records                      | Create service record                   |
+| GET    | /api/service-records/contract/:contractId | List service records by contract        |
+| GET    | /api/service-records/:id                  | Get service record detail               |
+| PATCH  | /api/service-records/:id/revoke           | Revoke service record (undo kompensasi) |
 
 ### Webhook
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | /api/webhooks/doku | DOKU payment webhook (public, no auth) |
+
+| Method | Path               | Description                            |
+| ------ | ------------------ | -------------------------------------- |
+| POST   | /api/webhooks/doku | DOKU payment webhook (public, no auth) |
 
 ## Seed Data
 
 Production seed script uses static TypeScript data files:
+
 - `prisma/data/customers.ts` — 80 real customers
 - `prisma/data/contracts.ts` — 79 contracts (71 active, 6 repossessed, 2 cancelled)
 
@@ -254,11 +285,13 @@ cd packages/backend && npx prisma db seed -- --reset --force
 ## Deployment
 
 ### Backend (Railway)
+
 1. Create Railway project + PostgreSQL addon
-2. Set env vars: `CORS_ORIGIN`, `NODE_ENV=production`
+2. Set env vars: `CORS_ORIGIN`, `NODE_ENV=production`, `JWT_SECRET`
 3. `railway.json` handles build + start + auto-seed
 
 ### Frontend (Vercel)
+
 1. Root directory: `packages/frontend`
 2. Set env var: `NEXT_PUBLIC_API_URL=https://your-backend.railway.app/api`
 
@@ -275,14 +308,21 @@ Branch protection: main + staging require PR + CI pass.
 ### Environment Variables
 
 **Backend** (`packages/backend/.env`):
+
 ```
 PORT=3001
 NODE_ENV=development
 CORS_ORIGIN=http://localhost:3000
 DATABASE_URL=postgresql://user:pass@localhost:5432/wedison
+JWT_SECRET=your-secret-key-here
+JWT_EXPIRES_IN=24h
+JWT_REFRESH_EXPIRES_IN=7d
 ```
 
+> **Note**: `JWT_SECRET` wajib di-set di production. `CORS_ORIGIN` tidak boleh `*` di production.
+
 **Frontend** (`packages/frontend/.env.local`):
+
 ```
 NEXT_PUBLIC_API_URL=http://localhost:3001/api
 ```

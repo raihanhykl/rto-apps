@@ -3,11 +3,13 @@ import {
   ICustomerRepository,
   IInvoiceRepository,
   IAuditLogRepository,
+  ITransactionManager,
+  TransactionalRepos,
   PaginationParams,
   PaginatedResult,
 } from '../../domain/interfaces';
 import { Contract, Invoice, Customer } from '../../domain/entities';
-import { getWibToday, getWibDateParts, getWibParts } from '../../domain/utils/dateUtils';
+import { getWibToday, getWibParts } from '../../domain/utils/dateUtils';
 import {
   ContractStatus,
   PaymentStatus,
@@ -29,23 +31,26 @@ import {
 import { IPaymentDayRepository } from '../../domain/interfaces';
 import { PaymentDay } from '../../domain/entities';
 import { computeLateFee } from '../../domain/utils/lateFeeCalculator';
-import { CreateContractDto, UpdateContractStatusDto, ExtendContractDto, UpdateContractDto, CancelContractDto } from '../dtos';
+import {
+  CreateContractDto,
+  UpdateContractStatusDto,
+  ExtendContractDto,
+  UpdateContractDto,
+  CancelContractDto,
+} from '../dtos';
 import { SettingService } from './SettingService';
+import { SequenceGenerator } from '../utils/SequenceGenerator';
 import { v4 as uuidv4 } from 'uuid';
 
 export class ContractService {
-  private static contractCounter = 0;
-  private static contractCounterInitialized = false;
-  private static invoiceCounter = 0;
-  private static invoiceCounterInitialized = false;
-
   constructor(
     private contractRepo: IContractRepository,
     private customerRepo: ICustomerRepository,
     private invoiceRepo: IInvoiceRepository,
     private paymentDayRepo: IPaymentDayRepository,
     private auditRepo: IAuditLogRepository,
-    private settingService?: SettingService
+    private settingService?: SettingService,
+    private txManager?: ITransactionManager,
   ) {}
 
   private async getSetting(key: string, fallback: number): Promise<number> {
@@ -55,7 +60,7 @@ export class ContractService {
 
   async getAll(includeDeleted = false): Promise<Contract[]> {
     const contracts = await this.contractRepo.findAll();
-    return includeDeleted ? contracts : contracts.filter(c => !c.isDeleted);
+    return includeDeleted ? contracts : contracts.filter((c) => !c.isDeleted);
   }
 
   async getAllPaginated(params: PaginationParams): Promise<PaginatedResult<Contract>> {
@@ -68,7 +73,9 @@ export class ContractService {
     return contract;
   }
 
-  async getDetailById(id: string): Promise<{ contract: Contract; customer: Customer; invoices: Invoice[] }> {
+  async getDetailById(
+    id: string,
+  ): Promise<{ contract: Contract; customer: Customer; invoices: Invoice[] }> {
     const contract = await this.contractRepo.findById(id);
     if (!contract) throw new Error('Contract not found');
 
@@ -84,7 +91,10 @@ export class ContractService {
     return this.contractRepo.findByCustomerId(customerId);
   }
 
-  async create(dto: CreateContractDto, adminId: string): Promise<{ contract: Contract; invoices: Invoice[] }> {
+  async create(
+    dto: CreateContractDto,
+    adminId: string,
+  ): Promise<{ contract: Contract; invoices: Invoice[] }> {
     const customer = await this.customerRepo.findById(dto.customerId);
     if (!customer) throw new Error('Customer not found');
 
@@ -97,8 +107,11 @@ export class ContractService {
 
     const startDate = new Date(dto.startDate);
 
-    const contractNumber = await this.generateContractNumber();
-    const ownershipTargetDays = await this.getSetting('ownership_target_days', DEFAULT_OWNERSHIP_TARGET_DAYS);
+    const contractNumber = await SequenceGenerator.getInstance().nextContractNumber();
+    const ownershipTargetDays = await this.getSetting(
+      'ownership_target_days',
+      DEFAULT_OWNERSHIP_TARGET_DAYS,
+    );
     const gracePeriodDays = await this.getSetting('grace_period_days', DEFAULT_GRACE_PERIOD_DAYS);
 
     const contract: Contract = {
@@ -136,6 +149,7 @@ export class ContractService {
       totalDaysPaid: 0,
       workingDaysPaid: 0,
       holidayDaysPaid: 0,
+      compensatedDaysPaid: 0,
       ownershipProgress: 0,
       gracePeriodDays,
       savingBalance: 0,
@@ -147,129 +161,160 @@ export class ContractService {
       updatedAt: new Date(),
     };
 
-    const createdContract = await this.contractRepo.create(contract);
-
-    // Generate DP invoice(s) based on dpScheme
-    const invoices: Invoice[] = [];
+    // Pre-generate invoice numbers outside transaction (sequence generator is singleton)
     const dueDate = new Date(startDate);
     dueDate.setDate(dueDate.getDate() + 1);
 
+    let invoiceNumber: string | undefined;
+    let inv1Number: string | undefined;
+    let inv2Number: string | undefined;
+
     if (dto.dpScheme === DPScheme.FULL) {
-      // Single DP invoice for full amount
-      const invoiceNumber = await this.generateInvoiceNumber();
-      const invoice: Invoice = {
-        id: uuidv4(),
-        invoiceNumber,
-        contractId: createdContract.id,
-        customerId: dto.customerId,
-        amount: dpAmount,
-        lateFee: 0,
-        type: InvoiceType.DP,
-        status: PaymentStatus.PENDING,
-        qrCodeData: `WEDISON-PAY-${invoiceNumber}-${dpAmount}`,
-        dueDate,
-        paidAt: null,
-        extensionDays: null, // DP doesn't extend days
-        dokuPaymentUrl: null,
-        dokuReferenceId: null,
-        dailyRate: null,
-        daysCount: null,
-        periodStart: null,
-        periodEnd: null,
-        expiredAt: null,
-        previousPaymentId: null,
-        isHoliday: false,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-      invoices.push(await this.invoiceRepo.create(invoice));
+      invoiceNumber = await SequenceGenerator.getInstance().nextInvoiceNumber();
     } else {
-      // INSTALLMENT: 2 invoices, 1st = ceil(dp/2), 2nd = floor(dp/2)
-      const firstAmount = Math.ceil(dpAmount / 2);
-      const secondAmount = Math.floor(dpAmount / 2);
-
-      const inv1Number = await this.generateInvoiceNumber();
-      const invoice1: Invoice = {
-        id: uuidv4(),
-        invoiceNumber: inv1Number,
-        contractId: createdContract.id,
-        customerId: dto.customerId,
-        amount: firstAmount,
-        lateFee: 0,
-        type: InvoiceType.DP_INSTALLMENT,
-        status: PaymentStatus.PENDING,
-        qrCodeData: `WEDISON-PAY-${inv1Number}-${firstAmount}`,
-        dueDate,
-        paidAt: null,
-        extensionDays: null,
-        dokuPaymentUrl: null,
-        dokuReferenceId: null,
-        dailyRate: null,
-        daysCount: null,
-        periodStart: null,
-        periodEnd: null,
-        expiredAt: null,
-        previousPaymentId: null,
-        isHoliday: false,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-      invoices.push(await this.invoiceRepo.create(invoice1));
-
-      const inv2Number = await this.generateInvoiceNumber();
-      const dueDate2 = new Date(dueDate);
-      dueDate2.setDate(dueDate2.getDate() + 7); // 2nd installment due 1 week later
-      const invoice2: Invoice = {
-        id: uuidv4(),
-        invoiceNumber: inv2Number,
-        contractId: createdContract.id,
-        customerId: dto.customerId,
-        amount: secondAmount,
-        lateFee: 0,
-        type: InvoiceType.DP_INSTALLMENT,
-        status: PaymentStatus.PENDING,
-        qrCodeData: `WEDISON-PAY-${inv2Number}-${secondAmount}`,
-        dueDate: dueDate2,
-        paidAt: null,
-        extensionDays: null,
-        dokuPaymentUrl: null,
-        dokuReferenceId: null,
-        dailyRate: null,
-        daysCount: null,
-        periodStart: null,
-        periodEnd: null,
-        expiredAt: null,
-        previousPaymentId: null,
-        isHoliday: false,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-      invoices.push(await this.invoiceRepo.create(invoice2));
+      inv1Number = await SequenceGenerator.getInstance().nextInvoiceNumber();
+      inv2Number = await SequenceGenerator.getInstance().nextInvoiceNumber();
     }
 
-    await this.auditRepo.create({
-      id: uuidv4(),
-      userId: adminId,
-      action: AuditAction.CREATE,
-      module: 'contract',
-      entityId: createdContract.id,
-      description: `Created contract ${contractNumber} for ${customer.fullName} - ${dto.motorModel} ${dto.batteryType} (DP: ${dto.dpScheme})`,
-      metadata: {
-        contractNumber,
-        motorModel: dto.motorModel,
-        batteryType: dto.batteryType,
-        dpScheme: dto.dpScheme,
-        dpAmount,
-        dailyRate,
-      },
-      ipAddress: '',
-      createdAt: new Date(),
-    });
+    // WRITES inside transaction
+    const writeOps = async (repos: TransactionalRepos) => {
+      const createdContract = await repos.contractRepo.create(contract);
 
-    return { contract: createdContract, invoices };
+      // Generate DP invoice(s) based on dpScheme
+      const invoices: Invoice[] = [];
+
+      if (dto.dpScheme === DPScheme.FULL) {
+        const invoice: Invoice = {
+          id: uuidv4(),
+          invoiceNumber: invoiceNumber!,
+          contractId: createdContract.id,
+          customerId: dto.customerId,
+          amount: dpAmount,
+          lateFee: 0,
+          type: InvoiceType.DP,
+          status: PaymentStatus.PENDING,
+          qrCodeData: `WEDISON-PAY-${invoiceNumber}-${dpAmount}`,
+          dueDate,
+          paidAt: null,
+          extensionDays: null,
+          dokuPaymentUrl: null,
+          dokuReferenceId: null,
+          dailyRate: null,
+          daysCount: null,
+          periodStart: null,
+          periodEnd: null,
+          expiredAt: null,
+          previousPaymentId: null,
+          isHoliday: false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+        invoices.push(await repos.invoiceRepo.create(invoice));
+      } else {
+        const firstAmount = Math.ceil(dpAmount / 2);
+        const secondAmount = Math.floor(dpAmount / 2);
+
+        const invoice1: Invoice = {
+          id: uuidv4(),
+          invoiceNumber: inv1Number!,
+          contractId: createdContract.id,
+          customerId: dto.customerId,
+          amount: firstAmount,
+          lateFee: 0,
+          type: InvoiceType.DP_INSTALLMENT,
+          status: PaymentStatus.PENDING,
+          qrCodeData: `WEDISON-PAY-${inv1Number}-${firstAmount}`,
+          dueDate,
+          paidAt: null,
+          extensionDays: null,
+          dokuPaymentUrl: null,
+          dokuReferenceId: null,
+          dailyRate: null,
+          daysCount: null,
+          periodStart: null,
+          periodEnd: null,
+          expiredAt: null,
+          previousPaymentId: null,
+          isHoliday: false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+        invoices.push(await repos.invoiceRepo.create(invoice1));
+
+        const dueDate2 = new Date(dueDate);
+        dueDate2.setDate(dueDate2.getDate() + 7);
+        const invoice2: Invoice = {
+          id: uuidv4(),
+          invoiceNumber: inv2Number!,
+          contractId: createdContract.id,
+          customerId: dto.customerId,
+          amount: secondAmount,
+          lateFee: 0,
+          type: InvoiceType.DP_INSTALLMENT,
+          status: PaymentStatus.PENDING,
+          qrCodeData: `WEDISON-PAY-${inv2Number}-${secondAmount}`,
+          dueDate: dueDate2,
+          paidAt: null,
+          extensionDays: null,
+          dokuPaymentUrl: null,
+          dokuReferenceId: null,
+          dailyRate: null,
+          daysCount: null,
+          periodStart: null,
+          periodEnd: null,
+          expiredAt: null,
+          previousPaymentId: null,
+          isHoliday: false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+        invoices.push(await repos.invoiceRepo.create(invoice2));
+      }
+
+      await repos.auditRepo.create({
+        id: uuidv4(),
+        userId: adminId,
+        action: AuditAction.CREATE,
+        module: 'contract',
+        entityId: createdContract.id,
+        description: `Created contract ${contractNumber} for ${customer.fullName} - ${dto.motorModel} ${dto.batteryType} (DP: ${dto.dpScheme})`,
+        metadata: {
+          contractNumber,
+          motorModel: dto.motorModel,
+          batteryType: dto.batteryType,
+          dpScheme: dto.dpScheme,
+          dpAmount,
+          dailyRate,
+        },
+        ipAddress: '',
+        createdAt: new Date(),
+      });
+
+      return { contract: createdContract, invoices };
+    };
+
+    if (this.txManager) {
+      return this.txManager.runInTransaction(writeOps);
+    } else {
+      return writeOps({
+        contractRepo: this.contractRepo,
+        invoiceRepo: this.invoiceRepo,
+        paymentDayRepo: this.paymentDayRepo,
+        auditRepo: this.auditRepo,
+        savingTxRepo: null as any,
+        serviceRecordRepo: null as any,
+        customerRepo: null as any,
+        settingRepo: null as any,
+      });
+    }
   }
 
-  async receiveUnit(id: string, adminId: string, bastPhoto: string, bastNotes?: string): Promise<Contract> {
+  async receiveUnit(
+    id: string,
+    adminId: string,
+    bastPhoto: string,
+    bastNotes?: string,
+  ): Promise<Contract> {
     const existing = await this.contractRepo.findById(id);
     if (!existing) throw new Error('Contract not found');
 
@@ -288,17 +333,19 @@ export class ContractService {
     // Validate DP payment - check dpFullyPaid flag first, then verify against invoices
     if (!existing.dpFullyPaid) {
       const invoices = await this.invoiceRepo.findByContractId(id);
-      const dpInvoices = invoices.filter(i => i.type === InvoiceType.DP || i.type === InvoiceType.DP_INSTALLMENT);
+      const dpInvoices = invoices.filter(
+        (i) => i.type === InvoiceType.DP || i.type === InvoiceType.DP_INSTALLMENT,
+      );
 
       if (existing.dpScheme === DPScheme.FULL) {
-        const dpInvoice = dpInvoices.find(i => i.type === InvoiceType.DP);
+        const dpInvoice = dpInvoices.find((i) => i.type === InvoiceType.DP);
         if (!dpInvoice || dpInvoice.status !== PaymentStatus.PAID) {
           throw new Error('DP harus dibayar lunas sebelum unit bisa diterima');
         }
       } else {
         // INSTALLMENT: at least 1st installment must be paid
         const sortedDpInvoices = dpInvoices
-          .filter(i => i.type === InvoiceType.DP_INSTALLMENT)
+          .filter((i) => i.type === InvoiceType.DP_INSTALLMENT)
           .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
         if (sortedDpInvoices.length === 0 || sortedDpInvoices[0].status !== PaymentStatus.PAID) {
           throw new Error('DP cicilan pertama harus dibayar sebelum unit bisa diterima');
@@ -311,15 +358,7 @@ export class ContractService {
     tomorrow.setDate(tomorrow.getDate() + 1);
     tomorrow.setHours(0, 0, 0, 0);
 
-    const updated = await this.contractRepo.update(id, {
-      unitReceivedDate: today,
-      billingStartDate: tomorrow,
-      bastPhoto,
-      bastNotes: bastNotes || '',
-    });
-    if (!updated) throw new Error('Failed to update contract');
-
-    // Generate PaymentDay records for 60 days from billingStartDate
+    // Pre-build PaymentDay records outside transaction
     const records: PaymentDay[] = [];
     const cursor = new Date(tomorrow);
     for (let i = 0; i < 60; i++) {
@@ -328,7 +367,8 @@ export class ContractService {
       const wib = getWibParts(d);
       const isSunday = wib.dayOfWeek === 0;
       const isDate29Plus = wib.day > 28;
-      const isHoliday = existing.holidayScheme === HolidayScheme.OLD_CONTRACT ? isSunday : isDate29Plus;
+      const isHoliday =
+        existing.holidayScheme === HolidayScheme.OLD_CONTRACT ? isSunday : isDate29Plus;
 
       records.push({
         id: uuidv4(),
@@ -345,34 +385,66 @@ export class ContractService {
 
       cursor.setDate(cursor.getDate() + 1);
     }
-    if (records.length > 0) {
-      await this.paymentDayRepo.createMany(records);
-    }
 
+    // Read customer name for audit (outside transaction)
     const customer = await this.customerRepo.findById(existing.customerId);
 
-    await this.auditRepo.create({
-      id: uuidv4(),
-      userId: adminId,
-      action: AuditAction.UPDATE,
-      module: 'contract',
-      entityId: id,
-      description: `Unit received for contract ${existing.contractNumber} (${customer?.fullName || 'Unknown'}) - billing starts ${tomorrow.toISOString().split('T')[0]}`,
-      metadata: {
-        contractNumber: existing.contractNumber,
+    // WRITES inside transaction
+    const writeOps = async (repos: TransactionalRepos) => {
+      const updated = await repos.contractRepo.update(id, {
         unitReceivedDate: today,
         billingStartDate: tomorrow,
         bastPhoto,
         bastNotes: bastNotes || '',
-      },
-      ipAddress: '',
-      createdAt: new Date(),
-    });
+      });
+      if (!updated) throw new Error('Failed to update contract');
 
-    return updated;
+      if (records.length > 0) {
+        await repos.paymentDayRepo.createMany(records);
+      }
+
+      await repos.auditRepo.create({
+        id: uuidv4(),
+        userId: adminId,
+        action: AuditAction.UPDATE,
+        module: 'contract',
+        entityId: id,
+        description: `Unit received for contract ${existing.contractNumber} (${customer?.fullName || 'Unknown'}) - billing starts ${tomorrow.toISOString().split('T')[0]}`,
+        metadata: {
+          contractNumber: existing.contractNumber,
+          unitReceivedDate: today,
+          billingStartDate: tomorrow,
+          bastPhoto,
+          bastNotes: bastNotes || '',
+        },
+        ipAddress: '',
+        createdAt: new Date(),
+      });
+
+      return updated;
+    };
+
+    if (this.txManager) {
+      return this.txManager.runInTransaction(writeOps);
+    } else {
+      return writeOps({
+        contractRepo: this.contractRepo,
+        invoiceRepo: this.invoiceRepo,
+        paymentDayRepo: this.paymentDayRepo,
+        auditRepo: this.auditRepo,
+        savingTxRepo: null as any,
+        serviceRecordRepo: null as any,
+        customerRepo: null as any,
+        settingRepo: null as any,
+      });
+    }
   }
 
-  async extend(id: string, dto: ExtendContractDto, adminId: string): Promise<{ contract: Contract; invoice: Invoice }> {
+  async extend(
+    id: string,
+    dto: ExtendContractDto,
+    adminId: string,
+  ): Promise<{ contract: Contract; invoice: Invoice }> {
     const existing = await this.contractRepo.findById(id);
     if (!existing) throw new Error('Contract not found');
 
@@ -382,9 +454,11 @@ export class ContractService {
 
     // Block extension if there are unpaid pending invoices
     const existingInvoices = await this.invoiceRepo.findByContractId(id);
-    const hasPending = existingInvoices.some(inv => inv.status === PaymentStatus.PENDING);
+    const hasPending = existingInvoices.some((inv) => inv.status === PaymentStatus.PENDING);
     if (hasPending) {
-      throw new Error('Tidak bisa perpanjang: masih ada invoice yang belum dibayar. Bayar atau void terlebih dahulu.');
+      throw new Error(
+        'Tidak bisa perpanjang: masih ada invoice yang belum dibayar. Bayar atau void terlebih dahulu.',
+      );
     }
 
     const maxRentalDays = await this.getSetting('max_rental_days', MAX_RENTAL_DAYS);
@@ -399,14 +473,20 @@ export class ContractService {
     let lateFee = 0;
     const now = getWibToday();
     if (existing.billingStartDate && existing.holidayScheme !== HolidayScheme.OLD_CONTRACT) {
-      const penaltyGraceDays = await this.getSetting('penalty_grace_days', DEFAULT_PENALTY_GRACE_DAYS);
+      const penaltyGraceDays = await this.getSetting(
+        'penalty_grace_days',
+        DEFAULT_PENALTY_GRACE_DAYS,
+      );
       const feePerDay = await this.getSetting('late_fee_per_day', DEFAULT_LATE_FEE_PER_DAY);
-      const allUnpaid = await this.paymentDayRepo.findByContractAndStatus(existing.id, PaymentDayStatus.UNPAID);
+      const allUnpaid = await this.paymentDayRepo.findByContractAndStatus(
+        existing.id,
+        PaymentDayStatus.UNPAID,
+      );
       lateFee = computeLateFee(allUnpaid, now, penaltyGraceDays, feePerDay);
     }
 
     // Generate new invoice for the extension (contract is NOT updated until payment)
-    const invoiceNumber = await this.generateInvoiceNumber();
+    const invoiceNumber = await SequenceGenerator.getInstance().nextInvoiceNumber();
     const dueDate = getWibToday();
     dueDate.setDate(dueDate.getDate() + 1);
 
@@ -461,6 +541,7 @@ export class ContractService {
   }
 
   async repossess(id: string, adminId: string): Promise<Contract> {
+    // READS outside transaction
     const existing = await this.contractRepo.findById(id);
     if (!existing) throw new Error('Contract not found');
 
@@ -474,51 +555,77 @@ export class ContractService {
       throw new Error('Cannot repossess a cancelled contract');
     }
 
-    // Auto-void all PENDING/FAILED invoices
     const invoices = await this.invoiceRepo.findByContractId(id);
-    for (const inv of invoices) {
-      if (inv.status === PaymentStatus.PENDING || inv.status === PaymentStatus.FAILED) {
-        await this.invoiceRepo.update(inv.id, { status: PaymentStatus.VOID });
-      }
-    }
-
-    // Void all UNPAID and PENDING PaymentDays
-    const unpaidDays = await this.paymentDayRepo.findByContractAndStatus(id, PaymentDayStatus.UNPAID);
-    const pendingDays = await this.paymentDayRepo.findByContractAndStatus(id, PaymentDayStatus.PENDING);
-    for (const day of [...unpaidDays, ...pendingDays]) {
-      await this.paymentDayRepo.update(day.id, {
-        status: PaymentDayStatus.VOIDED,
-        paymentId: null,
-      });
-    }
-
-    const updated = await this.contractRepo.update(id, {
-      status: ContractStatus.REPOSSESSED,
-      repossessedAt: new Date(),
-    });
-    if (!updated) throw new Error('Failed to update contract');
-
+    const unpaidDays = await this.paymentDayRepo.findByContractAndStatus(
+      id,
+      PaymentDayStatus.UNPAID,
+    );
+    const pendingDays = await this.paymentDayRepo.findByContractAndStatus(
+      id,
+      PaymentDayStatus.PENDING,
+    );
     const customer = await this.customerRepo.findById(existing.customerId);
 
-    await this.auditRepo.create({
-      id: uuidv4(),
-      userId: adminId,
-      action: AuditAction.UPDATE,
-      module: 'contract',
-      entityId: id,
-      description: `Repossessed motor for contract ${existing.contractNumber} (${customer?.fullName || 'Unknown'}) - ${existing.motorModel}`,
-      metadata: {
-        contractNumber: existing.contractNumber,
-        motorModel: existing.motorModel,
-        totalDaysPaid: existing.totalDaysPaid,
-        ownershipProgress: existing.ownershipProgress,
-        voidedInvoices: invoices.filter(i => i.status === PaymentStatus.PENDING || i.status === PaymentStatus.FAILED).length,
-      },
-      ipAddress: '',
-      createdAt: new Date(),
-    });
+    // WRITES inside transaction
+    const writeOps = async (repos: TransactionalRepos) => {
+      // Auto-void all PENDING/FAILED invoices
+      for (const inv of invoices) {
+        if (inv.status === PaymentStatus.PENDING || inv.status === PaymentStatus.FAILED) {
+          await repos.invoiceRepo.update(inv.id, { status: PaymentStatus.VOID });
+        }
+      }
 
-    return updated;
+      // Void all UNPAID and PENDING PaymentDays
+      for (const day of [...unpaidDays, ...pendingDays]) {
+        await repos.paymentDayRepo.update(day.id, {
+          status: PaymentDayStatus.VOIDED,
+          paymentId: null,
+        });
+      }
+
+      const updated = await repos.contractRepo.update(id, {
+        status: ContractStatus.REPOSSESSED,
+        repossessedAt: new Date(),
+      });
+      if (!updated) throw new Error('Failed to update contract');
+
+      await repos.auditRepo.create({
+        id: uuidv4(),
+        userId: adminId,
+        action: AuditAction.UPDATE,
+        module: 'contract',
+        entityId: id,
+        description: `Repossessed motor for contract ${existing.contractNumber} (${customer?.fullName || 'Unknown'}) - ${existing.motorModel}`,
+        metadata: {
+          contractNumber: existing.contractNumber,
+          motorModel: existing.motorModel,
+          totalDaysPaid: existing.totalDaysPaid,
+          ownershipProgress: existing.ownershipProgress,
+          voidedInvoices: invoices.filter(
+            (i) => i.status === PaymentStatus.PENDING || i.status === PaymentStatus.FAILED,
+          ).length,
+        },
+        ipAddress: '',
+        createdAt: new Date(),
+      });
+
+      return updated;
+    };
+
+    if (this.txManager) {
+      return this.txManager.runInTransaction(writeOps);
+    } else {
+      return writeOps({
+        contractRepo: this.contractRepo,
+        invoiceRepo: this.invoiceRepo,
+        paymentDayRepo: this.paymentDayRepo,
+        auditRepo: this.auditRepo,
+        savingTxRepo: null as any,
+        serviceRecordRepo: null as any,
+        customerRepo: null as any,
+        settingRepo: null as any,
+      });
+    }
   }
 
   async editContract(id: string, dto: UpdateContractDto, adminId: string): Promise<Contract> {
@@ -530,7 +637,9 @@ export class ContractService {
     if (dto.gracePeriodDays !== undefined) updateData.gracePeriodDays = dto.gracePeriodDays;
     if (dto.ownershipTargetDays !== undefined) {
       updateData.ownershipTargetDays = dto.ownershipTargetDays;
-      updateData.ownershipProgress = parseFloat(((existing.totalDaysPaid / dto.ownershipTargetDays) * 100).toFixed(2));
+      updateData.ownershipProgress = parseFloat(
+        ((existing.totalDaysPaid / dto.ownershipTargetDays) * 100).toFixed(2),
+      );
     }
     if (dto.color !== undefined) updateData.color = dto.color;
     if (dto.year !== undefined) updateData.year = dto.year;
@@ -556,6 +665,7 @@ export class ContractService {
   }
 
   async cancelContract(id: string, dto: CancelContractDto, adminId: string): Promise<Contract> {
+    // READS outside transaction
     const existing = await this.contractRepo.findById(id);
     if (!existing) throw new Error('Contract not found');
 
@@ -569,49 +679,77 @@ export class ContractService {
       throw new Error('Cannot cancel a repossessed contract');
     }
 
-    // Auto-void all PENDING/FAILED invoices
     const invoices = await this.invoiceRepo.findByContractId(id);
-    for (const inv of invoices) {
-      if (inv.status === PaymentStatus.PENDING || inv.status === PaymentStatus.FAILED) {
-        await this.invoiceRepo.update(inv.id, { status: PaymentStatus.VOID });
-      }
-    }
-
-    // Void all UNPAID and PENDING PaymentDays
-    const unpaidDays = await this.paymentDayRepo.findByContractAndStatus(id, PaymentDayStatus.UNPAID);
-    const pendingDays = await this.paymentDayRepo.findByContractAndStatus(id, PaymentDayStatus.PENDING);
-    for (const day of [...unpaidDays, ...pendingDays]) {
-      await this.paymentDayRepo.update(day.id, {
-        status: PaymentDayStatus.VOIDED,
-        paymentId: null,
-      });
-    }
-
-    const updated = await this.contractRepo.update(id, {
-      status: ContractStatus.CANCELLED,
-      notes: existing.notes ? `${existing.notes}\n[CANCELLED] ${dto.reason}` : `[CANCELLED] ${dto.reason}`,
-    });
-    if (!updated) throw new Error('Failed to update contract');
-
+    const unpaidDays = await this.paymentDayRepo.findByContractAndStatus(
+      id,
+      PaymentDayStatus.UNPAID,
+    );
+    const pendingDays = await this.paymentDayRepo.findByContractAndStatus(
+      id,
+      PaymentDayStatus.PENDING,
+    );
     const customer = await this.customerRepo.findById(existing.customerId);
 
-    await this.auditRepo.create({
-      id: uuidv4(),
-      userId: adminId,
-      action: AuditAction.UPDATE,
-      module: 'contract',
-      entityId: id,
-      description: `Cancelled contract ${existing.contractNumber} (${customer?.fullName || 'Unknown'}) - Reason: ${dto.reason}`,
-      metadata: {
-        reason: dto.reason,
-        previousStatus: existing.status,
-        voidedInvoices: invoices.filter(i => i.status === PaymentStatus.PENDING || i.status === PaymentStatus.FAILED).length,
-      },
-      ipAddress: '',
-      createdAt: new Date(),
-    });
+    // WRITES inside transaction
+    const writeOps = async (repos: TransactionalRepos) => {
+      // Auto-void all PENDING/FAILED invoices
+      for (const inv of invoices) {
+        if (inv.status === PaymentStatus.PENDING || inv.status === PaymentStatus.FAILED) {
+          await repos.invoiceRepo.update(inv.id, { status: PaymentStatus.VOID });
+        }
+      }
 
-    return updated;
+      // Void all UNPAID and PENDING PaymentDays
+      for (const day of [...unpaidDays, ...pendingDays]) {
+        await repos.paymentDayRepo.update(day.id, {
+          status: PaymentDayStatus.VOIDED,
+          paymentId: null,
+        });
+      }
+
+      const updated = await repos.contractRepo.update(id, {
+        status: ContractStatus.CANCELLED,
+        notes: existing.notes
+          ? `${existing.notes}\n[CANCELLED] ${dto.reason}`
+          : `[CANCELLED] ${dto.reason}`,
+      });
+      if (!updated) throw new Error('Failed to update contract');
+
+      await repos.auditRepo.create({
+        id: uuidv4(),
+        userId: adminId,
+        action: AuditAction.UPDATE,
+        module: 'contract',
+        entityId: id,
+        description: `Cancelled contract ${existing.contractNumber} (${customer?.fullName || 'Unknown'}) - Reason: ${dto.reason}`,
+        metadata: {
+          reason: dto.reason,
+          previousStatus: existing.status,
+          voidedInvoices: invoices.filter(
+            (i) => i.status === PaymentStatus.PENDING || i.status === PaymentStatus.FAILED,
+          ).length,
+        },
+        ipAddress: '',
+        createdAt: new Date(),
+      });
+
+      return updated;
+    };
+
+    if (this.txManager) {
+      return this.txManager.runInTransaction(writeOps);
+    } else {
+      return writeOps({
+        contractRepo: this.contractRepo,
+        invoiceRepo: this.invoiceRepo,
+        paymentDayRepo: this.paymentDayRepo,
+        auditRepo: this.auditRepo,
+        savingTxRepo: null as any,
+        serviceRecordRepo: null as any,
+        customerRepo: null as any,
+        settingRepo: null as any,
+      });
+    }
   }
 
   async softDelete(id: string, adminId: string): Promise<Contract> {
@@ -686,18 +824,27 @@ export class ContractService {
     return overdueCount;
   }
 
-  async getOverdueWarnings(): Promise<Array<{ contract: Contract; customer: Customer; daysOverdue: number; graceRemaining: number }>> {
+  async getOverdueWarnings(): Promise<
+    Array<{ contract: Contract; customer: Customer; daysOverdue: number; graceRemaining: number }>
+  > {
     const overdueContracts = await this.contractRepo.findByStatus(ContractStatus.OVERDUE);
     const activeContracts = await this.contractRepo.findByStatus(ContractStatus.ACTIVE);
     const now = getWibToday();
-    const warnings: Array<{ contract: Contract; customer: Customer; daysOverdue: number; graceRemaining: number }> = [];
+    const warnings: Array<{
+      contract: Contract;
+      customer: Customer;
+      daysOverdue: number;
+      graceRemaining: number;
+    }> = [];
 
     // Check overdue contracts
     for (const contract of overdueContracts) {
       const customer = await this.customerRepo.findById(contract.customerId);
       if (!customer) continue;
 
-      const daysOverdue = Math.floor((now.getTime() - contract.endDate.getTime()) / (1000 * 60 * 60 * 24));
+      const daysOverdue = Math.floor(
+        (now.getTime() - contract.endDate.getTime()) / (1000 * 60 * 60 * 24),
+      );
       const graceRemaining = Math.max(0, contract.gracePeriodDays - daysOverdue);
 
       warnings.push({ contract, customer, daysOverdue, graceRemaining });
@@ -705,12 +852,19 @@ export class ContractService {
 
     // Check active contracts nearing end date (within 2 days)
     for (const contract of activeContracts) {
-      const daysUntilEnd = Math.floor((contract.endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      const daysUntilEnd = Math.floor(
+        (contract.endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
+      );
       if (daysUntilEnd <= 2 && daysUntilEnd >= 0) {
         const customer = await this.customerRepo.findById(contract.customerId);
         if (!customer) continue;
 
-        warnings.push({ contract, customer, daysOverdue: -daysUntilEnd, graceRemaining: contract.gracePeriodDays + daysUntilEnd });
+        warnings.push({
+          contract,
+          customer,
+          daysOverdue: -daysUntilEnd,
+          graceRemaining: contract.gracePeriodDays + daysUntilEnd,
+        });
       }
     }
 
@@ -751,38 +905,5 @@ export class ContractService {
 
   async countByStatus(status: ContractStatus): Promise<number> {
     return this.contractRepo.countByStatus(status);
-  }
-
-  private async initContractCounter(): Promise<void> {
-    if (!ContractService.contractCounterInitialized) {
-      const maxSeq = await this.contractRepo.findMaxContractSequence();
-      ContractService.contractCounter = maxSeq;
-      ContractService.contractCounterInitialized = true;
-    }
-  }
-
-  private static readonly ROMAN_MONTHS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
-
-  private async generateContractNumber(): Promise<string> {
-    await this.initContractCounter();
-    ContractService.contractCounter++;
-    const { year, month } = getWibDateParts();
-    const romanMonth = ContractService.ROMAN_MONTHS[month - 1];
-    return `${ContractService.contractCounter}/WNUS-KTR/${romanMonth}/${year}`;
-  }
-
-  private async generateInvoiceNumber(): Promise<string> {
-    if (!ContractService.invoiceCounterInitialized) {
-      const maxSeq = await this.invoiceRepo.findMaxInvoiceSequence();
-      ContractService.invoiceCounter = maxSeq;
-      ContractService.invoiceCounterInitialized = true;
-    }
-    ContractService.invoiceCounter++;
-    const { year, month, day } = getWibDateParts();
-    const y = year.toString().slice(-2);
-    const m = month.toString().padStart(2, '0');
-    const d = day.toString().padStart(2, '0');
-    const seq = ContractService.invoiceCounter.toString().padStart(4, '0');
-    return `PMT-${y}${m}${d}-${seq}`;
   }
 }

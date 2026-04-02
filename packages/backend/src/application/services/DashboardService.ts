@@ -5,7 +5,6 @@ import {
   IAuditLogRepository,
 } from '../../domain/interfaces';
 import { ContractStatus, PaymentStatus } from '../../domain/enums';
-import { getWibToday, getWibParts } from '../../domain/utils/dateUtils';
 
 export interface DashboardStats {
   totalCustomers: number;
@@ -35,7 +34,7 @@ export class DashboardService {
     private contractRepo: IContractRepository,
     private customerRepo: ICustomerRepository,
     private invoiceRepo: IInvoiceRepository,
-    private auditRepo: IAuditLogRepository
+    private auditRepo: IAuditLogRepository,
   ) {}
 
   async getStats(): Promise<DashboardStats> {
@@ -65,27 +64,18 @@ export class DashboardService {
       this.auditRepo.findRecent(10),
     ]);
 
-    // Build chart data
-    const allInvoices = await this.invoiceRepo.findAll();
-    const paidInvoices = allInvoices.filter(inv => inv.status === PaymentStatus.PAID);
-
-    // Revenue by month (last 6 months)
-    const nowParts = getWibParts(getWibToday());
-    const revenueByMonth: Array<{ month: string; revenue: number }> = [];
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(nowParts.year, nowParts.month - 1 - i, 1);
-      const monthStr = d.toLocaleDateString('id-ID', { month: 'short', year: '2-digit', timeZone: 'Asia/Jakarta' });
-      const targetMonth = `${d.toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' }).slice(0, 7)}`;
-      const revenue = paidInvoices
-        .filter(inv => {
-          if (!inv.paidAt) return false;
-          const paidWib = getWibParts(new Date(inv.paidAt));
-          const paidMonth = `${paidWib.year}-${String(paidWib.month).padStart(2, '0')}`;
-          return paidMonth === targetMonth;
-        })
-        .reduce((sum, inv) => sum + inv.amount + (inv.lateFee || 0), 0);
-      revenueByMonth.push({ month: monthStr, revenue });
-    }
+    // Revenue by month (last 6 months) — aggregate query, not findAll
+    const revenueByMonthRaw = await this.invoiceRepo.getRevenueByMonth(6);
+    const revenueByMonth = revenueByMonthRaw.map(({ month, revenue }) => {
+      const [y, m] = month.split('-');
+      const d = new Date(parseInt(y), parseInt(m) - 1, 1);
+      const label = d.toLocaleDateString('id-ID', {
+        month: 'short',
+        year: '2-digit',
+        timeZone: 'Asia/Jakarta',
+      });
+      return { month: label, revenue };
+    });
 
     // Contracts by status
     const contractsByStatus: Record<string, number> = {
@@ -109,7 +99,7 @@ export class DashboardService {
       pendingPayments,
       totalRevenue,
       pendingRevenue,
-      recentActivity: recentLogs.map(log => ({
+      recentActivity: recentLogs.map((log) => ({
         id: log.id,
         action: log.action,
         description: log.description,

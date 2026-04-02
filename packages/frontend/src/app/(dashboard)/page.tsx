@@ -1,12 +1,12 @@
-"use client";
+'use client';
 
-import dynamic from "next/dynamic";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { DashboardSkeleton } from "@/components/skeletons/DashboardSkeleton";
-import { useDashboardStats } from "@/hooks/useApi";
-import { DashboardStats } from "@/types";
-import { formatCurrency, formatDateTime } from "@/lib/utils";
+import dynamic from 'next/dynamic';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { DashboardSkeleton } from '@/components/skeletons/DashboardSkeleton';
+import { useDashboardStats } from '@/hooks/useApi';
+import { DashboardStats } from '@/types';
+import { formatCurrency, formatDateTime } from '@/lib/utils';
 import {
   Users,
   FileText,
@@ -18,10 +18,10 @@ import {
   Activity,
   Ban,
   XCircle,
-} from "lucide-react";
+} from 'lucide-react';
 
 const RevenueChart = dynamic(
-  () => import("@/components/charts/RevenueChart").then((m) => m.RevenueChart),
+  () => import('@/components/charts/RevenueChart').then((m) => m.RevenueChart),
   {
     ssr: false,
     loading: () => <div className="h-[280px] animate-pulse bg-muted rounded" />,
@@ -30,9 +30,7 @@ const RevenueChart = dynamic(
 
 const StatusDistributionChart = dynamic(
   () =>
-    import("@/components/charts/StatusDistributionChart").then(
-      (m) => m.StatusDistributionChart,
-    ),
+    import('@/components/charts/StatusDistributionChart').then((m) => m.StatusDistributionChart),
   {
     ssr: false,
     loading: () => <div className="h-[280px] animate-pulse bg-muted rounded" />,
@@ -40,7 +38,10 @@ const StatusDistributionChart = dynamic(
 );
 
 export default function DashboardPage() {
-  const { data: stats, isLoading: loading } = useDashboardStats() as { data: DashboardStats | undefined; isLoading: boolean };
+  const { data: stats, isLoading: loading } = useDashboardStats() as {
+    data: DashboardStats | undefined;
+    isLoading: boolean;
+  };
 
   if (loading) {
     return <DashboardSkeleton />;
@@ -48,84 +49,82 @@ export default function DashboardPage() {
 
   if (!stats) {
     return (
-      <div className="text-center py-12 text-muted-foreground">
-        Gagal memuat data dashboard.
-      </div>
+      <div className="text-center py-12 text-muted-foreground">Gagal memuat data dashboard.</div>
     );
   }
 
   const statCards = [
     {
-      title: "Total Customers",
+      title: 'Total Customers',
       value: stats.totalCustomers,
       icon: Users,
-      color: "text-blue-600",
-      bg: "bg-blue-50",
+      color: 'text-blue-600',
+      bg: 'bg-blue-50',
     },
     {
-      title: "Active Contracts",
+      title: 'Active Contracts',
       value: stats.activeContracts,
       icon: FileText,
-      color: "text-green-600",
-      bg: "bg-green-50",
+      color: 'text-green-600',
+      bg: 'bg-green-50',
     },
     {
-      title: "Pending Payments",
+      title: 'Pending Payments',
       value: stats.pendingPayments,
       icon: Clock,
-      color: "text-yellow-600",
-      bg: "bg-yellow-50",
+      color: 'text-yellow-600',
+      bg: 'bg-yellow-50',
     },
     {
-      title: "Overdue",
+      title: 'Overdue',
       value: stats.overdueContracts,
       icon: AlertTriangle,
-      color: "text-red-600",
-      bg: "bg-red-50",
+      color: 'text-red-600',
+      bg: 'bg-red-50',
     },
     {
-      title: "Cancelled",
+      title: 'Cancelled',
       value: stats.cancelledContracts,
       icon: XCircle,
-      color: "text-orange-600",
-      bg: "bg-orange-50",
+      color: 'text-orange-600',
+      bg: 'bg-orange-50',
     },
     {
-      title: "Repossessed",
+      title: 'Repossessed',
       value: stats.repossessedContracts,
       icon: Ban,
-      color: "text-gray-600",
-      bg: "bg-gray-50",
+      color: 'text-gray-600',
+      bg: 'bg-gray-50',
     },
     {
-      title: "Completed",
+      title: 'Completed',
       value: stats.completedContracts,
       icon: CheckCircle2,
-      color: "text-emerald-600",
-      bg: "bg-emerald-50",
+      color: 'text-emerald-600',
+      bg: 'bg-emerald-50',
     },
     {
-      title: "Total Revenue",
+      title: 'Total Revenue',
       value: formatCurrency(stats.totalRevenue),
       icon: TrendingUp,
-      color: "text-primary",
-      bg: "bg-primary/5",
+      color: 'text-primary',
+      bg: 'bg-primary/5',
       isAmount: true,
     },
     {
-      title: "Pending Revenue",
+      title: 'Pending Revenue',
       value: formatCurrency(stats.pendingRevenue),
       icon: CreditCard,
-      color: "text-orange-600",
-      bg: "bg-orange-50",
+      color: 'text-orange-600',
+      bg: 'bg-orange-50',
       isAmount: true,
     },
     {
-      title: "Total Contracts",
+      title: 'Total Contracts',
       value: stats.totalContracts,
       icon: Activity,
-      color: "text-purple-600",
-      bg: "bg-purple-50",
+      color: 'text-purple-600',
+      bg: 'bg-purple-50',
     },
   ];
 
@@ -144,9 +143,7 @@ export default function DashboardPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">{stat.title}</p>
-                  <p
-                    className={`text-2xl font-bold mt-1 ${stat.isAmount ? "text-lg" : ""}`}
-                  >
+                  <p className={`text-2xl font-bold mt-1 ${stat.isAmount ? 'text-lg' : ''}`}>
                     {stat.value}
                   </p>
                 </div>
@@ -186,9 +183,7 @@ export default function DashboardPage() {
         </CardHeader>
         <CardContent>
           {stats.recentActivity.length === 0 ? (
-            <p className="text-muted-foreground text-sm py-4 text-center">
-              Belum ada aktivitas.
-            </p>
+            <p className="text-muted-foreground text-sm py-4 text-center">Belum ada aktivitas.</p>
           ) : (
             <div className="space-y-3">
               {stats.recentActivity.map((activity) => (

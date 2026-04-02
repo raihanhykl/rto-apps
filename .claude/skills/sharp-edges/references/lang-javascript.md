@@ -26,24 +26,25 @@ if (userRole == "admin") {  // What if userRole is 0?
 ```javascript
 // DANGEROUS: Merging untrusted objects
 function merge(target, source) {
-    for (let key in source) {
-        target[key] = source[key];  // Includes __proto__!
-    }
+  for (let key in source) {
+    target[key] = source[key]; // Includes __proto__!
+  }
 }
 
 // Attacker sends: {"__proto__": {"isAdmin": true}}
 merge({}, JSON.parse(userInput));
 
 // Now ALL objects have isAdmin
-({}).isAdmin  // true
+({}).isAdmin; // true
 const user = {};
-user.isAdmin  // true - authentication bypassed!
+user.isAdmin; // true - authentication bypassed!
 
 // Also via constructor.prototype
 // {"constructor": {"prototype": {"isAdmin": true}}}
 ```
 
 **Fix**:
+
 ```javascript
 // Check for dangerous keys
 const dangerous = ['__proto__', 'constructor', 'prototype'];
@@ -80,14 +81,14 @@ regex.test("aaaaaaaaaaaaaaaaaaaaaaaaaaaa!");
 
 ```javascript
 // DANGEROUS: Behavior varies
-parseInt("08");      // 8 (modern JS), was 0 in ES3 (octal)
-parseInt("0x10");    // 16 - hex prefix always recognized
-parseInt("10", 0);   // 10 or error depending on engine
-parseInt("10", 1);   // NaN - radix 1 invalid
+parseInt('08'); // 8 (modern JS), was 0 in ES3 (octal)
+parseInt('0x10'); // 16 - hex prefix always recognized
+parseInt('10', 0); // 10 or error depending on engine
+parseInt('10', 1); // NaN - radix 1 invalid
 
 // DANGEROUS: Unexpected results
-parseInt("123abc");  // 123 - stops at first non-digit
-parseInt("abc123");  // NaN - starts with non-digit
+parseInt('123abc'); // 123 - stops at first non-digit
+parseInt('abc123'); // NaN - starts with non-digit
 ```
 
 **Fix**: Always specify radix: `parseInt("08", 10)`
@@ -97,19 +98,21 @@ parseInt("abc123");  // NaN - starts with non-digit
 ```javascript
 // DANGEROUS: 'this' depends on how function is called
 const obj = {
-    value: 42,
-    getValue: function() { return this.value; }
+  value: 42,
+  getValue: function () {
+    return this.value;
+  },
 };
 
-obj.getValue();           // 42
+obj.getValue(); // 42
 const fn = obj.getValue;
-fn();                     // undefined - 'this' is global/undefined
+fn(); // undefined - 'this' is global/undefined
 
 // DANGEROUS: In callbacks
-setTimeout(obj.getValue, 100);  // 'this' is global/undefined
+setTimeout(obj.getValue, 100); // 'this' is global/undefined
 
 // DANGEROUS: In event handlers
-button.addEventListener('click', obj.getValue);  // 'this' is button
+button.addEventListener('click', obj.getValue); // 'this' is button
 ```
 
 **Fix**: Use arrow functions or `.bind()`.
@@ -118,14 +121,14 @@ button.addEventListener('click', obj.getValue);  // 'this' is button
 
 ```javascript
 // These MUTATE the original array:
-arr.push(x);      // Adds to end
-arr.pop();        // Removes from end
-arr.shift();      // Removes from start
-arr.unshift(x);   // Adds to start
+arr.push(x); // Adds to end
+arr.pop(); // Removes from end
+arr.shift(); // Removes from start
+arr.unshift(x); // Adds to start
 arr.splice(i, n); // Removes/inserts
-arr.sort();       // Sorts IN PLACE
-arr.reverse();    // Reverses IN PLACE
-arr.fill(x);      // Fills IN PLACE
+arr.sort(); // Sorts IN PLACE
+arr.reverse(); // Reverses IN PLACE
+arr.fill(x); // Fills IN PLACE
 
 // These return NEW arrays:
 arr.slice();
@@ -134,7 +137,7 @@ arr.map();
 arr.filter();
 
 // DANGEROUS: Sorting numbers
-[1, 10, 2].sort();  // [1, 10, 2] - string comparison!
+[1, 10, 2].sort(); // [1, 10, 2] - string comparison!
 // Fix: [1, 10, 2].sort((a, b) => a - b);  // [1, 2, 10]
 ```
 
@@ -142,14 +145,14 @@ arr.filter();
 
 ```javascript
 // DANGEROUS: + is overloaded for concatenation
-"5" + 3     // "53" (string)
-5 + "3"     // "53" (string)
-5 - "3"     // 2 (number)
-"5" - 3     // 2 (number)
+'5' + 3; // "53" (string)
+5 + '3'; // "53" (string)
+5 - '3'; // 2 (number)
+'5' - 3; // 2 (number)
 
 // DANGEROUS: Comparison with type coercion
-"10" > "9"  // false (string comparison: "1" < "9")
-"10" > 9    // true (numeric comparison)
+'10' > '9'; // false (string comparison: "1" < "9")
+'10' > 9; // true (numeric comparison)
 ```
 
 ## eval and Dynamic Code
@@ -162,10 +165,10 @@ eval(userInput);
 new Function(userInput)();
 
 // DANGEROUS: setTimeout/setInterval with string
-setTimeout(userInput, 1000);  // Executes as code!
+setTimeout(userInput, 1000); // Executes as code!
 
 // DANGEROUS: Template injection
-const template = userInput;  // "${process.exit()}"
+const template = userInput; // "${process.exit()}"
 eval(`\`${template}\``);
 ```
 
@@ -174,15 +177,18 @@ eval(`\`${template}\``);
 ```javascript
 // DANGEROUS: Bracket notation with user input
 const obj = { admin: false };
-const key = userInput;  // Could be "__proto__", "constructor", etc.
-obj[key] = true;  // Prototype pollution!
+const key = userInput; // Could be "__proto__", "constructor", etc.
+obj[key] = true; // Prototype pollution!
 
 // DANGEROUS: in operator checks prototype chain
-"toString" in {}  // true - inherited from Object.prototype
+'toString' in
+  {}(
+    // true - inherited from Object.prototype
 
-// Fix: Use hasOwnProperty
-({}).hasOwnProperty("toString")  // false
-Object.hasOwn({}, "toString")    // false (ES2022)
+    // Fix: Use hasOwnProperty
+    {},
+  ).hasOwnProperty('toString'); // false
+Object.hasOwn({}, 'toString'); // false (ES2022)
 ```
 
 ## Async/Await Pitfalls
@@ -190,27 +196,27 @@ Object.hasOwn({}, "toString")    // false (ES2022)
 ```javascript
 // DANGEROUS: Unhandled promise rejection
 async function riskyOperation() {
-    throw new Error("oops");
+  throw new Error('oops');
 }
-riskyOperation();  // Unhandled rejection - may crash Node.js
+riskyOperation(); // Unhandled rejection - may crash Node.js
 
 // DANGEROUS: Missing await
 async function process() {
-    validateInput();  // Forgot await - validation not complete!
-    doSensitiveOperation();
+  validateInput(); // Forgot await - validation not complete!
+  doSensitiveOperation();
 }
 
 // DANGEROUS: Sequential when parallel is possible
 async function slow() {
-    const a = await fetchA();  // Waits
-    const b = await fetchB();  // Then waits
-    return a + b;
+  const a = await fetchA(); // Waits
+  const b = await fetchB(); // Then waits
+  return a + b;
 }
 
 // Better: parallel
 async function fast() {
-    const [a, b] = await Promise.all([fetchA(), fetchB()]);
-    return a + b;
+  const [a, b] = await Promise.all([fetchA(), fetchB()]);
+  return a + b;
 }
 ```
 
@@ -234,36 +240,36 @@ JSON.parse('{"id": 9007199254740993}');
 
 ```typescript
 // DANGEROUS: Type assertions bypass checking
-const user = userData as Admin;  // No runtime check!
-user.adminMethod();  // Runtime error if not actually Admin
+const user = userData as Admin; // No runtime check!
+user.adminMethod(); // Runtime error if not actually Admin
 
 // DANGEROUS: any escapes type system
 function process(data: any) {
-    data.whatever();  // No type checking
+  data.whatever(); // No type checking
 }
 
 // DANGEROUS: Non-null assertion
 function greet(name: string | null) {
-    console.log(name!.toUpperCase());  // Crash if null!
+  console.log(name!.toUpperCase()); // Crash if null!
 }
 
 // DANGEROUS: Type guards can lie
 function isAdmin(user: User): user is Admin {
-    return true;  // Wrong! TypeScript trusts this
+  return true; // Wrong! TypeScript trusts this
 }
 ```
 
 ## Detection Patterns
 
-| Pattern | Risk |
-|---------|------|
-| `==` instead of `===` | Type coercion bugs |
-| `obj[userInput]` | Prototype pollution |
-| `/__proto__|constructor|prototype/` in merge | Pollution vectors |
-| `(a+)+`, `(.*)+` in regex | ReDoS |
-| `parseInt(x)` without radix | Parsing inconsistency |
-| `eval(`, `Function(`, `setTimeout(string` | Code execution |
-| `.sort()` on numbers without comparator | String sort |
-| `as Type` assertions | Runtime type mismatch |
-| `!` non-null assertion | Null pointer crash |
-| Missing `await` before async call | Race condition |
+| Pattern                                   | Risk                  |
+| ----------------------------------------- | --------------------- | -------------------- | ----------------- |
+| `==` instead of `===`                     | Type coercion bugs    |
+| `obj[userInput]`                          | Prototype pollution   |
+| `/**proto**                               | constructor           | prototype/` in merge | Pollution vectors |
+| `(a+)+`, `(.*)+` in regex                 | ReDoS                 |
+| `parseInt(x)` without radix               | Parsing inconsistency |
+| `eval(`, `Function(`, `setTimeout(string` | Code execution        |
+| `.sort()` on numbers without comparator   | String sort           |
+| `as Type` assertions                      | Runtime type mismatch |
+| `!` non-null assertion                    | Null pointer crash    |
+| Missing `await` before async call         | Race condition        |

@@ -34,12 +34,14 @@ web-asset-generator/
 ### Generate Favicons/App Icons
 
 **From Image:**
+
 ```bash
 python scripts/generate_favicons.py <source_image> <output_dir> [icon_type]
 # icon_type: 'favicon', 'app', or 'all' (default)
 ```
 
 **From Emoji (NEW):**
+
 ```bash
 # Get emoji suggestions
 python scripts/generate_favicons.py --suggest "project description" <output_dir> [icon_type]
@@ -51,11 +53,13 @@ python scripts/generate_favicons.py --emoji "🚀" <output_dir> [icon_type] [--e
 ### Generate Social Media Images
 
 **From logo:**
+
 ```bash
 python scripts/generate_og_images.py <output_dir> --image <source_image>
 ```
 
 **From text:**
+
 ```bash
 python scripts/generate_og_images.py <output_dir> --text "Your text" [--logo path] [--bg-color '#4F46E5']
 ```
@@ -73,6 +77,7 @@ python scripts/generate_favicons.py logo.png output/ all --validate
 ```
 
 **What gets validated:**
+
 - **File sizes**: Checks against platform limits (FB <8MB, Twitter <5MB, favicons <100KB)
 - **Dimensions**: Verifies sizes match platform specs and aspect ratios
 - **Format**: Ensures PNG/JPG/JPEG compatibility
@@ -89,6 +94,7 @@ python scripts/generate_favicons.py logo.png output/ all --validate
 ## Implementation Architecture
 
 ### generate_favicons.py
+
 - **Image mode**: Converts source to RGBA for transparency, LANCZOS resampling
 - **Emoji mode** (NEW): Renders emoji using Pilmoji library, auto-scales to fit icon sizes
 - Outputs: favicon.ico (multi-res) + PNGs at 16x16, 32x32, 96x96, 180x180, 192x192, 512x512
@@ -96,12 +102,14 @@ python scripts/generate_favicons.py logo.png output/ all --validate
 - Background: Transparent for favicons, solid (white default) for app icons when using emoji
 
 ### emoji_utils.py (NEW)
+
 - **`suggest_emojis(description, count=4)`**: Returns 4 emoji suggestions based on keyword matching
 - **`generate_emoji_icon(emoji, size, bg_color)`**: Renders emoji to PIL Image using Pilmoji
 - **Emoji database**: 60+ curated emojis with keywords across 10 categories (tech, business, food, health, etc.)
 - **Scoring algorithm**: Keyword matching with category diversity for better suggestions
 
 ### generate_og_images.py
+
 - **Two modes**: text-based (creates images) or image-based (resizes existing)
 - **Outputs**: og-image.png (1200x630), twitter-image.png (1200x675), og-square.png (1200x1200)
 - **Text rendering** (line 45): Dynamic font sizing (120-144px), wraps at 85% width, logo at 15% from top (max 20% height)
@@ -111,6 +119,7 @@ python scripts/generate_favicons.py logo.png output/ all --validate
 - Returns HTML `<meta>` tags for Open Graph and Twitter
 
 ### lib/validators.py (NEW)
+
 - **Platform requirements**: Defines specs for Facebook, Twitter, LinkedIn, WhatsApp
 - **`validate_file_size()`**: Checks against platform limits (8MB for FB, 5MB for Twitter)
 - **`validate_dimensions()`**: Verifies image sizes and aspect ratios
@@ -122,15 +131,18 @@ python scripts/generate_favicons.py logo.png output/ all --validate
 ## Skill Development Notes
 
 ### Editing SKILL.md
+
 - Keep description under 200 chars (triggers skill invocation)
 - Keep body under 500 lines for optimal performance
 - YAML frontmatter: `name` must match directory name in hyphen-case
 
 ### Testing the Skill
+
 - Install locally in Claude's skills directory
 - Test with various user prompts: "create a favicon", "make social sharing images", "generate Open Graph images"
 - Verify skill triggers automatically based on description match
 
 ### Reference Files
+
 - `references/specifications.md`: Detailed platform specs, aspect ratios, file size limits
 - SKILL.md already references this file; Claude reads it when needed

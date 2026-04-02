@@ -18,6 +18,7 @@
 Di setiap pembayaran tagihan harian, nominal yang dibayarkan customer **sudah termasuk saving sebesar Rp 5.000 per hari kerja**. Ini berlaku flat untuk **semua jenis motor dan tipe baterai** WEDISON.
 
 **Contoh perhitungan:**
+
 ```
 Customer A membayar tagihan 10 hari kerja.
 Daily rate: Rp 58.000 (Athena Regular)
@@ -26,6 +27,7 @@ Dari jumlah itu, Rp 5.000 × 10 = Rp 50.000 masuk ke saving.
 ```
 
 **PENTING — Saving bukan potongan:**
+
 - Customer tetap membayar Rp 58.000 penuh per hari. Daily rate TIDAK berubah.
 - Saving adalah **sebagian dari pembayaran** yang disisihkan secara internal.
 - Dari perspektif customer: "Rp 5.000/hari otomatis ditabung dari pembayaran saya."
@@ -33,27 +35,30 @@ Dari jumlah itu, Rp 5.000 × 10 = Rp 50.000 masuk ke saving.
 
 ### Kapan Saving Ter-credit?
 
-| Event | Saving Di-credit? | Penjelasan |
-|-------|-------------------|------------|
-| Invoice `DAILY_BILLING` di-PAID | ✅ YA | `5000 × daysCount` (hanya working days yang dibayar) |
-| Invoice `MANUAL_PAYMENT` di-PAID | ✅ YA | `5000 × daysCount` |
-| Invoice `DP` / `DP_INSTALLMENT` di-PAID | ❌ TIDAK | DP bukan pembayaran harian |
-| Holiday payment (isHoliday=true, amount=0) | ❌ TIDAK | Tidak ada pembayaran aktual |
-| Invoice di-revert dari PAID → PENDING | 🔄 REVERSAL | Saving yang sudah di-credit harus di-reverse |
+| Event                                      | Saving Di-credit? | Penjelasan                                           |
+| ------------------------------------------ | ----------------- | ---------------------------------------------------- |
+| Invoice `DAILY_BILLING` di-PAID            | ✅ YA             | `5000 × daysCount` (hanya working days yang dibayar) |
+| Invoice `MANUAL_PAYMENT` di-PAID           | ✅ YA             | `5000 × daysCount`                                   |
+| Invoice `DP` / `DP_INSTALLMENT` di-PAID    | ❌ TIDAK          | DP bukan pembayaran harian                           |
+| Holiday payment (isHoliday=true, amount=0) | ❌ TIDAK          | Tidak ada pembayaran aktual                          |
+| Invoice di-revert dari PAID → PENDING      | 🔄 REVERSAL       | Saving yang sudah di-credit harus di-reverse         |
 
 ### Kegunaan Saving
 
 **1. Service Motor (DEBIT_SERVICE)**
 Saat customer service motor di service center WEDISON, saving bisa digunakan untuk membayar/memotong biaya servis, spare part, dll.
+
 - Contoh: saving Rp 500.000, biaya servis Rp 300.000 → saving dipotong jadi Rp 200.000.
 - Tersedia saat kontrak berstatus: `ACTIVE`, `OVERDUE`, atau `COMPLETED`.
 
 **2. Biaya Balik Nama STNK & BPKB (DEBIT_TRANSFER)**
 Saat kontrak selesai (COMPLETED), biaya pemindahan kepemilikan kendaraan bisa menggunakan saving.
+
 - Tersedia **HANYA** saat kontrak berstatus: `COMPLETED`.
 
 **3. Claim Sisa Saving (DEBIT_CLAIM)**
 Saat kontrak COMPLETED dan masih ada sisa saving, customer bisa claim (tarik tunai) sisa saving.
+
 - Tersedia **HANYA** saat kontrak berstatus: `COMPLETED`.
 - **PENGECUALIAN**: Customer **TIDAK BISA** claim jika kontrak berakhir karena `REPOSSESSED` atau `CANCELLED`. Saving hangus (forfeited) — tapi **record tetap ada** di database untuk audit trail.
 
@@ -68,6 +73,7 @@ Saat kontrak COMPLETED dan masih ada sisa saving, customer bisa claim (tarik tun
 **Keputusan**: Gunakan **explicit records** — setiap perubahan saldo saving (masuk/keluar) dicatat sebagai `SavingTransaction` di database.
 
 **Alasan**:
+
 1. **Audit trail lengkap** — setiap transaksi saving (credit, debit, reversal) punya record sendiri dengan timestamp, admin, deskripsi, foto bukti.
 2. **Balance verification** — `balanceBefore` dan `balanceAfter` di setiap transaksi memudahkan deteksi discrepancy.
 3. **Debit bisa beragam** — service motor, balik nama, claim masing-masing punya metadata berbeda.
@@ -80,6 +86,7 @@ Saat kontrak COMPLETED dan masih ada sisa saving, customer bisa claim (tarik tun
 **Keputusan**: Simpan **`savingBalance`** di model `Contract` sebagai denormalized field.
 
 **Alasan**:
+
 1. Quick read tanpa aggregation query — saldo saving sering ditampilkan di halaman detail kontrak.
 2. Di-maintain otomatis setiap ada `SavingTransaction` baru (credit/debit).
 3. **Source of truth tetap `SavingTransaction`** — jika ada discrepancy, recalculate dari transaction log.
@@ -91,6 +98,7 @@ Saat kontrak COMPLETED dan masih ada sisa saving, customer bisa claim (tarik tun
 **Keputusan**: Saving **per kontrak** — setiap kontrak punya saldo saving sendiri.
 
 **Alasan**:
+
 1. Saving di-generate dari pembayaran kontrak spesifik.
 2. Claim tergantung status kontrak (COMPLETED = bisa claim, REPOSSESSED = tidak).
 3. Satu customer dengan kontrak A (COMPLETED) dan kontrak B (REPOSSESSED) → bisa claim saving A, tidak bisa claim saving B.
@@ -125,30 +133,30 @@ Presentation (controllers, routes) — hanya panggil Application services
 
 ### File-File Kunci yang Akan Dimodifikasi
 
-| File | Perubahan |
-|------|-----------|
-| `packages/backend/prisma/schema.prisma` | Tambah enum `SavingTransactionType` + model `SavingTransaction` + update `Contract` + update `Invoice` |
-| `packages/backend/src/domain/enums/index.ts` | Tambah enum `SavingTransactionType` + konstanta `SAVING_PER_DAY` |
-| `packages/backend/src/domain/entities/SavingTransaction.ts` | **BARU** — entity interface |
-| `packages/backend/src/domain/entities/index.ts` | Tambah export |
-| `packages/backend/src/domain/interfaces/ISavingTransactionRepository.ts` | **BARU** — repo interface |
-| `packages/backend/src/domain/interfaces/index.ts` | Tambah export |
-| `packages/backend/src/infrastructure/repositories/InMemorySavingTransactionRepository.ts` | **BARU** |
-| `packages/backend/src/infrastructure/repositories/PrismaSavingTransactionRepository.ts` | **BARU** |
-| `packages/backend/src/infrastructure/repositories/index.ts` | Tambah export |
-| `packages/backend/src/application/services/SavingService.ts` | **BARU** — business logic |
-| `packages/backend/src/application/services/index.ts` | Tambah export |
-| `packages/backend/src/application/services/PaymentService.ts` | Integrasi auto-credit & auto-reversal saving |
-| `packages/backend/src/application/dtos/index.ts` | Tambah DTO saving |
-| `packages/backend/src/presentation/controllers/SavingController.ts` | **BARU** |
-| `packages/backend/src/presentation/routes/index.ts` | Tambah saving routes |
-| `packages/backend/src/index.ts` | Wire repo & service baru |
-| `packages/backend/src/__tests__/SavingService.test.ts` | **BARU** — test suite |
-| `packages/frontend/src/types/index.ts` | Tambah types saving |
-| `packages/frontend/src/lib/api.ts` | Tambah API methods saving |
-| `packages/frontend/src/hooks/useApi.ts` | Tambah SWR hooks saving |
-| `packages/frontend/src/lib/schemas.ts` | Tambah Zod schemas saving |
-| `packages/frontend/src/app/(dashboard)/contracts/[id]/page.tsx` | Tambah section Saving di detail kontrak |
+| File                                                                                      | Perubahan                                                                                              |
+| ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `packages/backend/prisma/schema.prisma`                                                   | Tambah enum `SavingTransactionType` + model `SavingTransaction` + update `Contract` + update `Invoice` |
+| `packages/backend/src/domain/enums/index.ts`                                              | Tambah enum `SavingTransactionType` + konstanta `SAVING_PER_DAY`                                       |
+| `packages/backend/src/domain/entities/SavingTransaction.ts`                               | **BARU** — entity interface                                                                            |
+| `packages/backend/src/domain/entities/index.ts`                                           | Tambah export                                                                                          |
+| `packages/backend/src/domain/interfaces/ISavingTransactionRepository.ts`                  | **BARU** — repo interface                                                                              |
+| `packages/backend/src/domain/interfaces/index.ts`                                         | Tambah export                                                                                          |
+| `packages/backend/src/infrastructure/repositories/InMemorySavingTransactionRepository.ts` | **BARU**                                                                                               |
+| `packages/backend/src/infrastructure/repositories/PrismaSavingTransactionRepository.ts`   | **BARU**                                                                                               |
+| `packages/backend/src/infrastructure/repositories/index.ts`                               | Tambah export                                                                                          |
+| `packages/backend/src/application/services/SavingService.ts`                              | **BARU** — business logic                                                                              |
+| `packages/backend/src/application/services/index.ts`                                      | Tambah export                                                                                          |
+| `packages/backend/src/application/services/PaymentService.ts`                             | Integrasi auto-credit & auto-reversal saving                                                           |
+| `packages/backend/src/application/dtos/index.ts`                                          | Tambah DTO saving                                                                                      |
+| `packages/backend/src/presentation/controllers/SavingController.ts`                       | **BARU**                                                                                               |
+| `packages/backend/src/presentation/routes/index.ts`                                       | Tambah saving routes                                                                                   |
+| `packages/backend/src/index.ts`                                                           | Wire repo & service baru                                                                               |
+| `packages/backend/src/__tests__/SavingService.test.ts`                                    | **BARU** — test suite                                                                                  |
+| `packages/frontend/src/types/index.ts`                                                    | Tambah types saving                                                                                    |
+| `packages/frontend/src/lib/api.ts`                                                        | Tambah API methods saving                                                                              |
+| `packages/frontend/src/hooks/useApi.ts`                                                   | Tambah SWR hooks saving                                                                                |
+| `packages/frontend/src/lib/schemas.ts`                                                    | Tambah Zod schemas saving                                                                              |
+| `packages/frontend/src/app/(dashboard)/contracts/[id]/page.tsx`                           | Tambah section Saving di detail kontrak                                                                |
 
 ---
 
@@ -170,6 +178,7 @@ enum SavingTransactionType {
 ```
 
 **Penjelasan setiap tipe:**
+
 - `CREDIT` — Saving masuk dari pembayaran harian. Otomatis oleh sistem saat invoice DAILY_BILLING/MANUAL_PAYMENT di-PAID.
 - `DEBIT_SERVICE` — Penggunaan saving untuk service motor (servis, spare part, dll.). Dilakukan manual oleh admin.
 - `DEBIT_TRANSFER` — Penggunaan saving untuk biaya balik nama STNK/BPKB. Dilakukan manual oleh admin. Hanya boleh saat kontrak COMPLETED.
@@ -218,6 +227,7 @@ model SavingTransaction {
 ```
 
 **Penjelasan field-by-field:**
+
 - `id`: UUID primary key, konsisten dengan semua model lain di project.
 - `contractId`: FK ke Contract. Saving selalu per kontrak.
 - `type`: Enum `SavingTransactionType`. Menentukan arah transaksi.
@@ -227,7 +237,7 @@ model SavingTransaction {
   - `REVERSAL` → saldo berkurang (`balanceAfter = balanceBefore - amount`)
 - `balanceBefore`: Snapshot saldo sebelum transaksi ini. Untuk audit trail & debugging.
 - `balanceAfter`: Snapshot saldo setelah transaksi ini. Harus konsisten.
-- `paymentId`: FK ke Invoice. Terisi untuk CREDIT (invoice yang di-PAID) dan REVERSAL (invoice yang di-revert). Null untuk DEBIT_*.
+- `paymentId`: FK ke Invoice. Terisi untuk CREDIT (invoice yang di-PAID) dan REVERSAL (invoice yang di-revert). Null untuk DEBIT\_\*.
 - `daysCount`: Jumlah hari kerja yang menghasilkan saving. Hanya untuk CREDIT. `amount = daysCount × SAVING_PER_DAY`.
 - `description`: Deskripsi transaksi. Wajib diisi untuk DEBIT_SERVICE dan DEBIT_TRANSFER. Contoh: "Service rem depan + ganti kampas rem", "Biaya balik nama STNK".
 - `photo`: URL foto bukti. Opsional. Contoh: foto nota servis, kwitansi balik nama.
@@ -245,6 +255,7 @@ model SavingTransaction {
 ```
 
 Dan tambah relasi di bagian relations (setelah `paymentDays PaymentDay[]`):
+
 ```prisma
   savingTransactions SavingTransaction[]
 ```
@@ -298,7 +309,7 @@ export interface SavingTransaction {
   id: string;
   contractId: string;
   type: SavingTransactionType;
-  amount: number;           // Selalu positif
+  amount: number; // Selalu positif
   balanceBefore: number;
   balanceAfter: number;
   paymentId: string | null;
@@ -316,6 +327,7 @@ export interface SavingTransaction {
 **File**: `packages/backend/src/domain/entities/index.ts`
 
 Tambah di akhir file (setelah `export type { PaymentDay } from './PaymentDay';`):
+
 ```typescript
 export type { SavingTransaction } from './SavingTransaction';
 ```
@@ -330,15 +342,19 @@ import { SavingTransactionType } from '../enums';
 
 export interface ISavingTransactionRepository {
   findById(id: string): Promise<SavingTransaction | null>;
-  findByContractId(contractId: string): Promise<SavingTransaction[]>;  // ordered by createdAt DESC
+  findByContractId(contractId: string): Promise<SavingTransaction[]>; // ordered by createdAt DESC
   findByPaymentId(paymentId: string): Promise<SavingTransaction[]>;
-  findByContractAndType(contractId: string, type: SavingTransactionType): Promise<SavingTransaction[]>;
+  findByContractAndType(
+    contractId: string,
+    type: SavingTransactionType,
+  ): Promise<SavingTransaction[]>;
   create(tx: SavingTransaction): Promise<SavingTransaction>;
   count(contractId: string): Promise<number>;
 }
 ```
 
 **Penjelasan method-by-method:**
+
 - `findById`: Cari transaksi by ID. Untuk detail/audit.
 - `findByContractId`: Semua transaksi saving untuk kontrak tertentu. **Ordered by createdAt DESC** (terbaru di atas). Digunakan untuk riwayat transaksi di frontend.
 - `findByPaymentId`: Cari transaksi CREDIT yang linked ke invoice tertentu. Digunakan saat reversal — cari credit yang perlu di-reverse.
@@ -353,6 +369,7 @@ export interface ISavingTransactionRepository {
 **File**: `packages/backend/src/domain/interfaces/index.ts`
 
 Tambah di akhir file (setelah `export type { IPaymentDayRepository } from './IPaymentDayRepository';`):
+
 ```typescript
 export type { ISavingTransactionRepository } from './ISavingTransactionRepository';
 ```
@@ -368,6 +385,7 @@ export type { ISavingTransactionRepository } from './ISavingTransactionRepositor
 Implementasikan semua methods dari `ISavingTransactionRepository` menggunakan `Map<string, SavingTransaction>`.
 
 **Pattern yang WAJIB diikuti** (referensi: `InMemoryPaymentDayRepository.ts`, `InMemoryInvoiceRepository.ts`):
+
 - Private `private data = new Map<string, SavingTransaction>();`
 - Semua method async (return Promise)
 - `findByContractId`: filter by contractId, **sort by createdAt DESC**
@@ -390,22 +408,25 @@ export class InMemorySavingTransactionRepository implements ISavingTransactionRe
 
   async findByContractId(contractId: string): Promise<SavingTransaction[]> {
     return Array.from(this.data.values())
-      .filter(tx => tx.contractId === contractId)
+      .filter((tx) => tx.contractId === contractId)
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-      .map(tx => ({ ...tx }));
+      .map((tx) => ({ ...tx }));
   }
 
   async findByPaymentId(paymentId: string): Promise<SavingTransaction[]> {
     return Array.from(this.data.values())
-      .filter(tx => tx.paymentId === paymentId)
-      .map(tx => ({ ...tx }));
+      .filter((tx) => tx.paymentId === paymentId)
+      .map((tx) => ({ ...tx }));
   }
 
-  async findByContractAndType(contractId: string, type: SavingTransactionType): Promise<SavingTransaction[]> {
+  async findByContractAndType(
+    contractId: string,
+    type: SavingTransactionType,
+  ): Promise<SavingTransaction[]> {
     return Array.from(this.data.values())
-      .filter(tx => tx.contractId === contractId && tx.type === type)
+      .filter((tx) => tx.contractId === contractId && tx.type === type)
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-      .map(tx => ({ ...tx }));
+      .map((tx) => ({ ...tx }));
   }
 
   async create(tx: SavingTransaction): Promise<SavingTransaction> {
@@ -414,9 +435,7 @@ export class InMemorySavingTransactionRepository implements ISavingTransactionRe
   }
 
   async count(contractId: string): Promise<number> {
-    return Array.from(this.data.values())
-      .filter(tx => tx.contractId === contractId)
-      .length;
+    return Array.from(this.data.values()).filter((tx) => tx.contractId === contractId).length;
   }
 }
 ```
@@ -426,6 +445,7 @@ export class InMemorySavingTransactionRepository implements ISavingTransactionRe
 **File BARU**: `packages/backend/src/infrastructure/repositories/PrismaSavingTransactionRepository.ts`
 
 **Pattern yang WAJIB diikuti** (referensi: `PrismaPaymentDayRepository.ts`):
+
 - Constructor menerima `PrismaClient`
 - Private `toEntity(raw: any): SavingTransaction` method — cast Prisma types ke domain entity, termasuk enum casting
 - Semua queries menggunakan `this.prisma.savingTransaction.*`
@@ -456,22 +476,25 @@ export class PrismaSavingTransactionRepository implements ISavingTransactionRepo
       where: { contractId },
       orderBy: { createdAt: 'desc' },
     });
-    return raws.map(r => this.toEntity(r));
+    return raws.map((r) => this.toEntity(r));
   }
 
   async findByPaymentId(paymentId: string): Promise<SavingTransaction[]> {
     const raws = await this.prisma.savingTransaction.findMany({
       where: { paymentId },
     });
-    return raws.map(r => this.toEntity(r));
+    return raws.map((r) => this.toEntity(r));
   }
 
-  async findByContractAndType(contractId: string, type: SavingTransactionType): Promise<SavingTransaction[]> {
+  async findByContractAndType(
+    contractId: string,
+    type: SavingTransactionType,
+  ): Promise<SavingTransaction[]> {
     const raws = await this.prisma.savingTransaction.findMany({
       where: { contractId, type: type as any },
       orderBy: { createdAt: 'desc' },
     });
-    return raws.map(r => this.toEntity(r));
+    return raws.map((r) => this.toEntity(r));
   }
 
   async create(tx: SavingTransaction): Promise<SavingTransaction> {
@@ -505,6 +528,7 @@ export class PrismaSavingTransactionRepository implements ISavingTransactionRepo
 **File**: `packages/backend/src/infrastructure/repositories/index.ts`
 
 Tambah di akhir file:
+
 ```typescript
 export { InMemorySavingTransactionRepository } from './InMemorySavingTransactionRepository';
 export { PrismaSavingTransactionRepository } from './PrismaSavingTransactionRepository';
@@ -530,13 +554,14 @@ export const DebitSavingDto = z.object({
 export type DebitSavingDto = z.infer<typeof DebitSavingDto>;
 
 export const ClaimSavingDto = z.object({
-  amount: z.number().int().positive('Nominal harus lebih dari 0').optional(),  // Jika tidak diisi = claim semua sisa
+  amount: z.number().int().positive('Nominal harus lebih dari 0').optional(), // Jika tidak diisi = claim semua sisa
   notes: z.string().optional().nullable().default(null),
 });
 export type ClaimSavingDto = z.infer<typeof ClaimSavingDto>;
 ```
 
 **Tambah import** di bagian atas file jika belum ada:
+
 ```typescript
 import { SavingTransactionType } from '../../domain/enums';
 ```
@@ -546,6 +571,7 @@ import { SavingTransactionType } from '../../domain/enums';
 **File BARU**: `packages/backend/src/application/services/SavingService.ts`
 
 **Constructor dependencies** (inject via constructor):
+
 ```typescript
 import { ISavingTransactionRepository } from '../../domain/interfaces/ISavingTransactionRepository';
 import { IContractRepository } from '../../domain/interfaces/IContractRepository';
@@ -995,6 +1021,7 @@ async recalculateBalance(contractId: string, adminId: string): Promise<number> {
 **File**: `packages/backend/src/application/services/index.ts`
 
 Tambah di akhir file:
+
 ```typescript
 export { SavingService } from './SavingService';
 ```
@@ -1074,6 +1101,7 @@ Cek apakah di PaymentService ada method lain yang men-set invoice status ke PAID
 ### 6A. Import
 
 Tambah import di bagian atas (setelah existing imports):
+
 ```typescript
 import {
   InMemorySavingTransactionRepository,
@@ -1087,16 +1115,19 @@ import { SavingController } from './presentation/controllers/SavingController';
 ### 6B. Declare & Initialize Repository
 
 Di bagian repository declaration (line 61-67), tambah:
+
 ```typescript
 let savingTxRepo: ISavingTransactionRepository;
 ```
 
 Di blok `if (usePrisma)` (line 69-80), tambah:
+
 ```typescript
 savingTxRepo = new PrismaSavingTransactionRepository(prisma);
 ```
 
 Di blok `else` InMemory (line 81-89), tambah:
+
 ```typescript
 savingTxRepo = new InMemorySavingTransactionRepository();
 ```
@@ -1104,6 +1135,7 @@ savingTxRepo = new InMemorySavingTransactionRepository();
 ### 6C. Initialize Service
 
 Setelah inisialisasi `paymentService` (line 97), tambah:
+
 ```typescript
 const savingService = new SavingService(savingTxRepo, contractRepo, invoiceRepo, auditRepo);
 
@@ -1114,6 +1146,7 @@ paymentService.setSavingService(savingService);
 ### 6D. Initialize Controller
 
 Setelah inisialisasi controllers existing (line 118-126), tambah:
+
 ```typescript
 const savingController = new SavingController(savingService);
 ```
@@ -1121,6 +1154,7 @@ const savingController = new SavingController(savingService);
 ### 6E. Update Routes Interface & Wire
 
 Update `createRoutes` call (line 132-142) untuk include `savingController`:
+
 ```typescript
 const routes = createRoutes({
   authController,
@@ -1131,7 +1165,7 @@ const routes = createRoutes({
   reportController,
   auditController,
   settingController,
-  savingController,  // BARU
+  savingController, // BARU
   authMiddleware,
 });
 ```
@@ -1229,11 +1263,13 @@ export class SavingController {
 **File**: `packages/backend/src/presentation/routes/index.ts`
 
 **Update interface** `RouteControllers` (line 11-21) — tambah:
+
 ```typescript
 savingController: SavingController;
 ```
 
 **Tambah import**:
+
 ```typescript
 import { SavingController } from '../controllers/SavingController';
 ```
@@ -1242,12 +1278,36 @@ import { SavingController } from '../controllers/SavingController';
 
 ```typescript
 // Saving
-router.get('/savings/contract/:contractId', authMiddleware, controllers.savingController.getByContractId);
-router.get('/savings/contract/:contractId/balance', authMiddleware, controllers.savingController.getBalance);
-router.post('/savings/contract/:contractId/debit/service', authMiddleware, controllers.savingController.debitForService);
-router.post('/savings/contract/:contractId/debit/transfer', authMiddleware, controllers.savingController.debitForTransfer);
-router.post('/savings/contract/:contractId/claim', authMiddleware, controllers.savingController.claimSaving);
-router.post('/savings/contract/:contractId/recalculate', authMiddleware, controllers.savingController.recalculateBalance);
+router.get(
+  '/savings/contract/:contractId',
+  authMiddleware,
+  controllers.savingController.getByContractId,
+);
+router.get(
+  '/savings/contract/:contractId/balance',
+  authMiddleware,
+  controllers.savingController.getBalance,
+);
+router.post(
+  '/savings/contract/:contractId/debit/service',
+  authMiddleware,
+  controllers.savingController.debitForService,
+);
+router.post(
+  '/savings/contract/:contractId/debit/transfer',
+  authMiddleware,
+  controllers.savingController.debitForTransfer,
+);
+router.post(
+  '/savings/contract/:contractId/claim',
+  authMiddleware,
+  controllers.savingController.claimSaving,
+);
+router.post(
+  '/savings/contract/:contractId/recalculate',
+  authMiddleware,
+  controllers.savingController.recalculateBalance,
+);
 ```
 
 ---
@@ -1292,6 +1352,7 @@ export interface SavingData {
 ```
 
 Tambah field di interface `Contract` (setelah `gracePeriodDays`, line 147):
+
 ```typescript
 savingBalance: number;
 ```
@@ -1342,6 +1403,7 @@ async recalculateSavingBalance(contractId: string) {
 ```
 
 **Tambah import** di bagian atas file:
+
 ```typescript
 import { SavingTransaction, SavingData } from '@/types';
 ```
@@ -1358,7 +1420,7 @@ export function useSavingByContract(contractId: string | undefined) {
   return useSWR(
     contractId ? `/savings/contract/${contractId}` : null,
     () => api.getSavingByContract(contractId!),
-    { dedupingInterval: TTL.SHORT }
+    { dedupingInterval: TTL.SHORT },
   );
 }
 
@@ -1366,7 +1428,7 @@ export function useSavingBalance(contractId: string | undefined) {
   return useSWR(
     contractId ? `/savings/contract/${contractId}/balance` : null,
     () => api.getSavingBalance(contractId!),
-    { dedupingInterval: TTL.SHORT }
+    { dedupingInterval: TTL.SHORT },
   );
 }
 ```
@@ -1399,6 +1461,7 @@ export const claimSavingSchema = z.object({
 **Tambahkan section baru "Saving"** di halaman detail kontrak. Letakkan setelah section Ownership Progress dan sebelum section Customer Info.
 
 **Data hook yang digunakan:**
+
 ```typescript
 const { data: savingData, mutate: mutateSaving } = useSavingByContract(id);
 ```
@@ -1406,6 +1469,7 @@ const { data: savingData, mutate: mutateSaving } = useSavingByContract(id);
 **Komponen yang harus ditampilkan:**
 
 #### 1. Kartu Saldo Saving
+
 - Tampilkan **saldo saving saat ini** dalam format currency (Rp X.XXX.XXX).
 - Gunakan icon yang sesuai (piggy bank / wallet).
 - **Badge status** berdasarkan kontrak:
@@ -1414,12 +1478,14 @@ const { data: savingData, mutate: mutateSaving } = useSavingByContract(id);
   - ACTIVE / OVERDUE → tidak perlu badge (saving masih berjalan, belum bisa claim)
 
 #### 2. Tombol Aksi (di dalam atau di bawah kartu saldo)
+
 - **"Gunakan untuk Servis"** — Tampil jika status ACTIVE/OVERDUE/COMPLETED dan savingBalance > 0. Buka dialog debit service.
 - **"Gunakan untuk Balik Nama"** — Tampil HANYA jika status COMPLETED dan savingBalance > 0. Buka dialog debit transfer.
 - **"Claim Saving"** — Tampil HANYA jika status COMPLETED dan savingBalance > 0. Buka dialog claim.
 - Semua tombol **disabled jika savingBalance === 0**.
 
 #### 3. Riwayat Transaksi Saving
+
 - Tabel/list riwayat transaksi, kolom:
   - **Tanggal** — format `formatDateTime(tx.createdAt)`
   - **Tipe** — badge warna:
@@ -1437,6 +1503,7 @@ const { data: savingData, mutate: mutateSaving } = useSavingByContract(id);
 #### 4. Dialog Forms
 
 **Dialog Debit (Servis Motor / Balik Nama):**
+
 ```
 ┌─────────────────────────────────────────┐
 │  Gunakan Saving untuk Servis Motor      │
@@ -1463,6 +1530,7 @@ const { data: savingData, mutate: mutateSaving } = useSavingByContract(id);
 - Toast success: "Saving berhasil digunakan untuk servis".
 
 **Dialog Claim:**
+
 ```
 ┌─────────────────────────────────────────┐
 │  Claim Sisa Saving                      │
@@ -1485,11 +1553,13 @@ const { data: savingData, mutate: mutateSaving } = useSavingByContract(id);
 #### 5. Update Quick Stats
 
 Di section Quick Stats yang sudah ada (kartu-kartu kecil: Progress, Hari Kerja, Hari Libur, Total Bayar), tambahkan kartu baru:
+
 - **Label**: "Saving"
 - **Value**: `Rp ${formatCurrency(contract.savingBalance)}`
 - **Icon**: piggy bank atau wallet
 
 **Bahasa UI — semua dalam Bahasa Indonesia:**
+
 - "Saving" (tetap English — istilah umum)
 - "Gunakan untuk Servis"
 - "Gunakan untuk Balik Nama"
@@ -1504,10 +1574,11 @@ Di section Quick Stats yang sudah ada (kartu-kartu kecil: Progress, Hari Kerja, 
 - "Batal"
 
 **SWR invalidation setelah mutasi:**
+
 ```typescript
 const invalidate = useInvalidate();
 // Setelah operasi saving:
-invalidate("/savings", "/contracts");
+invalidate('/savings', '/contracts');
 ```
 
 ---
@@ -2053,6 +2124,7 @@ describe('SavingService', () => {
 **PENTING**: Contract entity sekarang punya field baru `savingBalance`. Update helper functions di test suites existing (`ContractService.test.ts`, `PaymentService.test.ts`, dll.) untuk include `savingBalance: 0` di contract creation.
 
 Cari semua tempat di test files yang create Contract object dan tambahkan:
+
 ```typescript
 savingBalance: 0,
 ```
@@ -2064,11 +2136,13 @@ savingBalance: 0,
 **File**: `packages/backend/src/domain/entities/Contract.ts`
 
 Tambah field baru di interface Contract (setelah `gracePeriodDays`):
+
 ```typescript
 savingBalance: number;
 ```
 
 **PENTING**: Pastikan field ini ada di:
+
 1. Domain entity interface (`Contract.ts`)
 2. Prisma schema (`schema.prisma`) — sudah ditambah di Langkah 1C
 3. Frontend types (`types/index.ts`) — sudah ditambah di Langkah 8A
@@ -2102,6 +2176,7 @@ savingBalance: number;
 ## CHECKLIST FINAL
 
 ### Backend — Domain Layer
+
 - [ ] Prisma schema: enum `SavingTransactionType` ditambahkan
 - [ ] Prisma schema: model `SavingTransaction` ditambahkan dengan semua fields & indexes
 - [ ] Prisma schema: `Contract.savingBalance` ditambahkan (Int, default 0)
@@ -2115,11 +2190,13 @@ savingBalance: number;
 - [ ] Barrel exports updated: entities, interfaces
 
 ### Backend — Infrastructure Layer
+
 - [ ] `InMemorySavingTransactionRepository`: semua methods implemented
 - [ ] `PrismaSavingTransactionRepository`: semua methods implemented
 - [ ] Barrel exports updated: repositories
 
 ### Backend — Application Layer
+
 - [ ] `SavingService`: `creditFromPayment()` — auto-credit saat invoice PAID
 - [ ] `SavingService`: `reverseCreditFromPayment()` — auto-reverse saat payment revert
 - [ ] `SavingService`: `debitForService()` — debit untuk service motor
@@ -2132,18 +2209,21 @@ savingBalance: number;
 - [ ] Barrel export: `SavingService` di `services/index.ts`
 
 ### Backend — Integrasi PaymentService
+
 - [ ] `PaymentService`: property `savingService` + setter `setSavingService()`
 - [ ] `PaymentService.payPayment()`: auto-credit saving setelah daily/manual payment PAID
 - [ ] `PaymentService.revertPaymentStatus()`: auto-reverse saving saat revert dari PAID
 - [ ] Try-catch wrapper: saving failure TIDAK menggagalkan payment flow
 
 ### Backend — Presentation Layer
+
 - [ ] `SavingController`: 6 endpoints (getByContract, getBalance, debitService, debitTransfer, claim, recalculate)
 - [ ] Routes: 6 routes saving ditambahkan di `routes/index.ts`
 - [ ] Routes interface `RouteControllers` updated
 - [ ] `index.ts`: repo wired, service initialized, setter called, controller created, passed to routes
 
 ### Backend — Tests
+
 - [ ] `SavingService.test.ts`: test suite baru — minimal 28 test cases
 - [ ] Credit tests: 5 cases (daily billing, manual payment, accumulation, invalid daysCount, audit log)
 - [ ] Debit service tests: 7 cases (success, exceed balance, not found, ACTIVE, OVERDUE, COMPLETED, CANCELLED, REPOSSESSED)
@@ -2157,6 +2237,7 @@ savingBalance: number;
 - [ ] `npm test` — ALL tests pass (existing + new)
 
 ### Frontend
+
 - [ ] Types: `SavingTransactionType` enum, `SavingTransaction` interface, `SavingData` interface
 - [ ] Types: `Contract.savingBalance` field ditambahkan
 - [ ] API client: 6 methods saving (get, balance, debit service, debit transfer, claim, recalculate)

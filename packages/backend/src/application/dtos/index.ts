@@ -1,5 +1,14 @@
 import { z } from 'zod';
-import { MotorModel, BatteryType, DPScheme, ContractStatus, PaymentStatus, Gender, HolidayScheme } from '../../domain/enums';
+import {
+  MotorModel,
+  BatteryType,
+  DPScheme,
+  ContractStatus,
+  PaymentStatus,
+  Gender,
+  HolidayScheme,
+  ServiceType,
+} from '../../domain/enums';
 
 // Auth DTOs
 export const LoginDto = z.object({
@@ -11,7 +20,12 @@ export type LoginDto = z.infer<typeof LoginDto>;
 // Customer DTOs
 export const CreateCustomerDto = z.object({
   fullName: z.string().min(1, 'Full name is required'),
-  phone: z.string().regex(/^(\+62|62|0)8[0-9]{8,12}$/, 'Format nomor telepon tidak valid (contoh: 08xxx atau +628xxx)'),
+  phone: z
+    .string()
+    .regex(
+      /^(\+62|62|0)8[0-9]{8,12}$/,
+      'Format nomor telepon tidak valid (contoh: 08xxx atau +628xxx)',
+    ),
   email: z.string().email('Invalid email').optional().default(''),
   address: z.string().min(1, 'Address is required'),
   birthDate: z.string().optional().nullable().default(null),
@@ -104,7 +118,29 @@ export const DebitSavingDto = z.object({
 export type DebitSavingDto = z.infer<typeof DebitSavingDto>;
 
 export const ClaimSavingDto = z.object({
-  amount: z.number().int().positive('Nominal harus lebih dari 0').optional(),  // Jika tidak diisi = claim semua sisa
+  amount: z.number().int().positive('Nominal harus lebih dari 0').optional(), // Jika tidak diisi = claim semua sisa
   notes: z.string().optional().nullable().default(null),
 });
 export type ClaimSavingDto = z.infer<typeof ClaimSavingDto>;
+
+// ============ Service Compensation DTOs ============
+
+export const CreateServiceRecordDto = z.object({
+  contractId: z.string().min(1, 'Contract ID wajib diisi'),
+  serviceType: z.nativeEnum(ServiceType),
+  replacementProvided: z.boolean(),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Format tanggal harus YYYY-MM-DD'),
+  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Format tanggal harus YYYY-MM-DD'),
+  notes: z.string().optional().default(''),
+  attachment: z.string().optional().nullable().default(null),
+  // Service cost & parts — langsung di ServiceRecord
+  serviceCost: z.number().int().min(0, 'Biaya tidak boleh negatif').optional().default(0),
+  partsReplaced: z.string().optional().nullable().default(null),
+  partsRepaired: z.string().optional().nullable().default(null),
+});
+export type CreateServiceRecordDtoType = z.infer<typeof CreateServiceRecordDto>;
+
+export const RevokeServiceRecordDto = z.object({
+  reason: z.string().min(1, 'Alasan revoke wajib diisi'),
+});
+export type RevokeServiceRecordDtoType = z.infer<typeof RevokeServiceRecordDto>;

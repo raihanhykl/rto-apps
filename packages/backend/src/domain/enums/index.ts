@@ -59,21 +59,21 @@ export enum UserRole {
 }
 
 export const MOTOR_DAILY_RATES: Record<string, number> = {
-  'ATHENA_REGULAR': 58000,
-  'ATHENA_EXTENDED': 63000,
-  'VICTORY_REGULAR': 58000,
-  'VICTORY_EXTENDED': 63000,
-  'EDPOWER_REGULAR': 83000,
-  'EDPOWER_EXTENDED': 83000,
+  ATHENA_REGULAR: 58000,
+  ATHENA_EXTENDED: 63000,
+  VICTORY_REGULAR: 58000,
+  VICTORY_EXTENDED: 63000,
+  EDPOWER_REGULAR: 83000,
+  EDPOWER_EXTENDED: 83000,
 };
 
 export const DP_AMOUNTS: Record<string, number> = {
-  'ATHENA_REGULAR': 530000,
-  'ATHENA_EXTENDED': 580000,
-  'VICTORY_REGULAR': 530000,
-  'VICTORY_EXTENDED': 580000,
-  'EDPOWER_REGULAR': 780000,
-  'EDPOWER_EXTENDED': 780000,
+  ATHENA_REGULAR: 530000,
+  ATHENA_EXTENDED: 580000,
+  VICTORY_REGULAR: 530000,
+  VICTORY_EXTENDED: 580000,
+  EDPOWER_REGULAR: 780000,
+  EDPOWER_EXTENDED: 780000,
 };
 
 export const MAX_RENTAL_DAYS = 7;
@@ -94,6 +94,17 @@ export enum PaymentDayStatus {
   PAID = 'PAID',
   HOLIDAY = 'HOLIDAY',
   VOIDED = 'VOIDED',
+  COMPENSATED = 'COMPENSATED',
+}
+
+export enum ServiceType {
+  MINOR = 'MINOR',
+  MAJOR = 'MAJOR',
+}
+
+export enum ServiceRecordStatus {
+  ACTIVE = 'ACTIVE',
+  REVOKED = 'REVOKED',
 }
 
 export enum SavingTransactionType {
@@ -107,8 +118,18 @@ export enum SavingTransactionType {
 export const SAVING_PER_DAY = 5000; // Rp 5.000 per hari kerja
 
 export const VALID_STATUS_TRANSITIONS: Record<ContractStatus, ContractStatus[]> = {
-  [ContractStatus.ACTIVE]: [ContractStatus.OVERDUE, ContractStatus.COMPLETED, ContractStatus.CANCELLED, ContractStatus.REPOSSESSED],
-  [ContractStatus.OVERDUE]: [ContractStatus.ACTIVE, ContractStatus.COMPLETED, ContractStatus.CANCELLED, ContractStatus.REPOSSESSED],
+  [ContractStatus.ACTIVE]: [
+    ContractStatus.OVERDUE,
+    ContractStatus.COMPLETED,
+    ContractStatus.CANCELLED,
+    ContractStatus.REPOSSESSED,
+  ],
+  [ContractStatus.OVERDUE]: [
+    ContractStatus.ACTIVE,
+    ContractStatus.COMPLETED,
+    ContractStatus.CANCELLED,
+    ContractStatus.REPOSSESSED,
+  ],
   [ContractStatus.COMPLETED]: [],
   [ContractStatus.CANCELLED]: [],
   [ContractStatus.REPOSSESSED]: [],

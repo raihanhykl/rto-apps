@@ -40,6 +40,7 @@ int ret = snprintf(buf, sizeof(buf), "%s", long_string);
 ```
 
 **Safe Alternatives**:
+
 - `strlcpy`, `strlcat` (BSD, not standard)
 - `snprintf` with proper return value checking
 - C11 Annex K `strcpy_s`, `sprintf_s` (limited support)
@@ -74,6 +75,7 @@ memset(password, 0, sizeof(password));  // May be removed!
 ```
 
 **Safe Alternatives**:
+
 ```c
 // Option 1: explicit_bzero (BSD, glibc 2.25+)
 explicit_bzero(password, sizeof(password));
@@ -132,6 +134,7 @@ char *get_greeting() {
 ```
 
 **Mitigations**:
+
 - Set pointer to NULL after free: `free(ptr); ptr = NULL;`
 - Use static analysis (Coverity, cppcheck)
 - Use AddressSanitizer in testing
@@ -194,12 +197,12 @@ int x = ADD(1, 2) * 3;  // Expands to 1 + 2 * 3 = 7, not 9
 
 Search for these patterns in C/C++ code:
 
-| Pattern | Risk |
-|---------|------|
-| `strcpy`, `strcat`, `gets`, `sprintf` | Buffer overflow |
-| `printf(var)` where var is not literal | Format string |
-| `memset` before variable goes out of scope | Dead store elimination |
-| `free(ptr)` without `ptr = NULL` | Double free risk |
-| `malloc` without overflow check on size | Integer overflow |
-| Arithmetic on `int` near INT_MAX | Signed overflow UB |
-| `strncpy` without explicit null termination | Missing terminator |
+| Pattern                                     | Risk                   |
+| ------------------------------------------- | ---------------------- |
+| `strcpy`, `strcat`, `gets`, `sprintf`       | Buffer overflow        |
+| `printf(var)` where var is not literal      | Format string          |
+| `memset` before variable goes out of scope  | Dead store elimination |
+| `free(ptr)` without `ptr = NULL`            | Double free risk       |
+| `malloc` without overflow check on size     | Integer overflow       |
+| Arithmetic on `int` near INT_MAX            | Signed overflow UB     |
+| `strncpy` without explicit null termination | Missing terminator     |

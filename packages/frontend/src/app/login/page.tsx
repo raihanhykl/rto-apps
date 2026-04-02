@@ -1,32 +1,36 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useAuthStore } from "@/stores/authStore";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Zap } from "lucide-react";
-import { loginSchema, LoginFormData } from "@/lib/schemas";
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useAuthStore } from '@/stores/authStore';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Zap } from 'lucide-react';
+import { loginSchema, LoginFormData } from '@/lib/schemas';
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const { login, error, clearError } = useAuthStore();
   const router = useRouter();
 
-  const { register, handleSubmit, formState: { errors } } = useForm<LoginFormData>({
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
-    defaultValues: { username: "", password: "" },
+    defaultValues: { username: '', password: '' },
   });
 
   const onSubmit = async (data: LoginFormData) => {
     setLoading(true);
     try {
       await login(data.username, data.password);
-      router.push("/");
+      router.push('/');
     } catch {
       // error handled by store
     } finally {
@@ -58,7 +62,7 @@ export default function LoginPage() {
               <Label htmlFor="username">Username</Label>
               <Input
                 id="username"
-                {...register("username", { onChange: () => clearError() })}
+                {...register('username', { onChange: () => clearError() })}
                 placeholder="Masukkan username"
               />
               {errors.username && (
@@ -70,7 +74,7 @@ export default function LoginPage() {
               <Input
                 id="password"
                 type="password"
-                {...register("password", { onChange: () => clearError() })}
+                {...register('password', { onChange: () => clearError() })}
                 placeholder="Masukkan password"
               />
               {errors.password && (
@@ -78,7 +82,7 @@ export default function LoginPage() {
               )}
             </div>
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Memproses..." : "Login"}
+              {loading ? 'Memproses...' : 'Login'}
             </Button>
             <p className="text-xs text-center text-muted-foreground mt-4">
               Default: admin / admin123

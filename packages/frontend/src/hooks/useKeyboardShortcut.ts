@@ -1,11 +1,11 @@
-"use client";
+'use client';
 
-import { useEffect } from "react";
+import { useEffect } from 'react';
 
 export function useKeyboardShortcut(
   key: string,
   callback: () => void,
-  options: { ctrl?: boolean; meta?: boolean; shift?: boolean } = {}
+  options: { ctrl?: boolean; meta?: boolean; shift?: boolean } = {},
 ) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -18,7 +18,7 @@ export function useKeyboardShortcut(
       }
     };
 
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
   }, [key, callback, options.ctrl, options.meta, options.shift]);
 }

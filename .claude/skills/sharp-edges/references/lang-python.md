@@ -21,6 +21,7 @@ def register(name, registry={}):
 **The Problem**: Default arguments are evaluated once at function definition, not at each call.
 
 **Fix**: Use `None` sentinel:
+
 ```python
 def append_to(item, target=None):
     if target is None:
@@ -50,6 +51,7 @@ importlib.import_module(user_input)
 ```
 
 **Also Dangerous**:
+
 - `pickle.loads()` - arbitrary code execution
 - `yaml.load()` - arbitrary code execution (use `safe_load`)
 - `subprocess.Popen(shell=True)` with user input
@@ -70,6 +72,7 @@ funcs = [lambda: i for i in range(3)]
 ```
 
 **Fix**: Capture by value using default argument:
+
 ```python
 funcs = []
 for i in range(3):
@@ -186,6 +189,7 @@ print(u2.permissions)  # ['admin'] - u2 is also admin!
 ```
 
 **Fix**: Initialize in `__init__`:
+
 ```python
 class User:
     def __init__(self):
@@ -260,15 +264,15 @@ result = api.get_user().profile.settings.theme
 
 ## Detection Patterns
 
-| Pattern | Risk |
-|---------|------|
-| `def f(x=[])` or `def f(x={})` | Mutable default argument |
-| `eval(`, `exec(`, `compile(` | Code execution |
-| `pickle.loads(`, `yaml.load(` | Deserialization RCE |
-| `lambda: var` in loop | Late binding closure |
-| `x is 1`, `x is "string"` | Identity vs equality confusion |
-| `import x` where x.py exists locally | Import shadowing |
-| `except:` or `except Exception:` | Over-broad exception catching |
-| `class Foo: bar = []` | Shared mutable class attribute |
-| `template.format(obj)` with user template | Format string injection |
-| `subprocess.*(..., shell=True)` | Command injection |
+| Pattern                                   | Risk                           |
+| ----------------------------------------- | ------------------------------ |
+| `def f(x=[])` or `def f(x={})`            | Mutable default argument       |
+| `eval(`, `exec(`, `compile(`              | Code execution                 |
+| `pickle.loads(`, `yaml.load(`             | Deserialization RCE            |
+| `lambda: var` in loop                     | Late binding closure           |
+| `x is 1`, `x is "string"`                 | Identity vs equality confusion |
+| `import x` where x.py exists locally      | Import shadowing               |
+| `except:` or `except Exception:`          | Over-broad exception catching  |
+| `class Foo: bar = []`                     | Shared mutable class attribute |
+| `template.format(obj)` with user template | Format string injection        |
+| `subprocess.*(..., shell=True)`           | Command injection              |

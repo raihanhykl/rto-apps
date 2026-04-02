@@ -11,22 +11,32 @@ export class InMemorySavingTransactionRepository implements ISavingTransactionRe
 
   async findByContractId(contractId: string): Promise<SavingTransaction[]> {
     return Array.from(this.data.values())
-      .filter(tx => tx.contractId === contractId)
+      .filter((tx) => tx.contractId === contractId)
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-      .map(tx => ({ ...tx }));
+      .map((tx) => ({ ...tx }));
   }
 
   async findByPaymentId(paymentId: string): Promise<SavingTransaction[]> {
     return Array.from(this.data.values())
-      .filter(tx => tx.paymentId === paymentId)
-      .map(tx => ({ ...tx }));
+      .filter((tx) => tx.paymentId === paymentId)
+      .map((tx) => ({ ...tx }));
   }
 
-  async findByContractAndType(contractId: string, type: SavingTransactionType): Promise<SavingTransaction[]> {
+  async findByServiceRecordId(serviceRecordId: string): Promise<SavingTransaction | null> {
+    const found = Array.from(this.data.values()).find(
+      (tx) => tx.serviceRecordId === serviceRecordId,
+    );
+    return found ? { ...found } : null;
+  }
+
+  async findByContractAndType(
+    contractId: string,
+    type: SavingTransactionType,
+  ): Promise<SavingTransaction[]> {
     return Array.from(this.data.values())
-      .filter(tx => tx.contractId === contractId && tx.type === type)
+      .filter((tx) => tx.contractId === contractId && tx.type === type)
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-      .map(tx => ({ ...tx }));
+      .map((tx) => ({ ...tx }));
   }
 
   async create(tx: SavingTransaction): Promise<SavingTransaction> {
@@ -35,8 +45,20 @@ export class InMemorySavingTransactionRepository implements ISavingTransactionRe
   }
 
   async count(contractId: string): Promise<number> {
-    return Array.from(this.data.values())
-      .filter(tx => tx.contractId === contractId)
-      .length;
+    return Array.from(this.data.values()).filter((tx) => tx.contractId === contractId).length;
+  }
+
+  async findPaginatedByContractId(
+    contractId: string,
+    page: number,
+    limit: number,
+  ): Promise<{ data: SavingTransaction[]; total: number }> {
+    const filtered = Array.from(this.data.values())
+      .filter((tx) => tx.contractId === contractId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .map((tx) => ({ ...tx }));
+    const total = filtered.length;
+    const data = filtered.slice((page - 1) * limit, page * limit);
+    return { data, total };
   }
 }

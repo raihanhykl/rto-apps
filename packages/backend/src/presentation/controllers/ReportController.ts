@@ -7,20 +7,29 @@ import { v4 as uuidv4 } from 'uuid';
 export class ReportController {
   constructor(
     private reportService: ReportService,
-    private auditRepo: IAuditLogRepository
+    private auditRepo: IAuditLogRepository,
   ) {}
 
-  private parseFilters(query: any): ReportFilters {
+  private parseFilters(query: Record<string, unknown>): ReportFilters {
     const filters: ReportFilters = {};
     if (query.startDate) filters.startDate = query.startDate as string;
     if (query.endDate) filters.endDate = query.endDate as string;
-    if (query.status && Object.values(ContractStatus).includes(query.status)) {
+    if (
+      query.status &&
+      (Object.values(ContractStatus) as string[]).includes(query.status as string)
+    ) {
       filters.status = query.status as ContractStatus;
     }
-    if (query.motorModel && Object.values(MotorModel).includes(query.motorModel)) {
+    if (
+      query.motorModel &&
+      (Object.values(MotorModel) as string[]).includes(query.motorModel as string)
+    ) {
       filters.motorModel = query.motorModel as MotorModel;
     }
-    if (query.batteryType && Object.values(BatteryType).includes(query.batteryType)) {
+    if (
+      query.batteryType &&
+      (Object.values(BatteryType) as string[]).includes(query.batteryType as string)
+    ) {
       filters.batteryType = query.batteryType as BatteryType;
     }
     return filters;

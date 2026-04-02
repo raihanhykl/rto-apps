@@ -1,26 +1,30 @@
 import { Request, Response, NextFunction } from 'express';
 import { CustomerService } from '../../application/services';
 import { CreateCustomerDto, UpdateCustomerDto } from '../../application/dtos';
+import { sanitizePaginationParams } from '../utils/queryParams';
 
 export class CustomerController {
   constructor(private customerService: CustomerService) {}
 
   getAll = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { page, limit, sortBy, sortOrder, search, gender } = req.query;
-      if (page) {
+      const { gender } = req.query;
+      const params = sanitizePaginationParams(req.query as Record<string, unknown>, [
+        'createdAt',
+        'fullName',
+        'phone',
+        'email',
+        'ktpNumber',
+      ]);
+      if (req.query.page) {
         const result = await this.customerService.getAllPaginated({
-          page: parseInt(page as string) || 1,
-          limit: parseInt(limit as string) || 20,
-          sortBy: sortBy as string,
-          sortOrder: sortOrder as 'asc' | 'desc',
-          search: search as string,
+          ...params,
           gender: gender as string,
         });
         return res.json(result);
       }
-      const customers = search
-        ? await this.customerService.search(search as string)
+      const customers = params.search
+        ? await this.customerService.search(params.search)
         : await this.customerService.getAll();
       res.json(customers);
     } catch (error) {

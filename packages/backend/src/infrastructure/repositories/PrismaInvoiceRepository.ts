@@ -1,7 +1,7 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 import { Invoice } from '../../domain/entities';
 import { IInvoiceRepository } from '../../domain/interfaces';
-import { PaymentStatus, InvoiceType } from '../../domain/enums';
+import { PaymentStatus } from '../../domain/enums';
 import { PaginationParams, PaginatedResult } from '../../domain/interfaces/Pagination';
 
 export class PrismaInvoiceRepository implements IInvoiceRepository {
@@ -18,7 +18,7 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
     const rows = await this.prisma.invoice.findMany({
       orderBy: { createdAt: 'desc' },
     });
-    return rows.map(r => this.toEntity(r));
+    return rows.map((r) => this.toEntity(r));
   }
 
   async findAllPaginated(params: PaginationParams): Promise<PaginatedResult<Invoice>> {
@@ -64,7 +64,7 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
     ]);
 
     return {
-      data: rows.map(r => this.toEntity(r)),
+      data: rows.map((r) => this.toEntity(r)),
       total,
       page,
       limit,
@@ -82,21 +82,48 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
       where: { contractId },
       orderBy: { createdAt: 'desc' },
     });
-    return rows.map(r => this.toEntity(r));
+    return rows.map((r) => this.toEntity(r));
+  }
+
+  async findByContractIds(contractIds: string[]): Promise<Invoice[]> {
+    if (contractIds.length === 0) return [];
+    const rows = await this.prisma.invoice.findMany({
+      where: { contractId: { in: contractIds } },
+      orderBy: { createdAt: 'desc' },
+    });
+    return rows.map((r) => this.toEntity(r));
+  }
+
+  async findActiveByContractIds(contractIds: string[]): Promise<Map<string, Invoice>> {
+    if (contractIds.length === 0) return new Map();
+    const rows = await this.prisma.invoice.findMany({
+      where: {
+        contractId: { in: contractIds },
+        status: 'PENDING' as any,
+        type: { in: ['DAILY_BILLING', 'MANUAL_PAYMENT'] as any },
+      },
+    });
+    const result = new Map<string, Invoice>();
+    for (const row of rows) {
+      if (!result.has(row.contractId)) {
+        result.set(row.contractId, this.toEntity(row));
+      }
+    }
+    return result;
   }
 
   async findByCustomerId(customerId: string): Promise<Invoice[]> {
     const rows = await this.prisma.invoice.findMany({
       where: { customerId },
     });
-    return rows.map(r => this.toEntity(r));
+    return rows.map((r) => this.toEntity(r));
   }
 
   async findByStatus(status: PaymentStatus): Promise<Invoice[]> {
     const rows = await this.prisma.invoice.findMany({
       where: { status: status as any },
     });
-    return rows.map(r => this.toEntity(r));
+    return rows.map((r) => this.toEntity(r));
   }
 
   async findActiveByContractId(contractId: string): Promise<Invoice | null> {
@@ -110,6 +137,17 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
     return row ? this.toEntity(row) : null;
   }
 
+  async findAllPendingByContractId(contractId: string): Promise<Invoice[]> {
+    const rows = await this.prisma.invoice.findMany({
+      where: {
+        contractId,
+        status: 'PENDING' as any,
+        type: { in: ['DAILY_BILLING', 'MANUAL_PAYMENT'] as any },
+      },
+    });
+    return rows.map((r) => this.toEntity(r));
+  }
+
   async search(query: string): Promise<Invoice[]> {
     const rows = await this.prisma.invoice.findMany({
       where: {
@@ -118,7 +156,7 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
       orderBy: { createdAt: 'desc' },
       take: 20,
     });
-    return rows.map(r => this.toEntity(r));
+    return rows.map((r) => this.toEntity(r));
   }
 
   async create(invoice: Invoice): Promise<Invoice> {
@@ -160,8 +198,15 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
         data: updateData,
       });
       return this.toEntity(row);
-    } catch {
-      return null;
+    } catch (error: unknown) {
+      if (
+        error instanceof Error &&
+        'code' in error &&
+        (error as Record<string, unknown>).code === 'P2025'
+      ) {
+        return null;
+      }
+      throw error;
     }
   }
 
@@ -169,8 +214,15 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
     try {
       await this.prisma.invoice.delete({ where: { id } });
       return true;
-    } catch {
-      return false;
+    } catch (error: unknown) {
+      if (
+        error instanceof Error &&
+        'code' in error &&
+        (error as Record<string, unknown>).code === 'P2025'
+      ) {
+        return false;
+      }
+      throw error;
     }
   }
 
@@ -208,5 +260,87 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
       }
     }
     return max;
+  }
+
+  async getRevenueByMonth(months: number): Promise<Array<{ month: string; revenue: number }>> {
+    const now = new Date();
+    const wibStr = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+    const [yearStr, monthStr] = wibStr.split('-');
+    const year = parseInt(yearStr, 10);
+    const month = parseInt(monthStr, 10);
+
+    // Calculate start date (N months ago, first of month)
+    const startDate = new Date(year, month - 1 - (months - 1), 1);
+
+    // Fetch only PAID invoices in the date range (much smaller than findAll)
+    const rows = await this.prisma.invoice.findMany({
+      where: {
+        status: 'PAID' as any,
+        paidAt: { gte: startDate },
+      },
+      select: {
+        amount: true,
+        lateFee: true,
+        paidAt: true,
+      },
+    });
+
+    // Group by month in WIB timezone (NOT UTC!)
+    const monthMap = new Map<string, number>();
+    for (const r of rows) {
+      if (!r.paidAt) continue;
+      const pd = new Date(r.paidAt);
+      const wibPd = pd.toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+      const monthKey = wibPd.slice(0, 7); // "YYYY-MM"
+      monthMap.set(monthKey, (monthMap.get(monthKey) || 0) + r.amount + r.lateFee);
+    }
+
+    // Build result array for last N months (chronological order)
+    const result: Array<{ month: string; revenue: number }> = [];
+    for (let i = months - 1; i >= 0; i--) {
+      const d = new Date(year, month - 1 - i, 1);
+      const dWib = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+      const monthKey = dWib.slice(0, 7);
+      result.push({ month: monthKey, revenue: monthMap.get(monthKey) || 0 });
+    }
+
+    return result;
+  }
+
+  async findByDateRange(
+    startDate?: Date,
+    endDate?: Date,
+    contractIds?: string[],
+  ): Promise<Invoice[]> {
+    const where: Prisma.InvoiceWhereInput = {};
+    if (startDate || endDate) {
+      where.createdAt = {};
+      if (startDate) (where.createdAt as Prisma.DateTimeFilter).gte = startDate;
+      if (endDate) (where.createdAt as Prisma.DateTimeFilter).lte = endDate;
+    }
+    if (contractIds && contractIds.length > 0) {
+      where.contractId = { in: contractIds };
+    }
+    const rows = await this.prisma.invoice.findMany({ where, orderBy: { createdAt: 'desc' } });
+    return rows.map((r) => this.toEntity(r));
+  }
+
+  async findPaginatedByContractId(
+    contractId: string,
+    page: number,
+    limit: number,
+    sortOrder: 'asc' | 'desc' = 'desc',
+  ): Promise<{ data: Invoice[]; total: number }> {
+    const where = { contractId };
+    const [rows, total] = await Promise.all([
+      this.prisma.invoice.findMany({
+        where,
+        orderBy: { createdAt: sortOrder },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.invoice.count({ where }),
+    ]);
+    return { data: rows.map((r) => this.toEntity(r)), total };
   }
 }

@@ -1,6 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
 import { ContractService } from '../../application/services';
-import { CreateContractDto, UpdateContractStatusDto, ExtendContractDto, UpdateContractDto, CancelContractDto } from '../../application/dtos';
+import { sanitizePaginationParams } from '../utils/queryParams';
+import {
+  CreateContractDto,
+  UpdateContractStatusDto,
+  ExtendContractDto,
+  UpdateContractDto,
+  CancelContractDto,
+} from '../../application/dtos';
 
 export class ContractController {
   constructor(private contractService: ContractService) {}
@@ -11,7 +18,12 @@ export class ContractController {
       if (!bastPhoto) {
         return res.status(400).json({ error: 'Foto BAST wajib dilampirkan' });
       }
-      const contract = await this.contractService.receiveUnit(req.params.id, req.user!.id, bastPhoto, bastNotes);
+      const contract = await this.contractService.receiveUnit(
+        req.params.id,
+        req.user!.id,
+        bastPhoto,
+        bastNotes,
+      );
       res.json(contract);
     } catch (error) {
       next(error);
@@ -40,14 +52,20 @@ export class ContractController {
 
   getAll = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { page, limit, sortBy, sortOrder, search, status, motorModel, batteryType, dpScheme, dpFullyPaid } = req.query;
-      if (page) {
+      const { status, motorModel, batteryType, dpScheme, dpFullyPaid } = req.query;
+      const params = sanitizePaginationParams(req.query as Record<string, unknown>, [
+        'createdAt',
+        'contractNumber',
+        'startDate',
+        'endDate',
+        'status',
+        'dailyRate',
+        'totalDaysPaid',
+        'ownershipProgress',
+      ]);
+      if (req.query.page) {
         const result = await this.contractService.getAllPaginated({
-          page: parseInt(page as string) || 1,
-          limit: parseInt(limit as string) || 20,
-          sortBy: sortBy as string,
-          sortOrder: sortOrder as 'asc' | 'desc',
-          search: search as string,
+          ...params,
           status: status as string,
           motorModel: motorModel as string,
           batteryType: batteryType as string,

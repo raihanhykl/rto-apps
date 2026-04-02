@@ -1,5 +1,6 @@
-import { PrismaClient, Prisma } from '@prisma/client';
+import { PrismaClient, Prisma, $Enums } from '@prisma/client';
 import { AuditLog } from '../../domain/entities';
+import { AuditAction } from '../../domain/enums';
 import { IAuditLogRepository } from '../../domain/interfaces';
 import { PaginationParams, PaginatedResult } from '../../domain/interfaces/Pagination';
 
@@ -10,7 +11,7 @@ export class PrismaAuditLogRepository implements IAuditLogRepository {
     const rows = await this.prisma.auditLog.findMany({
       orderBy: { createdAt: 'desc' },
     });
-    return rows.map(r => this.toEntity(r));
+    return rows.map((r) => this.toEntity(r));
   }
 
   async findAllPaginated(params: PaginationParams): Promise<PaginatedResult<AuditLog>> {
@@ -19,7 +20,7 @@ export class PrismaAuditLogRepository implements IAuditLogRepository {
     if (params.search) {
       where.OR = [
         { description: { contains: params.search, mode: 'insensitive' } },
-        { action: { equals: params.search as any } },
+        { action: { equals: params.search as string as $Enums.AuditAction } },
       ];
     }
     if (params.module) {
@@ -53,7 +54,7 @@ export class PrismaAuditLogRepository implements IAuditLogRepository {
     ]);
 
     return {
-      data: rows.map(r => this.toEntity(r)),
+      data: rows.map((r) => this.toEntity(r)),
       total,
       page,
       limit,
@@ -66,7 +67,7 @@ export class PrismaAuditLogRepository implements IAuditLogRepository {
       where: { userId },
       orderBy: { createdAt: 'desc' },
     });
-    return rows.map(r => this.toEntity(r));
+    return rows.map((r) => this.toEntity(r));
   }
 
   async findByModule(module: string): Promise<AuditLog[]> {
@@ -74,7 +75,7 @@ export class PrismaAuditLogRepository implements IAuditLogRepository {
       where: { module },
       orderBy: { createdAt: 'desc' },
     });
-    return rows.map(r => this.toEntity(r));
+    return rows.map((r) => this.toEntity(r));
   }
 
   async findRecent(limit: number): Promise<AuditLog[]> {
@@ -82,7 +83,7 @@ export class PrismaAuditLogRepository implements IAuditLogRepository {
       orderBy: { createdAt: 'desc' },
       take: limit,
     });
-    return rows.map(r => this.toEntity(r));
+    return rows.map((r) => this.toEntity(r));
   }
 
   async create(log: AuditLog): Promise<AuditLog> {
@@ -106,11 +107,11 @@ export class PrismaAuditLogRepository implements IAuditLogRepository {
     return this.prisma.auditLog.count();
   }
 
-  private toEntity(raw: any): AuditLog {
+  private toEntity(raw: Prisma.AuditLogGetPayload<object>): AuditLog {
     return {
       id: raw.id,
       userId: raw.userId,
-      action: raw.action,
+      action: raw.action as unknown as AuditAction,
       module: raw.module,
       entityId: raw.entityId,
       description: raw.description,

@@ -1,14 +1,13 @@
-"use client";
+'use client';
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { cn } from "@/lib/utils";
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { cn } from '@/lib/utils';
 import {
   LayoutDashboard,
   Users,
   FileText,
   Receipt,
-  CreditCard,
   BarChart3,
   ClipboardList,
   Settings,
@@ -17,20 +16,19 @@ import {
   Menu,
   X,
   Search,
-} from "lucide-react";
-import { useAuthStore } from "@/stores/authStore";
-import { useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+} from 'lucide-react';
+import { useAuthStore } from '@/stores/authStore';
+import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
 
 const navItems = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/customers", label: "Customers", icon: Users },
-  { href: "/contracts", label: "Contracts", icon: FileText },
-  { href: "/invoices", label: "Tagihan", icon: Receipt },
-  { href: "/payments", label: "Payments", icon: CreditCard },
-  { href: "/reports", label: "Reports", icon: BarChart3 },
-  { href: "/audit", label: "Audit Log", icon: ClipboardList },
-  { href: "/settings", label: "Settings", icon: Settings },
+  { href: '/', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/customers', label: 'Customers', icon: Users },
+  { href: '/contracts', label: 'Contracts', icon: FileText },
+  { href: '/invoices', label: 'Tagihan', icon: Receipt },
+  { href: '/reports', label: 'Reports', icon: BarChart3 },
+  { href: '/audit', label: 'Audit Log', icon: ClipboardList },
+  { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
 export function Sidebar() {
@@ -47,18 +45,18 @@ export function Sidebar() {
   // Prevent body scroll when mobile sidebar is open
   useEffect(() => {
     if (mobileOpen) {
-      document.body.style.overflow = "hidden";
+      document.body.style.overflow = 'hidden';
     } else {
-      document.body.style.overflow = "";
+      document.body.style.overflow = '';
     }
     return () => {
-      document.body.style.overflow = "";
+      document.body.style.overflow = '';
     };
   }, [mobileOpen]);
 
   const handleLogout = async () => {
     await logout();
-    router.push("/login");
+    router.push('/login');
   };
 
   const sidebarContent = (
@@ -67,14 +65,16 @@ export function Sidebar() {
       <div className="flex items-center gap-2 px-6 py-5 border-b">
         <Zap className="h-6 w-6 text-primary" />
         <span className="text-xl font-bold">WEDISON</span>
-        <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full ml-auto">RTO</span>
+        <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full ml-auto">
+          RTO
+        </span>
       </div>
 
       {/* Quick Search Hint */}
       <div className="px-3 pt-4 pb-2">
         <button
           onClick={() => {
-            const event = new KeyboardEvent("keydown", { key: "k", ctrlKey: true });
+            const event = new KeyboardEvent('keydown', { key: 'k', ctrlKey: true });
             window.dispatchEvent(event);
           }}
           className="w-full flex items-center gap-2 rounded-md border border-input bg-muted/50 px-3 py-2 text-sm text-muted-foreground hover:bg-accent transition-colors cursor-pointer"
@@ -91,17 +91,17 @@ export function Sidebar() {
       <nav className="flex-1 overflow-y-auto py-2 px-3">
         <ul className="space-y-1">
           {navItems.map((item) => {
-            const isActive = pathname === item.href ||
-              (item.href !== "/" && pathname.startsWith(item.href));
+            const isActive =
+              pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
             return (
               <li key={item.href}>
                 <Link
                   href={item.href}
                   className={cn(
-                    "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors",
+                    'flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors',
                     isActive
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
                   )}
                 >
                   <item.icon className="h-4 w-4" />
@@ -117,11 +117,11 @@ export function Sidebar() {
       <div className="border-t p-4">
         <div className="flex items-center gap-3 mb-3">
           <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-sm font-medium">
-            {user?.fullName?.charAt(0) || "A"}
+            {user?.fullName?.charAt(0) || 'A'}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">{user?.fullName || "Admin"}</p>
-            <p className="text-xs text-muted-foreground truncate">{user?.role || "ADMIN"}</p>
+            <p className="text-sm font-medium truncate">{user?.fullName || 'Admin'}</p>
+            <p className="text-xs text-muted-foreground truncate">{user?.role || 'ADMIN'}</p>
           </div>
         </div>
         <button
@@ -161,8 +161,8 @@ export function Sidebar() {
       {/* Mobile Sidebar */}
       <aside
         className={cn(
-          "fixed left-0 top-0 z-50 h-screen w-64 bg-card flex flex-col transition-transform duration-200 lg:hidden",
-          mobileOpen ? "translate-x-0" : "-translate-x-full"
+          'fixed left-0 top-0 z-50 h-screen w-64 bg-card flex flex-col transition-transform duration-200 lg:hidden',
+          mobileOpen ? 'translate-x-0' : '-translate-x-full',
         )}
       >
         <button

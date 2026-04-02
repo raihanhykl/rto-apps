@@ -39,6 +39,7 @@ export interface Contract {
   totalDaysPaid: number; // cumulative days paid across all payments (working + holiday)
   workingDaysPaid: number; // working days paid (customer actually paid money)
   holidayDaysPaid: number; // holiday days credited for free (amount=0)
+  compensatedDaysPaid: number; // days compensated via service record
   ownershipProgress: number; // percentage (0-100)
   gracePeriodDays: number; // days allowed after endDate before repossession
   savingBalance: number;

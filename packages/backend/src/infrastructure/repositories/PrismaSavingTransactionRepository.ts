@@ -1,15 +1,17 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma, $Enums } from '@prisma/client';
 import { ISavingTransactionRepository } from '../../domain/interfaces/ISavingTransactionRepository';
 import { SavingTransaction } from '../../domain/entities/SavingTransaction';
 import { SavingTransactionType } from '../../domain/enums';
 
+type PrismaSavingTx = Prisma.SavingTransactionGetPayload<object>;
+
 export class PrismaSavingTransactionRepository implements ISavingTransactionRepository {
   constructor(private prisma: PrismaClient) {}
 
-  private toEntity(raw: any): SavingTransaction {
+  private toEntity(raw: PrismaSavingTx): SavingTransaction {
     return {
       ...raw,
-      type: raw.type as SavingTransactionType,
+      type: raw.type as unknown as SavingTransactionType,
     };
   }
 
@@ -23,22 +25,32 @@ export class PrismaSavingTransactionRepository implements ISavingTransactionRepo
       where: { contractId },
       orderBy: { createdAt: 'desc' },
     });
-    return raws.map(r => this.toEntity(r));
+    return raws.map((r) => this.toEntity(r));
   }
 
   async findByPaymentId(paymentId: string): Promise<SavingTransaction[]> {
     const raws = await this.prisma.savingTransaction.findMany({
       where: { paymentId },
     });
-    return raws.map(r => this.toEntity(r));
+    return raws.map((r) => this.toEntity(r));
   }
 
-  async findByContractAndType(contractId: string, type: SavingTransactionType): Promise<SavingTransaction[]> {
+  async findByServiceRecordId(serviceRecordId: string): Promise<SavingTransaction | null> {
+    const raw = await this.prisma.savingTransaction.findFirst({
+      where: { serviceRecordId },
+    });
+    return raw ? this.toEntity(raw) : null;
+  }
+
+  async findByContractAndType(
+    contractId: string,
+    type: SavingTransactionType,
+  ): Promise<SavingTransaction[]> {
     const raws = await this.prisma.savingTransaction.findMany({
-      where: { contractId, type: type as any },
+      where: { contractId, type: type as string as $Enums.SavingTransactionType },
       orderBy: { createdAt: 'desc' },
     });
-    return raws.map(r => this.toEntity(r));
+    return raws.map((r) => this.toEntity(r));
   }
 
   async create(tx: SavingTransaction): Promise<SavingTransaction> {
@@ -46,11 +58,12 @@ export class PrismaSavingTransactionRepository implements ISavingTransactionRepo
       data: {
         id: tx.id,
         contractId: tx.contractId,
-        type: tx.type as any,
+        type: tx.type as string as $Enums.SavingTransactionType,
         amount: tx.amount,
         balanceBefore: tx.balanceBefore,
         balanceAfter: tx.balanceAfter,
         paymentId: tx.paymentId,
+        serviceRecordId: tx.serviceRecordId,
         daysCount: tx.daysCount,
         description: tx.description,
         photo: tx.photo,
@@ -63,5 +76,23 @@ export class PrismaSavingTransactionRepository implements ISavingTransactionRepo
 
   async count(contractId: string): Promise<number> {
     return this.prisma.savingTransaction.count({ where: { contractId } });
+  }
+
+  async findPaginatedByContractId(
+    contractId: string,
+    page: number,
+    limit: number,
+  ): Promise<{ data: SavingTransaction[]; total: number }> {
+    const where = { contractId };
+    const [rows, total] = await Promise.all([
+      this.prisma.savingTransaction.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.savingTransaction.count({ where }),
+    ]);
+    return { data: rows.map((r) => this.toEntity(r)), total };
   }
 }

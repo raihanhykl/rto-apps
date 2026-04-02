@@ -80,6 +80,7 @@ enum PaymentDayStatus {
   PAID
   HOLIDAY
   VOIDED
+  COMPENSATED
 }
 
 enum SavingTransactionType {
@@ -88,6 +89,16 @@ enum SavingTransactionType {
   DEBIT_TRANSFER
   DEBIT_CLAIM
   REVERSAL
+}
+
+enum ServiceType {
+  MINOR
+  MAJOR
+}
+
+enum ServiceRecordStatus {
+  ACTIVE
+  REVOKED
 }
 
 // ============ MODELS ============
@@ -102,7 +113,20 @@ model User {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  refreshTokens RefreshToken[]
+
   @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id])
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("refresh_tokens")
 }
 
 model Customer {
@@ -175,6 +199,7 @@ model Contract {
   totalDaysPaid       Int       @default(0) @map("total_days_paid")
   workingDaysPaid     Int       @default(0) @map("working_days_paid")
   holidayDaysPaid     Int       @default(0) @map("holiday_days_paid")
+  compensatedDaysPaid Int       @default(0) @map("compensated_days_paid")
   ownershipProgress   Float     @default(0) @map("ownership_progress")
   gracePeriodDays     Int       @default(7) @map("grace_period_days")
   savingBalance       Int       @default(0) @map("saving_balance")
@@ -189,10 +214,13 @@ model Contract {
   invoices           Invoice[]
   paymentDays        PaymentDay[]
   savingTransactions SavingTransaction[]
+  serviceRecords     ServiceRecord[]
 
   @@index([customerId])
   @@index([status])
   @@index([isDeleted])
+  @@index([status, isDeleted])
+  @@index([createdAt])
   @@map("contracts")
 }
 
@@ -237,6 +265,9 @@ model Invoice {
   @@index([customerId])
   @@index([status])
   @@index([previousPaymentId])
+  @@index([contractId, status, type])
+  @@index([createdAt])
+  @@index([dueDate])
   @@map("invoices")
 }
 
@@ -285,7 +316,6 @@ model PaymentDay {
   @@unique([contractId, date])
   @@index([contractId, status])
   @@index([paymentId])
-  @@index([contractId, date])
   @@map("payment_days")
 }
 
@@ -298,8 +328,9 @@ model SavingTransaction {
   balanceAfter  Int                    @map("balance_after")
 
   // Referensi sumber transaksi
-  paymentId     String?                @map("payment_id")     // FK ke Invoice (untuk CREDIT / REVERSAL)
-  daysCount     Int?                   @map("days_count")     // Jumlah hari yang menghasilkan saving (untuk CREDIT)
+  paymentId       String?                @map("payment_id")     // FK ke Invoice (untuk CREDIT / REVERSAL)
+  serviceRecordId String?                @map("service_record_id") // FK ke ServiceRecord (untuk DEBIT_SERVICE yang linked)
+  daysCount       Int?                   @map("days_count")     // Jumlah hari yang menghasilkan saving (untuk CREDIT)
 
   // Detail transaksi (untuk DEBIT)
   description   String?                // "Service rem + ganti kampas", "Biaya balik nama STNK", dll.
@@ -314,9 +345,44 @@ model SavingTransaction {
   // Relations
   contract      Contract               @relation(fields: [contractId], references: [id])
   payment       Invoice?               @relation(fields: [paymentId], references: [id])
+  serviceRecord ServiceRecord?         @relation(fields: [serviceRecordId], references: [id])
 
   @@index([contractId])
   @@index([paymentId])
+  @@index([serviceRecordId])
   @@index([type])
   @@map("saving_transactions")
+}
+
+model ServiceRecord {
+  id                  String              @id @default(uuid())
+  contractId          String              @map("contract_id")
+  serviceType         ServiceType         @map("service_type")
+  replacementProvided Boolean             @default(false) @map("replacement_provided")
+  startDate           DateTime            @map("start_date")
+  endDate             DateTime            @map("end_date")
+  compensationDays    Int                 @default(0) @map("compensation_days")
+  serviceCost         Int                 @default(0) @map("service_cost")
+  partsReplaced       String?             @map("parts_replaced")
+  partsRepaired       String?             @map("parts_repaired")
+  notes               String              @default("")
+  attachment          String?
+
+  daySnapshots        Json?               @map("day_snapshots")
+
+  status              ServiceRecordStatus @default(ACTIVE)
+  revokedAt           DateTime?           @map("revoked_at")
+  revokedBy           String?             @map("revoked_by")
+  revokeReason        String?             @map("revoke_reason")
+
+  createdBy           String              @map("created_by")
+  createdAt           DateTime            @default(now()) @map("created_at")
+  updatedAt           DateTime            @updatedAt @map("updated_at")
+
+  contract           Contract              @relation(fields: [contractId], references: [id])
+  savingTransactions SavingTransaction[]
+
+  @@index([contractId])
+  @@index([status])
+  @@map("service_records")
 }

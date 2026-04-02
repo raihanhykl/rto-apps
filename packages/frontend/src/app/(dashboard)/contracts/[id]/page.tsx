@@ -1,24 +1,38 @@
-"use client";
+'use client';
 
-import { useState, useEffect, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Label } from "@/components/ui/label";
+import { useState, useEffect, useCallback } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { api } from "@/lib/api";
-import { useContractDetail, usePaymentsByContract, useActivePayment, useSavingByContract, useInvalidate } from "@/hooks/useApi";
-import { Contract, Customer, Invoice, SavingTransactionType } from "@/types";
-import { formatCurrency, formatDate, formatDateTime, getWibToday } from "@/lib/utils";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+} from '@/components/ui/select';
+import { api } from '@/lib/api';
+import {
+  useContractDetail,
+  useActivePayment,
+  useSavingByContract,
+  useServiceRecords,
+  useInvalidate,
+} from '@/hooks/useApi';
+import {
+  Contract,
+  Customer,
+  Invoice,
+  SavingTransactionType,
+  ServiceRecord,
+  ServiceType,
+  ServiceRecordStatus,
+} from '@/types';
+import { formatCurrency, formatDate, formatDateTime, getWibToday } from '@/lib/utils';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import {
   ArrowLeft,
   User,
@@ -45,7 +59,10 @@ import {
   ChevronDown,
   ChevronUp,
   Wallet,
-} from "lucide-react";
+  Wrench,
+  Plus,
+  ShieldOff,
+} from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -53,70 +70,95 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
-} from "@/components/ui/dialog";
-import { toastSuccess, toastError } from "@/stores/toastStore";
-import PaymentCalendar from "@/components/PaymentCalendar";
+} from '@/components/ui/dialog';
+import { toastSuccess, toastError } from '@/stores/toastStore';
+import PaymentCalendar from '@/components/PaymentCalendar';
 
 const statusBadgeVariant = (status: string) => {
   switch (status) {
-    case "ACTIVE": return "default" as const;
-    case "COMPLETED": return "success" as const;
-    case "OVERDUE": return "destructive" as const;
-    case "CANCELLED": return "secondary" as const;
-    case "REPOSSESSED": return "destructive" as const;
-    default: return "outline" as const;
+    case 'ACTIVE':
+      return 'default' as const;
+    case 'COMPLETED':
+      return 'success' as const;
+    case 'OVERDUE':
+      return 'destructive' as const;
+    case 'CANCELLED':
+      return 'secondary' as const;
+    case 'REPOSSESSED':
+      return 'destructive' as const;
+    default:
+      return 'outline' as const;
   }
 };
 
 const statusLabel = (status: string) => {
   switch (status) {
-    case "ACTIVE": return "Aktif";
-    case "COMPLETED": return "Lunas (Milik Customer)";
-    case "OVERDUE": return "Terlambat";
-    case "CANCELLED": return "Dibatalkan";
-    case "REPOSSESSED": return "Motor Ditarik";
-    default: return status;
+    case 'ACTIVE':
+      return 'Aktif';
+    case 'COMPLETED':
+      return 'Lunas (Milik Customer)';
+    case 'OVERDUE':
+      return 'Terlambat';
+    case 'CANCELLED':
+      return 'Dibatalkan';
+    case 'REPOSSESSED':
+      return 'Motor Ditarik';
+    default:
+      return status;
   }
 };
 
 const paymentBadgeVariant = (status: string) => {
   switch (status) {
-    case "PENDING": return "warning" as const;
-    case "PAID": return "success" as const;
-    case "FAILED": return "destructive" as const;
-    case "VOID": return "secondary" as const;
-    default: return "outline" as const;
+    case 'PENDING':
+      return 'warning' as const;
+    case 'PAID':
+      return 'success' as const;
+    case 'FAILED':
+      return 'destructive' as const;
+    case 'VOID':
+      return 'secondary' as const;
+    default:
+      return 'outline' as const;
   }
 };
 
 const getInvoiceTypeLabel = (type: string): string => {
   switch (type) {
-    case "DP": return "DP";
-    case "DP_INSTALLMENT": return "DP Cicilan";
-    case "DAILY_BILLING": return "Harian";
-    case "MANUAL_PAYMENT": return "Manual";
-    default: return type;
+    case 'DP':
+      return 'DP';
+    case 'DP_INSTALLMENT':
+      return 'DP Cicilan';
+    case 'DAILY_BILLING':
+      return 'Harian';
+    case 'MANUAL_PAYMENT':
+      return 'Manual';
+    default:
+      return type;
   }
 };
 
 const getInvoiceTypeBadgeVariant = (type: string) => {
   switch (type) {
-    case "DP":
-    case "DP_INSTALLMENT": return "default" as const;
-    case "DAILY_BILLING": return "outline" as const;
-    case "MANUAL_PAYMENT": return "secondary" as const;
-    default: return "outline" as const;
+    case 'DP':
+    case 'DP_INSTALLMENT':
+      return 'default' as const;
+    case 'DAILY_BILLING':
+      return 'outline' as const;
+    case 'MANUAL_PAYMENT':
+      return 'secondary' as const;
+    default:
+      return 'outline' as const;
   }
 };
 
 const formatPeriod = (invoice: Invoice): string => {
-  if (!invoice.periodStart) return "-";
+  if (!invoice.periodStart) return '-';
   const start = formatDate(invoice.periodStart);
   if (!invoice.periodEnd || invoice.periodStart === invoice.periodEnd) return start;
   return `${start} - ${formatDate(invoice.periodEnd)}`;
 };
 
-const TIMELINE_PAGE_SIZE = 5;
 const TAGIHAN_PAGE_SIZE = 5;
 
 export default function ContractDetailPage() {
@@ -126,19 +168,18 @@ export default function ContractDetailPage() {
 
   // SWR hooks
   const { data: detailData, isLoading: detailLoading } = useContractDetail(id);
-  const { data: paymentsData } = usePaymentsByContract(id);
   const { data: activePaymentData } = useActivePayment(id);
   const { data: savingData, mutate: mutateSaving } = useSavingByContract(id);
+  const { data: serviceRecordsData, mutate: mutateServiceRecords } = useServiceRecords(id);
 
-  const contract = (detailData as any)?.contract as Contract | undefined ?? null;
-  const customer = (detailData as any)?.customer as Customer | undefined ?? null;
+  const contract = ((detailData as any)?.contract as Contract | undefined) ?? null;
+  const customer = ((detailData as any)?.customer as Customer | undefined) ?? null;
   const invoices = ((detailData as any)?.invoices as Invoice[] | undefined) || [];
-  const payments = (paymentsData as Invoice[] | undefined) || [];
   const activePayment = (activePaymentData as Invoice | undefined) ?? null;
   const loading = detailLoading;
 
   const refreshAll = () => {
-    invalidate("/contracts", "/payments", "/dashboard", "/savings");
+    invalidate('/contracts', '/payments', '/dashboard', '/savings', '/service-records');
   };
 
   const savingTransactions = (savingData as any)?.transactions || [];
@@ -146,53 +187,68 @@ export default function ContractDetailPage() {
 
   const getSavingTypeLabel = (type: string) => {
     switch (type) {
-      case "CREDIT": return "Masuk";
-      case "DEBIT_SERVICE": return "Servis Motor";
-      case "DEBIT_TRANSFER": return "Balik Nama";
-      case "DEBIT_CLAIM": return "Claim";
-      case "REVERSAL": return "Pembalikan";
-      default: return type;
+      case 'CREDIT':
+        return 'Masuk';
+      case 'DEBIT_SERVICE':
+        return 'Servis Motor';
+      case 'DEBIT_TRANSFER':
+        return 'Balik Nama';
+      case 'DEBIT_CLAIM':
+        return 'Claim';
+      case 'REVERSAL':
+        return 'Pembalikan';
+      default:
+        return type;
     }
   };
 
   const getSavingTypeBadge = (type: string) => {
     switch (type) {
-      case "CREDIT": return "default";
-      case "DEBIT_SERVICE": return "destructive";
-      case "DEBIT_TRANSFER": return "destructive";
-      case "DEBIT_CLAIM": return "warning";
-      case "REVERSAL": return "secondary";
-      default: return "outline";
+      case 'CREDIT':
+        return 'default';
+      case 'DEBIT_SERVICE':
+        return 'destructive';
+      case 'DEBIT_TRANSFER':
+        return 'destructive';
+      case 'DEBIT_CLAIM':
+        return 'warning';
+      case 'REVERSAL':
+        return 'secondary';
+      default:
+        return 'outline';
     }
   };
 
-  const handleDebitSaving = async (debitType: "service" | "transfer") => {
+  const handleDebitSaving = async (debitType: 'service' | 'transfer') => {
     if (!contract) return;
     const amt = parseInt(savingAmount);
     if (!amt || amt <= 0 || !savingDescription.trim()) {
-      toastError("Gagal", "Nominal dan deskripsi wajib diisi.");
+      toastError('Gagal', 'Nominal dan deskripsi wajib diisi.');
       return;
     }
     setProcessing(true);
     try {
-      const fn = debitType === "service" ? api.debitSavingForService : api.debitSavingForTransfer;
+      const fn = debitType === 'service' ? api.debitSavingForService : api.debitSavingForTransfer;
       await fn.call(api, contract.id, {
         amount: amt,
         description: savingDescription,
         photo: savingPhoto || undefined,
         notes: savingNotes || undefined,
       });
-      toastSuccess("Berhasil", `Saving berhasil digunakan untuk ${debitType === "service" ? "servis" : "balik nama"}.`);
+      toastSuccess(
+        'Berhasil',
+        `Saving berhasil digunakan untuk ${debitType === 'service' ? 'servis' : 'balik nama'}.`,
+      );
       setServiceDialogOpen(false);
       setTransferDialogOpen(false);
-      setSavingAmount("");
-      setSavingDescription("");
-      setSavingPhoto("");
-      setSavingNotes("");
+      setSavingAmount('');
+      setSavingDescription('');
+      setSavingPhoto('');
+      setSavingNotes('');
       mutateSaving();
       refreshAll();
     } catch (error: any) {
-      toastError("Gagal", error?.message || "Gagal menggunakan saving.");
+      toastError('Gagal', error?.message || 'Gagal menggunakan saving.');
     } finally {
       setProcessing(false);
     }
@@ -207,14 +263,14 @@ export default function ContractDetailPage() {
         amount: amt,
         notes: claimNotes || undefined,
       });
-      toastSuccess("Berhasil", "Saving berhasil di-claim.");
+      toastSuccess('Berhasil', 'Saving berhasil di-claim.');
       setClaimDialogOpen(false);
-      setClaimAmount("");
-      setClaimNotes("");
+      setClaimAmount('');
+      setClaimNotes('');
       mutateSaving();
       refreshAll();
     } catch (error: any) {
-      toastError("Gagal", error?.message || "Gagal claim saving.");
+      toastError('Gagal', error?.message || 'Gagal claim saving.');
     } finally {
       setProcessing(false);
     }
@@ -222,23 +278,29 @@ export default function ContractDetailPage() {
 
   const [processing, setProcessing] = useState(false);
   const [qrDialogOpen, setQrDialogOpen] = useState(false);
-  const [qrCode, setQrCode] = useState("");
+  const [qrCode, setQrCode] = useState('');
   const [qrInvoice, setQrInvoice] = useState<Invoice | null>(null);
   const [extendDialogOpen, setExtendDialogOpen] = useState(false);
-  const [extendDays, setExtendDays] = useState("7");
-  const [paymentPreview, setPaymentPreview] = useState<{ amount: number; lateFee: number; total: number; daysCount: number; dailyRate: number } | null>(null);
+  const [extendDays, setExtendDays] = useState('7');
+  const [paymentPreview, setPaymentPreview] = useState<{
+    amount: number;
+    lateFee: number;
+    total: number;
+    daysCount: number;
+    dailyRate: number;
+  } | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [repossessDialogOpen, setRepossessDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [editNotes, setEditNotes] = useState("");
-  const [editGracePeriod, setEditGracePeriod] = useState("");
-  const [editOwnershipTarget, setEditOwnershipTarget] = useState("");
-  const [editColor, setEditColor] = useState("");
-  const [editYear, setEditYear] = useState("");
-  const [editVinNumber, setEditVinNumber] = useState("");
-  const [editEngineNumber, setEditEngineNumber] = useState("");
+  const [editNotes, setEditNotes] = useState('');
+  const [editGracePeriod, setEditGracePeriod] = useState('');
+  const [editOwnershipTarget, setEditOwnershipTarget] = useState('');
+  const [editColor, setEditColor] = useState('');
+  const [editYear, setEditYear] = useState('');
+  const [editVinNumber, setEditVinNumber] = useState('');
+  const [editEngineNumber, setEditEngineNumber] = useState('');
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
-  const [cancelReason, setCancelReason] = useState("");
+  const [cancelReason, setCancelReason] = useState('');
   const [voidDialogOpen, setVoidDialogOpen] = useState(false);
   const [voidInvoiceTarget, setVoidInvoiceTarget] = useState<Invoice | null>(null);
   const [markPaidDialogOpen, setMarkPaidDialogOpen] = useState(false);
@@ -246,29 +308,48 @@ export default function ContractDetailPage() {
   const [revertDialogOpen, setRevertDialogOpen] = useState(false);
   const [revertTarget, setRevertTarget] = useState<Invoice | null>(null);
   const [receiveUnitDialogOpen, setReceiveUnitDialogOpen] = useState(false);
-  const [bastPhoto, setBastPhoto] = useState("");
-  const [bastNotes, setBastNotes] = useState("");
+  const [bastPhoto, setBastPhoto] = useState('');
+  const [bastNotes, setBastNotes] = useState('');
 
   // Saving dialogs
   const [savingOpen, setSavingOpen] = useState(false);
   const [serviceDialogOpen, setServiceDialogOpen] = useState(false);
   const [transferDialogOpen, setTransferDialogOpen] = useState(false);
   const [claimDialogOpen, setClaimDialogOpen] = useState(false);
-  const [savingAmount, setSavingAmount] = useState("");
-  const [savingDescription, setSavingDescription] = useState("");
-  const [savingPhoto, setSavingPhoto] = useState("");
-  const [savingNotes, setSavingNotes] = useState("");
-  const [claimAmount, setClaimAmount] = useState("");
-  const [claimNotes, setClaimNotes] = useState("");
+  const [savingAmount, setSavingAmount] = useState('');
+  const [savingDescription, setSavingDescription] = useState('');
+  const [savingPhoto, setSavingPhoto] = useState('');
+  const [savingNotes, setSavingNotes] = useState('');
+  const [claimAmount, setClaimAmount] = useState('');
+  const [claimNotes, setClaimNotes] = useState('');
   const [savingPage, setSavingPage] = useState(1);
   const savingTotalPages = Math.ceil(savingTransactions.length / SAVING_PAGE_SIZE);
-  const savingSlice = savingTransactions.slice((savingPage - 1) * SAVING_PAGE_SIZE, savingPage * SAVING_PAGE_SIZE);
+  const savingSlice = savingTransactions.slice(
+    (savingPage - 1) * SAVING_PAGE_SIZE,
+    savingPage * SAVING_PAGE_SIZE,
+  );
+
+  // Service record state
+  const [servisOpen, setServisOpen] = useState(true);
+  const [servisPage, setServisPage] = useState(1);
+  const [addServisDialogOpen, setAddServisDialogOpen] = useState(false);
+  const [revokeServisDialogOpen, setRevokeServisDialogOpen] = useState(false);
+  const [revokeServisTarget, setRevokeServisTarget] = useState<ServiceRecord | null>(null);
+  const [servisType, setServisType] = useState<ServiceType>(ServiceType.MINOR);
+  const [servisReplacement, setServisReplacement] = useState(false);
+  const [servisStartDate, setServisStartDate] = useState('');
+  const [servisEndDate, setServisEndDate] = useState('');
+  const [servisNotes, setServisNotes] = useState('');
+  const [servisAttachment, setServisAttachment] = useState('');
+  const [revokeReason, setRevokeReason] = useState('');
+
+  // Biaya servis & info part
+  const [servisServiceCost, setServisServiceCost] = useState('0');
+  const [servisPartsReplaced, setServisPartsReplaced] = useState('');
+  const [servisPartsRepaired, setServisPartsRepaired] = useState('');
 
   // Collapsible sections
-  const [timelineOpen, setTimelineOpen] = useState(false);
   const [tagihanOpen, setTagihanOpen] = useState(true);
-  // Pagination
-  const [timelinePage, setTimelinePage] = useState(1);
   const [tagihanPage, setTagihanPage] = useState(1);
 
   // Determine if contract has outstanding unpaid days (for banner)
@@ -281,18 +362,21 @@ export default function ContractDetailPage() {
   })();
 
   // Fetch payment preview when extend dialog opens or days change
-  const fetchPaymentPreview = useCallback(async (days: string) => {
-    if (!contract?.id || !contract?.billingStartDate) return;
-    setPreviewLoading(true);
-    try {
-      const preview = await api.previewManualPayment(id, parseInt(days));
-      setPaymentPreview(preview);
-    } catch {
-      setPaymentPreview(null);
-    } finally {
-      setPreviewLoading(false);
-    }
-  }, [id, contract?.id, contract?.billingStartDate]);
+  const fetchPaymentPreview = useCallback(
+    async (days: string) => {
+      if (!contract?.id || !contract?.billingStartDate) return;
+      setPreviewLoading(true);
+      try {
+        const preview = await api.previewManualPayment(id, parseInt(days));
+        setPaymentPreview(preview);
+      } catch {
+        setPaymentPreview(null);
+      } finally {
+        setPreviewLoading(false);
+      }
+    },
+    [id, contract?.id, contract?.billingStartDate],
+  );
 
   useEffect(() => {
     if (extendDialogOpen) {
@@ -309,18 +393,21 @@ export default function ContractDetailPage() {
       setQrInvoice(invoice);
       setQrDialogOpen(true);
     } catch (error: any) {
-      toastError("Gagal", error?.message || "Gagal membuat QR code.");
+      toastError('Gagal', error?.message || 'Gagal membuat QR code.');
     }
   };
 
-  const simulatePayment = async (invoiceId: string, status: "PAID" | "FAILED") => {
+  const simulatePayment = async (invoiceId: string, status: 'PAID' | 'FAILED') => {
     setProcessing(true);
     try {
       await api.simulatePayment(invoiceId, status);
-      toastSuccess("Pembayaran", `Tagihan berhasil di-${status === "PAID" ? "bayar" : "gagalkan"}.`);
+      toastSuccess(
+        'Pembayaran',
+        `Tagihan berhasil di-${status === 'PAID' ? 'bayar' : 'gagalkan'}.`,
+      );
       refreshAll();
     } catch (error: any) {
-      toastError("Gagal", error.message);
+      toastError('Gagal', error.message);
     } finally {
       setProcessing(false);
     }
@@ -330,11 +417,11 @@ export default function ContractDetailPage() {
     setProcessing(true);
     try {
       await api.createManualPayment(id, parseInt(extendDays));
-      toastSuccess("Bayar Tagihan", `Tagihan manual ${extendDays} hari berhasil dibuat.`);
+      toastSuccess('Bayar Tagihan', `Tagihan manual ${extendDays} hari berhasil dibuat.`);
       setExtendDialogOpen(false);
       refreshAll();
     } catch (error: any) {
-      toastError("Gagal", error.message);
+      toastError('Gagal', error.message);
     } finally {
       setProcessing(false);
     }
@@ -344,11 +431,11 @@ export default function ContractDetailPage() {
     setProcessing(true);
     try {
       await api.repossessContract(id);
-      toastSuccess("Penarikan", "Motor berhasil ditarik (repossessed).");
+      toastSuccess('Penarikan', 'Motor berhasil ditarik (repossessed).');
       setRepossessDialogOpen(false);
       refreshAll();
     } catch (error: any) {
-      toastError("Gagal", error.message);
+      toastError('Gagal', error.message);
     } finally {
       setProcessing(false);
     }
@@ -356,13 +443,13 @@ export default function ContractDetailPage() {
 
   const openEditDialog = () => {
     if (!contract) return;
-    setEditNotes(contract.notes || "");
+    setEditNotes(contract.notes || '');
     setEditGracePeriod(contract.gracePeriodDays.toString());
     setEditOwnershipTarget(contract.ownershipTargetDays.toString());
-    setEditColor(contract.color || "");
-    setEditYear(contract.year ? contract.year.toString() : "");
-    setEditVinNumber(contract.vinNumber || "");
-    setEditEngineNumber(contract.engineNumber || "");
+    setEditColor(contract.color || '');
+    setEditYear(contract.year ? contract.year.toString() : '');
+    setEditVinNumber(contract.vinNumber || '');
+    setEditEngineNumber(contract.engineNumber || '');
     setEditDialogOpen(true);
   };
 
@@ -378,11 +465,11 @@ export default function ContractDetailPage() {
         vinNumber: editVinNumber,
         engineNumber: editEngineNumber,
       });
-      toastSuccess("Berhasil", "Kontrak berhasil diperbarui.");
+      toastSuccess('Berhasil', 'Kontrak berhasil diperbarui.');
       setEditDialogOpen(false);
       refreshAll();
     } catch (error: any) {
-      toastError("Gagal", error.message);
+      toastError('Gagal', error.message);
     } finally {
       setProcessing(false);
     }
@@ -390,18 +477,18 @@ export default function ContractDetailPage() {
 
   const handleCancel = async () => {
     if (!cancelReason.trim()) {
-      toastError("Gagal", "Alasan pembatalan wajib diisi.");
+      toastError('Gagal', 'Alasan pembatalan wajib diisi.');
       return;
     }
     setProcessing(true);
     try {
       await api.cancelContract(id, cancelReason);
-      toastSuccess("Dibatalkan", "Kontrak berhasil dibatalkan.");
+      toastSuccess('Dibatalkan', 'Kontrak berhasil dibatalkan.');
       setCancelDialogOpen(false);
-      setCancelReason("");
+      setCancelReason('');
       refreshAll();
     } catch (error: any) {
-      toastError("Gagal", error.message);
+      toastError('Gagal', error.message);
     } finally {
       setProcessing(false);
     }
@@ -412,12 +499,12 @@ export default function ContractDetailPage() {
     setProcessing(true);
     try {
       await api.voidPayment(voidInvoiceTarget.id);
-      toastSuccess("Berhasil", `Tagihan ${voidInvoiceTarget.invoiceNumber} berhasil di-void.`);
+      toastSuccess('Berhasil', `Tagihan ${voidInvoiceTarget.invoiceNumber} berhasil di-void.`);
       setVoidDialogOpen(false);
       setVoidInvoiceTarget(null);
       refreshAll();
     } catch (error: any) {
-      toastError("Gagal", error.message);
+      toastError('Gagal', error.message);
     } finally {
       setProcessing(false);
     }
@@ -428,12 +515,12 @@ export default function ContractDetailPage() {
     setProcessing(true);
     try {
       await api.markPaymentPaid(markPaidTarget.id);
-      toastSuccess("Berhasil", `Tagihan ${markPaidTarget.invoiceNumber} ditandai lunas.`);
+      toastSuccess('Berhasil', `Tagihan ${markPaidTarget.invoiceNumber} ditandai lunas.`);
       setMarkPaidDialogOpen(false);
       setMarkPaidTarget(null);
       refreshAll();
     } catch (error: any) {
-      toastError("Gagal", error.message);
+      toastError('Gagal', error.message);
     } finally {
       setProcessing(false);
     }
@@ -444,12 +531,12 @@ export default function ContractDetailPage() {
     setProcessing(true);
     try {
       await api.revertPaymentStatus(revertTarget.id);
-      toastSuccess("Berhasil", `Tagihan ${revertTarget.invoiceNumber} dikembalikan ke PENDING.`);
+      toastSuccess('Berhasil', `Tagihan ${revertTarget.invoiceNumber} dikembalikan ke PENDING.`);
       setRevertDialogOpen(false);
       setRevertTarget(null);
       refreshAll();
     } catch (error: any) {
-      toastError("Gagal", error.message);
+      toastError('Gagal', error.message);
     } finally {
       setProcessing(false);
     }
@@ -457,19 +544,19 @@ export default function ContractDetailPage() {
 
   const handleReceiveUnit = async () => {
     if (!bastPhoto.trim()) {
-      toastError("Gagal", "Foto BAST wajib dilampirkan");
+      toastError('Gagal', 'Foto BAST wajib dilampirkan');
       return;
     }
     setProcessing(true);
     try {
       await api.receiveUnit(id, bastPhoto.trim(), bastNotes.trim());
-      toastSuccess("Berhasil", "Unit berhasil diterima. Tagihan harian dimulai H+1.");
+      toastSuccess('Berhasil', 'Unit berhasil diterima. Tagihan harian dimulai H+1.');
       setReceiveUnitDialogOpen(false);
-      setBastPhoto("");
-      setBastNotes("");
+      setBastPhoto('');
+      setBastNotes('');
       refreshAll();
     } catch (error: any) {
-      toastError("Gagal", error.message);
+      toastError('Gagal', error.message);
     } finally {
       setProcessing(false);
     }
@@ -479,10 +566,10 @@ export default function ContractDetailPage() {
     setProcessing(true);
     try {
       await api.payPayment(paymentId);
-      toastSuccess("Berhasil", "Pembayaran berhasil.");
+      toastSuccess('Berhasil', 'Pembayaran berhasil.');
       refreshAll();
     } catch (error: any) {
-      toastError("Gagal", error.message);
+      toastError('Gagal', error.message);
     } finally {
       setProcessing(false);
     }
@@ -492,10 +579,72 @@ export default function ContractDetailPage() {
     setProcessing(true);
     try {
       await api.cancelPayment(paymentId);
-      toastSuccess("Berhasil", "Pembayaran berhasil dibatalkan.");
+      toastSuccess('Berhasil', 'Pembayaran berhasil dibatalkan.');
       refreshAll();
     } catch (error: any) {
-      toastError("Gagal", error.message);
+      toastError('Gagal', error.message);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleCreateServiceRecord = async () => {
+    if (!servisStartDate || !servisEndDate) {
+      toastError('Gagal', 'Tanggal mulai dan selesai wajib diisi.');
+      return;
+    }
+    setProcessing(true);
+    try {
+      await api.createServiceRecord({
+        contractId: id,
+        serviceType: servisType,
+        replacementProvided: servisReplacement,
+        startDate: servisStartDate,
+        endDate: servisEndDate,
+        notes: servisNotes || undefined,
+        attachment: servisAttachment || null,
+        serviceCost: parseInt(servisServiceCost) || 0,
+        partsReplaced: servisPartsReplaced || null,
+        partsRepaired: servisPartsRepaired || null,
+      });
+      toastSuccess('Berhasil', 'Record servis berhasil ditambahkan.');
+      setAddServisDialogOpen(false);
+      setServisType(ServiceType.MINOR);
+      setServisReplacement(false);
+      setServisStartDate('');
+      setServisEndDate('');
+      setServisNotes('');
+      setServisAttachment('');
+      setServisServiceCost('0');
+      setServisPartsReplaced('');
+      setServisPartsRepaired('');
+      mutateServiceRecords();
+      mutateSaving();
+      invalidate('/service-records', '/savings', '/contracts');
+    } catch (error: any) {
+      toastError('Gagal', error?.message || 'Gagal membuat record servis.');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleRevokeServiceRecord = async () => {
+    if (!revokeServisTarget) return;
+    if (!revokeReason.trim()) {
+      toastError('Gagal', 'Alasan revoke wajib diisi.');
+      return;
+    }
+    setProcessing(true);
+    try {
+      await api.revokeServiceRecord(revokeServisTarget.id, revokeReason);
+      toastSuccess('Berhasil', 'Record servis berhasil di-revoke.');
+      setRevokeServisDialogOpen(false);
+      setRevokeServisTarget(null);
+      setRevokeReason('');
+      mutateServiceRecords();
+      refreshAll();
+    } catch (error: any) {
+      toastError('Gagal', error?.message || 'Gagal me-revoke record servis.');
     } finally {
       setProcessing(false);
     }
@@ -513,35 +662,48 @@ export default function ContractDetailPage() {
     return (
       <div className="text-center py-12">
         <p className="text-muted-foreground">Kontrak tidak ditemukan.</p>
-        <Button variant="outline" className="mt-4" onClick={() => router.push("/contracts")}>
+        <Button variant="outline" className="mt-4" onClick={() => router.push('/contracts')}>
           <ArrowLeft className="h-4 w-4 mr-2" /> Kembali
         </Button>
       </div>
     );
   }
 
-  const canExtend = contract.status === "ACTIVE" || contract.status === "OVERDUE";
-  const canRepossess = contract.status === "ACTIVE" || contract.status === "OVERDUE";
-  const canCancel = contract.status === "ACTIVE" || contract.status === "OVERDUE";
+  const canExtend = contract.status === 'ACTIVE' || contract.status === 'OVERDUE';
+  const canRepossess = contract.status === 'ACTIVE' || contract.status === 'OVERDUE';
+  const canCancel = contract.status === 'ACTIVE' || contract.status === 'OVERDUE';
 
   // Sorted data for timeline and tagihan
-  const paidInvoices = invoices
-    .filter((inv) => inv.status === "PAID")
-    .sort((a, b) => new Date(a.paidAt || a.createdAt).getTime() - new Date(b.paidAt || b.createdAt).getTime());
-  const timelineTotalPages = Math.ceil(paidInvoices.length / TIMELINE_PAGE_SIZE);
-  const timelineSlice = paidInvoices.slice((timelinePage - 1) * TIMELINE_PAGE_SIZE, timelinePage * TIMELINE_PAGE_SIZE);
-
   const tagihanTotalPages = Math.ceil(invoices.length / TAGIHAN_PAGE_SIZE);
-  const tagihanSlice = invoices.slice((tagihanPage - 1) * TAGIHAN_PAGE_SIZE, tagihanPage * TAGIHAN_PAGE_SIZE);
+  const tagihanSlice = invoices.slice(
+    (tagihanPage - 1) * TAGIHAN_PAGE_SIZE,
+    tagihanPage * TAGIHAN_PAGE_SIZE,
+  );
 
-  const dpInvoices = invoices.filter((inv) => inv.type === "DP" || inv.type === "DP_INSTALLMENT");
+  const dpInvoices = invoices.filter((inv) => inv.type === 'DP' || inv.type === 'DP_INSTALLMENT');
+
+  const serviceRecords = (serviceRecordsData as ServiceRecord[]) || [];
+  const SERVIS_PAGE_SIZE = 5;
+  const servisTotalPages = Math.ceil(serviceRecords.length / SERVIS_PAGE_SIZE);
+  const servisSlice = serviceRecords.slice(
+    (servisPage - 1) * SERVIS_PAGE_SIZE,
+    servisPage * SERVIS_PAGE_SIZE,
+  );
+
+  // Map serviceRecordId → saving transaction (untuk badge "Dana Sisihan" di riwayat servis)
+  const savingByServiceRecord = new Map<string, (typeof savingTransactions)[0]>();
+  savingTransactions.forEach((tx: any) => {
+    if (tx.serviceRecordId) {
+      savingByServiceRecord.set(tx.serviceRecordId, tx);
+    }
+  });
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => router.push("/contracts")}>
+          <Button variant="ghost" size="icon" onClick={() => router.push('/contracts')}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
@@ -551,7 +713,7 @@ export default function ContractDetailPage() {
                 {statusLabel(contract.status)}
               </Badge>
             </div>
-            <p className="text-muted-foreground">Detail kontrak RTO</p>
+            <p className="text-base text-muted-foreground font-medium">{customer?.fullName}</p>
           </div>
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -564,7 +726,11 @@ export default function ContractDetailPage() {
             </Button>
           )}
           {canCancel && (
-            <Button variant="outline" className="text-orange-600 border-orange-300 hover:bg-orange-50" onClick={() => setCancelDialogOpen(true)}>
+            <Button
+              variant="outline"
+              className="text-orange-600 border-orange-300 hover:bg-orange-50"
+              onClick={() => setCancelDialogOpen(true)}
+            >
               <Ban className="h-4 w-4 mr-2" /> Batalkan
             </Button>
           )}
@@ -577,45 +743,65 @@ export default function ContractDetailPage() {
       </div>
 
       {/* Payment Status Summary - Prominent at top */}
-      <Card className={
-        contract.status === "COMPLETED" ? "border-green-300 dark:border-green-800 bg-green-50/50 dark:bg-green-950/20" :
-        contract.status === "REPOSSESSED" ? "border-red-300 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20" :
-        !contract.dpFullyPaid ? "border-yellow-300 dark:border-yellow-800 bg-yellow-50/50 dark:bg-yellow-950/20" :
-        contract.status === "OVERDUE" ? "border-red-300 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20" :
-        activePayment ? "border-blue-300 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20" :
-        hasOutstandingDays ? "border-orange-300 dark:border-orange-800 bg-orange-50/50 dark:bg-orange-950/20" :
-        "border-green-300 dark:border-green-800 bg-green-50/50 dark:bg-green-950/20"
-      }>
+      <Card
+        className={
+          contract.status === 'COMPLETED'
+            ? 'border-green-300 dark:border-green-800 bg-green-50/50 dark:bg-green-950/20'
+            : contract.status === 'REPOSSESSED'
+              ? 'border-red-300 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20'
+              : !contract.dpFullyPaid
+                ? 'border-yellow-300 dark:border-yellow-800 bg-yellow-50/50 dark:bg-yellow-950/20'
+                : contract.status === 'OVERDUE'
+                  ? 'border-red-300 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20'
+                  : activePayment
+                    ? 'border-blue-300 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20'
+                    : hasOutstandingDays
+                      ? 'border-orange-300 dark:border-orange-800 bg-orange-50/50 dark:bg-orange-950/20'
+                      : 'border-green-300 dark:border-green-800 bg-green-50/50 dark:bg-green-950/20'
+        }
+      >
         <CardContent className="p-4">
           <div className="flex flex-col md:flex-row md:items-center gap-4">
             <div className="flex items-center gap-3 flex-1">
-              {contract.status === "COMPLETED" ? (
+              {contract.status === 'COMPLETED' ? (
                 <>
                   <div className="h-12 w-12 rounded-full bg-green-100 dark:bg-green-900/50 flex items-center justify-center">
                     <Trophy className="h-6 w-6 text-green-600" />
                   </div>
                   <div>
-                    <p className="font-bold text-green-700 dark:text-green-400 text-lg">Motor Resmi Milik Customer</p>
-                    <p className="text-sm text-green-600 dark:text-green-500">Tanggal kepemilikan: {contract.completedAt && formatDate(contract.completedAt)}</p>
+                    <p className="font-bold text-green-700 dark:text-green-400 text-lg">
+                      Motor Resmi Milik Customer
+                    </p>
+                    <p className="text-sm text-green-600 dark:text-green-500">
+                      Tanggal kepemilikan:{' '}
+                      {contract.completedAt && formatDate(contract.completedAt)}
+                    </p>
                   </div>
                 </>
-              ) : contract.status === "REPOSSESSED" ? (
+              ) : contract.status === 'REPOSSESSED' ? (
                 <>
                   <div className="h-12 w-12 rounded-full bg-red-100 dark:bg-red-900/50 flex items-center justify-center">
                     <AlertTriangle className="h-6 w-6 text-red-600" />
                   </div>
                   <div>
-                    <p className="font-bold text-red-700 dark:text-red-400 text-lg">Motor Ditarik</p>
-                    <p className="text-sm text-red-600 dark:text-red-500">Tanggal penarikan: {contract.repossessedAt && formatDate(contract.repossessedAt)}</p>
+                    <p className="font-bold text-red-700 dark:text-red-400 text-lg">
+                      Motor Ditarik
+                    </p>
+                    <p className="text-sm text-red-600 dark:text-red-500">
+                      Tanggal penarikan:{' '}
+                      {contract.repossessedAt && formatDate(contract.repossessedAt)}
+                    </p>
                   </div>
                 </>
-              ) : contract.status === "CANCELLED" ? (
+              ) : contract.status === 'CANCELLED' ? (
                 <>
                   <div className="h-12 w-12 rounded-full bg-gray-100 dark:bg-gray-900/50 flex items-center justify-center">
                     <Ban className="h-6 w-6 text-gray-600" />
                   </div>
                   <div>
-                    <p className="font-bold text-gray-700 dark:text-gray-400 text-lg">Kontrak Dibatalkan</p>
+                    <p className="font-bold text-gray-700 dark:text-gray-400 text-lg">
+                      Kontrak Dibatalkan
+                    </p>
                   </div>
                 </>
               ) : !contract.dpFullyPaid ? (
@@ -624,9 +810,13 @@ export default function ContractDetailPage() {
                     <CreditCard className="h-6 w-6 text-yellow-600" />
                   </div>
                   <div>
-                    <p className="font-bold text-yellow-700 dark:text-yellow-400 text-lg">Menunggu Pembayaran DP</p>
+                    <p className="font-bold text-yellow-700 dark:text-yellow-400 text-lg">
+                      Menunggu Pembayaran DP
+                    </p>
                     <p className="text-sm text-yellow-600 dark:text-yellow-500">
-                      {contract.dpScheme === "FULL" ? "DP Lunas" : "DP Cicilan 2x"} — Terbayar {formatCurrency(contract.dpPaidAmount)} dari {formatCurrency(contract.dpAmount)}
+                      {contract.dpScheme === 'FULL' ? 'DP Lunas' : 'DP Cicilan 2x'} — Terbayar{' '}
+                      {formatCurrency(contract.dpPaidAmount)} dari{' '}
+                      {formatCurrency(contract.dpAmount)}
                     </p>
                   </div>
                 </>
@@ -636,17 +826,23 @@ export default function ContractDetailPage() {
                     <Package className="h-6 w-6 text-blue-600" />
                   </div>
                   <div>
-                    <p className="font-bold text-blue-700 dark:text-blue-400 text-lg">Menunggu Serah Terima Unit</p>
-                    <p className="text-sm text-blue-600 dark:text-blue-500">DP sudah lunas. Unit motor belum diserahkan ke customer.</p>
+                    <p className="font-bold text-blue-700 dark:text-blue-400 text-lg">
+                      Menunggu Serah Terima Unit
+                    </p>
+                    <p className="text-sm text-blue-600 dark:text-blue-500">
+                      DP sudah lunas. Unit motor belum diserahkan ke customer.
+                    </p>
                   </div>
                 </>
-              ) : contract.status === "OVERDUE" ? (
+              ) : contract.status === 'OVERDUE' ? (
                 <>
                   <div className="h-12 w-12 rounded-full bg-red-100 dark:bg-red-900/50 flex items-center justify-center">
                     <AlertTriangle className="h-6 w-6 text-red-600" />
                   </div>
                   <div>
-                    <p className="font-bold text-red-700 dark:text-red-400 text-lg">Terlambat Bayar</p>
+                    <p className="font-bold text-red-700 dark:text-red-400 text-lg">
+                      Terlambat Bayar
+                    </p>
                     <p className="text-sm text-red-600 dark:text-red-500">
                       Customer melewati jatuh tempo. Grace period: {contract.gracePeriodDays} hari.
                     </p>
@@ -658,13 +854,21 @@ export default function ContractDetailPage() {
                     <CreditCard className="h-6 w-6 text-blue-600" />
                   </div>
                   <div>
-                    <p className="font-bold text-blue-700 dark:text-blue-400 text-lg">Ada Tagihan Aktif</p>
+                    <p className="font-bold text-blue-700 dark:text-blue-400 text-lg">
+                      Ada Tagihan Aktif
+                    </p>
                     <p className="text-sm text-blue-600 dark:text-blue-500">
-                      {formatCurrency(activePayment.amount + (activePayment.lateFee || 0))} — {activePayment.daysCount} hari ({activePayment.periodStart ? formatDate(activePayment.periodStart) : "-"} s/d {activePayment.periodEnd ? formatDate(activePayment.periodEnd) : "-"})
+                      {formatCurrency(activePayment.amount + (activePayment.lateFee || 0))} —{' '}
+                      {activePayment.daysCount} hari (
+                      {activePayment.periodStart ? formatDate(activePayment.periodStart) : '-'} s/d{' '}
+                      {activePayment.periodEnd ? formatDate(activePayment.periodEnd) : '-'})
                     </p>
                     {(activePayment.lateFee || 0) > 0 && (
                       <p className="text-xs text-blue-500">
-                        Pokok {formatCurrency(activePayment.amount)} + <span className="text-orange-600">Denda {formatCurrency(activePayment.lateFee)}</span>
+                        Pokok {formatCurrency(activePayment.amount)} +{' '}
+                        <span className="text-orange-600">
+                          Denda {formatCurrency(activePayment.lateFee)}
+                        </span>
                       </p>
                     )}
                   </div>
@@ -675,9 +879,12 @@ export default function ContractDetailPage() {
                     <AlertTriangle className="h-6 w-6 text-orange-600" />
                   </div>
                   <div>
-                    <p className="font-bold text-orange-700 dark:text-orange-400 text-lg">Ada Tunggakan</p>
+                    <p className="font-bold text-orange-700 dark:text-orange-400 text-lg">
+                      Ada Tunggakan
+                    </p>
                     <p className="text-sm text-orange-600 dark:text-orange-500">
-                      Terakhir bayar: {formatDate(contract.endDate)}. Masih ada hari yang belum terbayar.
+                      Terakhir bayar: {formatDate(contract.endDate)}. Masih ada hari yang belum
+                      terbayar.
                     </p>
                   </div>
                 </>
@@ -687,8 +894,12 @@ export default function ContractDetailPage() {
                     <CheckCircle2 className="h-6 w-6 text-green-600" />
                   </div>
                   <div>
-                    <p className="font-bold text-green-700 dark:text-green-400 text-lg">Pembayaran Lancar</p>
-                    <p className="text-sm text-green-600 dark:text-green-500">Tidak ada tunggakan. Tagihan harian berjalan otomatis.</p>
+                    <p className="font-bold text-green-700 dark:text-green-400 text-lg">
+                      Pembayaran Lancar
+                    </p>
+                    <p className="text-sm text-green-600 dark:text-green-500">
+                      Tidak ada tunggakan. Tagihan harian berjalan otomatis.
+                    </p>
                   </div>
                 </>
               )}
@@ -711,6 +922,14 @@ export default function ContractDetailPage() {
                 <p className="text-xs text-muted-foreground">Total Bayar</p>
                 <p className="font-bold text-lg">{formatCurrency(contract.totalAmount)}</p>
               </div>
+              {(contract.compensatedDaysPaid ?? 0) > 0 && (
+                <div className="px-4 py-2 rounded-lg bg-white/60 dark:bg-gray-900/40">
+                  <p className="text-xs text-muted-foreground">Kompensasi</p>
+                  <p className="font-bold text-lg text-violet-600">
+                    {contract.compensatedDaysPaid}
+                  </p>
+                </div>
+              )}
               <div className="px-4 py-2 rounded-lg bg-white/60 dark:bg-gray-900/40">
                 <p className="text-xs text-muted-foreground">Saving</p>
                 <p className="font-bold text-lg">{formatCurrency(contract.savingBalance)}</p>
@@ -755,29 +974,37 @@ export default function ContractDetailPage() {
               </div>
               <div>
                 <p className="text-muted-foreground">Total Hari</p>
-                <p className="font-bold text-lg">{contract.totalDaysPaid} / {contract.ownershipTargetDays}</p>
+                <p className="font-bold text-lg">
+                  {contract.totalDaysPaid} / {contract.ownershipTargetDays}
+                </p>
               </div>
               <div>
                 <p className="text-muted-foreground">Sisa Hari</p>
-                <p className="font-bold text-lg">{Math.max(0, contract.ownershipTargetDays - contract.totalDaysPaid)}</p>
+                <p className="font-bold text-lg">
+                  {Math.max(0, contract.ownershipTargetDays - contract.totalDaysPaid)}
+                </p>
               </div>
               <div>
                 <p className="text-muted-foreground">Total Dibayar</p>
-                <p className="font-bold text-lg text-primary">{formatCurrency(contract.totalAmount)}</p>
+                <p className="font-bold text-lg text-primary">
+                  {formatCurrency(contract.totalAmount)}
+                </p>
               </div>
             </div>
-            {contract.status === "COMPLETED" && contract.completedAt && (
+            {contract.status === 'COMPLETED' && contract.completedAt && (
               <div className="bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-900 rounded-lg p-4 flex items-center gap-3">
                 <Trophy className="h-6 w-6 text-green-600" />
                 <div>
-                  <p className="font-bold text-green-700 dark:text-green-400">Motor Resmi Milik Customer!</p>
+                  <p className="font-bold text-green-700 dark:text-green-400">
+                    Motor Resmi Milik Customer!
+                  </p>
                   <p className="text-sm text-green-600 dark:text-green-500">
                     Tanggal kepemilikan: {formatDate(contract.completedAt)}
                   </p>
                 </div>
               </div>
             )}
-            {contract.status === "REPOSSESSED" && contract.repossessedAt && (
+            {contract.status === 'REPOSSESSED' && contract.repossessedAt && (
               <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 rounded-lg p-4 flex items-center gap-3">
                 <AlertTriangle className="h-6 w-6 text-red-600" />
                 <div>
@@ -800,14 +1027,20 @@ export default function ContractDetailPage() {
               <Wallet className="h-5 w-5" /> Dana Sisihan (Saving)
             </CardTitle>
             <div className="flex items-center gap-2">
-              <span className="font-bold text-primary">{formatCurrency(contract.savingBalance)}</span>
-              {contract.status === "COMPLETED" && contract.savingBalance > 0 && (
+              <span className="font-bold text-primary">
+                {formatCurrency(contract.savingBalance)}
+              </span>
+              {contract.status === 'COMPLETED' && contract.savingBalance > 0 && (
                 <Badge variant="default">Bisa Claim</Badge>
               )}
-              {(contract.status === "CANCELLED" || contract.status === "REPOSSESSED") && (
+              {(contract.status === 'CANCELLED' || contract.status === 'REPOSSESSED') && (
                 <Badge variant="secondary">Tidak Dapat Di-claim</Badge>
               )}
-              {savingOpen ? <ChevronUp className="h-5 w-5 text-muted-foreground" /> : <ChevronDown className="h-5 w-5 text-muted-foreground" />}
+              {savingOpen ? (
+                <ChevronUp className="h-5 w-5 text-muted-foreground" />
+              ) : (
+                <ChevronDown className="h-5 w-5 text-muted-foreground" />
+              )}
             </div>
           </div>
         </CardHeader>
@@ -816,59 +1049,112 @@ export default function ContractDetailPage() {
             <div className="space-y-4">
               {/* Action Buttons */}
               <div className="flex flex-wrap gap-2">
-                {(contract.status === "ACTIVE" || contract.status === "OVERDUE" || contract.status === "COMPLETED") && contract.savingBalance > 0 && (
-                  <Button variant="outline" size="sm" onClick={() => setServiceDialogOpen(true)}>
-                    <Zap className="h-4 w-4 mr-2" /> Gunakan untuk Servis
-                  </Button>
-                )}
-                {contract.status === "COMPLETED" && contract.savingBalance > 0 && (
-                  <>
-                    <Button variant="outline" size="sm" onClick={() => setTransferDialogOpen(true)}>
-                      <RefreshCw className="h-4 w-4 mr-2" /> Gunakan untuk Balik Nama
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => setClaimDialogOpen(true)}>
-                      <FileDown className="h-4 w-4 mr-2" /> Claim Saving
-                    </Button>
-                  </>
-                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={contract.status !== 'COMPLETED' || contract.savingBalance <= 0}
+                  onClick={() => setTransferDialogOpen(true)}
+                  title={
+                    contract.status !== 'COMPLETED'
+                      ? 'Hanya tersedia setelah kontrak COMPLETED'
+                      : contract.savingBalance <= 0
+                        ? 'Saldo saving kosong'
+                        : undefined
+                  }
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" /> Balik Nama
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={contract.status !== 'COMPLETED' || contract.savingBalance <= 0}
+                  onClick={() => setClaimDialogOpen(true)}
+                  title={
+                    contract.status !== 'COMPLETED'
+                      ? 'Hanya tersedia setelah kontrak COMPLETED'
+                      : contract.savingBalance <= 0
+                        ? 'Saldo saving kosong'
+                        : undefined
+                  }
+                >
+                  <FileDown className="h-4 w-4 mr-2" /> Claim Saving
+                </Button>
               </div>
 
               {/* Transaction History */}
               {savingTransactions.length > 0 ? (
                 <div className="border-t pt-4">
-                  <p className="text-sm font-semibold mb-3">Riwayat Transaksi Saving ({savingTransactions.length})</p>
+                  <p className="text-sm font-semibold mb-3">
+                    Riwayat Transaksi Saving ({savingTransactions.length})
+                  </p>
                   <div className="space-y-2">
                     {savingSlice.map((tx: any) => (
-                      <div key={tx.id} className="flex items-center justify-between text-sm p-3 border rounded-lg">
+                      <div
+                        key={tx.id}
+                        className="flex items-center justify-between text-sm p-3 border rounded-lg"
+                      >
                         <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
                             <Badge variant={getSavingTypeBadge(tx.type) as any}>
                               {getSavingTypeLabel(tx.type)}
                             </Badge>
-                            {tx.daysCount && <span className="text-xs text-muted-foreground">({tx.daysCount} hari)</span>}
+                            {tx.daysCount && (
+                              <span className="text-xs text-muted-foreground">
+                                ({tx.daysCount} hari)
+                              </span>
+                            )}
+                            {tx.type === 'DEBIT_SERVICE' && tx.serviceRecordId && (
+                              <span className="text-xs text-muted-foreground italic">
+                                (Terkait Servis)
+                              </span>
+                            )}
                           </div>
-                          <p className="text-xs text-muted-foreground">{formatDateTime(tx.createdAt)}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatDateTime(tx.createdAt)}
+                          </p>
                           {tx.description && <p className="text-xs mt-1">{tx.description}</p>}
                         </div>
                         <div className="text-right">
-                          <p className={`font-bold ${tx.type === "CREDIT" ? "text-green-600" : "text-red-600"}`}>
-                            {tx.type === "CREDIT" ? "+" : "-"} {formatCurrency(tx.amount)}
+                          <p
+                            className={`font-bold ${tx.type === 'CREDIT' ? 'text-green-600' : 'text-red-600'}`}
+                          >
+                            {tx.type === 'CREDIT' ? '+' : '-'} {formatCurrency(tx.amount)}
                           </p>
-                          <p className="text-xs text-muted-foreground">Saldo: {formatCurrency(tx.balanceAfter)}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Saldo: {formatCurrency(tx.balanceAfter)}
+                          </p>
                         </div>
                       </div>
                     ))}
                   </div>
                   {savingTotalPages > 1 && (
                     <div className="flex items-center justify-center gap-2 mt-3 pt-3 border-t">
-                      <Button variant="outline" size="sm" disabled={savingPage <= 1} onClick={() => setSavingPage(savingPage - 1)}>Sebelumnya</Button>
-                      <span className="text-xs text-muted-foreground">{savingPage} / {savingTotalPages}</span>
-                      <Button variant="outline" size="sm" disabled={savingPage >= savingTotalPages} onClick={() => setSavingPage(savingPage + 1)}>Selanjutnya</Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={savingPage <= 1}
+                        onClick={() => setSavingPage(savingPage - 1)}
+                      >
+                        Sebelumnya
+                      </Button>
+                      <span className="text-xs text-muted-foreground">
+                        {savingPage} / {savingTotalPages}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={savingPage >= savingTotalPages}
+                        onClick={() => setSavingPage(savingPage + 1)}
+                      >
+                        Selanjutnya
+                      </Button>
                     </div>
                   )}
                 </div>
               ) : (
-                <p className="text-muted-foreground text-sm text-center py-4 border-t">Belum ada riwayat saving.</p>
+                <p className="text-muted-foreground text-sm text-center py-4 border-t">
+                  Belum ada riwayat saving.
+                </p>
               )}
             </div>
           </CardContent>
@@ -886,14 +1172,21 @@ export default function ContractDetailPage() {
                 {activePayment.previousPaymentId && (
                   <span className="ml-2 text-xs text-orange-600 font-medium">(Gabungan)</span>
                 )}
-                <p className="text-xl font-bold mt-1">{formatCurrency(activePayment.amount + (activePayment.lateFee || 0))}</p>
+                <p className="text-xl font-bold mt-1">
+                  {formatCurrency(activePayment.amount + (activePayment.lateFee || 0))}
+                </p>
                 {(activePayment.lateFee || 0) > 0 && (
                   <p className="text-xs text-muted-foreground">
-                    Pokok {formatCurrency(activePayment.amount)} + <span className="text-orange-600 font-medium">Denda {formatCurrency(activePayment.lateFee)}</span>
+                    Pokok {formatCurrency(activePayment.amount)} +{' '}
+                    <span className="text-orange-600 font-medium">
+                      Denda {formatCurrency(activePayment.lateFee)}
+                    </span>
                   </p>
                 )}
                 <p className="text-xs text-muted-foreground">
-                  {activePayment.daysCount} hari tertunggak — {activePayment.periodStart ? formatDate(activePayment.periodStart) : "-"} s/d {activePayment.periodEnd ? formatDate(activePayment.periodEnd) : "-"}
+                  {activePayment.daysCount} hari tertunggak —{' '}
+                  {activePayment.periodStart ? formatDate(activePayment.periodStart) : '-'} s/d{' '}
+                  {activePayment.periodEnd ? formatDate(activePayment.periodEnd) : '-'}
                 </p>
               </div>
               <div className="flex gap-2">
@@ -901,7 +1194,11 @@ export default function ContractDetailPage() {
                   <Zap className="h-4 w-4 mr-2" /> Bayar Sekarang
                 </Button>
                 {activePayment.previousPaymentId && (
-                  <Button variant="outline" disabled={processing} onClick={() => handleCancelPayment(activePayment.id)}>
+                  <Button
+                    variant="outline"
+                    disabled={processing}
+                    onClick={() => handleCancelPayment(activePayment.id)}
+                  >
                     Batalkan
                   </Button>
                 )}
@@ -927,7 +1224,9 @@ export default function ContractDetailPage() {
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Tipe Baterai</p>
-                <p className="font-medium mt-1">{contract.batteryType === "EXTENDED" ? "Extended" : "Regular"}</p>
+                <p className="font-medium mt-1">
+                  {contract.batteryType === 'EXTENDED' ? 'Extended' : 'Regular'}
+                </p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Rate / Hari</p>
@@ -957,7 +1256,9 @@ export default function ContractDetailPage() {
             {/* Unit Details */}
             {(contract.color || contract.vinNumber || contract.engineNumber || contract.year) && (
               <div className="mt-4 pt-4 border-t">
-                <p className="text-xs text-muted-foreground font-semibold uppercase mb-3">Detail Unit</p>
+                <p className="text-xs text-muted-foreground font-semibold uppercase mb-3">
+                  Detail Unit
+                </p>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   {contract.color && (
                     <div>
@@ -991,7 +1292,11 @@ export default function ContractDetailPage() {
               <div className="flex items-center gap-2 text-sm">
                 <CalendarOff className="h-4 w-4 text-muted-foreground" />
                 <span className="text-muted-foreground">Libur Bayar:</span>
-                <span className="font-medium">{contract.holidayScheme === 'OLD_CONTRACT' ? 'Libur setiap hari Minggu' : 'Libur tanggal 29-31'}</span>
+                <span className="font-medium">
+                  {contract.holidayScheme === 'OLD_CONTRACT'
+                    ? 'Libur setiap hari Minggu'
+                    : 'Libur tanggal 29-31'}
+                </span>
               </div>
               <p className="text-xs text-muted-foreground mt-1 ml-6">
                 Hari libur tetap dihitung sebagai progress kepemilikan tanpa biaya.
@@ -1038,69 +1343,6 @@ export default function ContractDetailPage() {
         </Card>
       </div>
 
-      {/* Payment Timeline (Collapsible + Paginated) */}
-      {paidInvoices.length > 0 && (
-        <Card>
-          <CardHeader className="cursor-pointer" onClick={() => setTimelineOpen(!timelineOpen)}>
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <History className="h-5 w-5" /> Timeline Pembayaran ({paidInvoices.length})
-              </CardTitle>
-              {timelineOpen ? <ChevronUp className="h-5 w-5 text-muted-foreground" /> : <ChevronDown className="h-5 w-5 text-muted-foreground" />}
-            </div>
-          </CardHeader>
-          {timelineOpen && (
-            <CardContent>
-              <div className="relative pl-6 space-y-6">
-                <div className="absolute left-2 top-1 bottom-1 w-0.5 bg-muted" />
-                {timelineSlice.map((inv, idx) => {
-                  const globalIdx = (timelinePage - 1) * TIMELINE_PAGE_SIZE + idx;
-                  return (
-                    <div key={inv.id} className="relative">
-                      <div className="absolute -left-[17px] top-1 h-3 w-3 rounded-full bg-green-500 border-2 border-background" />
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <p className="text-sm font-medium">
-                            {globalIdx === 0 && inv.extensionDays
-                              ? `Kontrak awal (${inv.extensionDays} hari)`
-                              : inv.type === "DP" || inv.type === "DP_INSTALLMENT"
-                              ? `Down Payment${inv.type === "DP_INSTALLMENT" ? " (Cicilan)" : ""}`
-                              : inv.extensionDays
-                              ? `Bayar Tagihan ${inv.extensionDays} hari`
-                              : `Pembayaran ${inv.invoiceNumber}`
-                            }
-                          </p>
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            {inv.paidAt ? formatDateTime(inv.paidAt) : formatDateTime(inv.createdAt)}
-                          </p>
-                        </div>
-                        <span className="text-sm font-bold text-green-600 whitespace-nowrap">
-                          {formatCurrency(inv.amount + (inv.lateFee || 0))}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              {/* Pagination */}
-              {timelineTotalPages > 1 && (
-                <div className="flex items-center justify-center gap-2 mt-4 pt-4 border-t">
-                  <Button variant="outline" size="sm" disabled={timelinePage <= 1} onClick={() => setTimelinePage(timelinePage - 1)}>
-                    Sebelumnya
-                  </Button>
-                  <span className="text-xs text-muted-foreground">
-                    {timelinePage} / {timelineTotalPages}
-                  </span>
-                  <Button variant="outline" size="sm" disabled={timelinePage >= timelineTotalPages} onClick={() => setTimelinePage(timelinePage + 1)}>
-                    Selanjutnya
-                  </Button>
-                </div>
-              )}
-            </CardContent>
-          )}
-        </Card>
-      )}
-
       {/* Riwayat Tagihan (Collapsible + Paginated) */}
       <Card>
         <CardHeader className="cursor-pointer" onClick={() => setTagihanOpen(!tagihanOpen)}>
@@ -1108,7 +1350,11 @@ export default function ContractDetailPage() {
             <CardTitle className="text-lg flex items-center gap-2">
               <CreditCard className="h-5 w-5" /> Riwayat Tagihan ({invoices.length})
             </CardTitle>
-            {tagihanOpen ? <ChevronUp className="h-5 w-5 text-muted-foreground" /> : <ChevronDown className="h-5 w-5 text-muted-foreground" />}
+            {tagihanOpen ? (
+              <ChevronUp className="h-5 w-5 text-muted-foreground" />
+            ) : (
+              <ChevronDown className="h-5 w-5 text-muted-foreground" />
+            )}
           </div>
         </CardHeader>
         {tagihanOpen && (
@@ -1121,7 +1367,9 @@ export default function ContractDetailPage() {
                   <div key={invoice.id} className="border rounded-lg p-4">
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-mono text-sm font-medium">{invoice.invoiceNumber}</span>
+                        <span className="font-mono text-sm font-medium">
+                          {invoice.invoiceNumber}
+                        </span>
                         <Badge variant={paymentBadgeVariant(invoice.status)}>
                           {invoice.status}
                         </Badge>
@@ -1129,7 +1377,12 @@ export default function ContractDetailPage() {
                           {getInvoiceTypeLabel(invoice.type)}
                         </Badge>
                         {invoice.isHoliday && (
-                          <Badge variant="outline" className="text-blue-600 border-blue-300 text-xs">Libur</Badge>
+                          <Badge
+                            variant="outline"
+                            className="text-blue-600 border-blue-300 text-xs"
+                          >
+                            Libur
+                          </Badge>
                         )}
                       </div>
                       <div className="text-right">
@@ -1138,7 +1391,10 @@ export default function ContractDetailPage() {
                         </p>
                         {(invoice.lateFee || 0) > 0 && (
                           <p className="text-xs text-muted-foreground">
-                            {formatCurrency(invoice.amount)} + <span className="text-orange-600">{formatCurrency(invoice.lateFee || 0)}</span>
+                            {formatCurrency(invoice.amount)} +{' '}
+                            <span className="text-orange-600">
+                              {formatCurrency(invoice.lateFee || 0)}
+                            </span>
                           </p>
                         )}
                       </div>
@@ -1148,12 +1404,16 @@ export default function ContractDetailPage() {
                         <Clock className="h-3.5 w-3.5" /> Due: {formatDate(invoice.dueDate)}
                       </div>
                       <div>
-                        {invoice.paidAt ? `Dibayar: ${formatDateTime(invoice.paidAt)}` : "Belum dibayar"}
+                        {invoice.paidAt
+                          ? `Dibayar: ${formatDateTime(invoice.paidAt)}`
+                          : 'Belum dibayar'}
                       </div>
                       {invoice.periodStart && (
                         <div className="flex items-center gap-1">
                           <Calendar className="h-3.5 w-3.5" /> Periode: {formatPeriod(invoice)}
-                          {invoice.daysCount && invoice.daysCount > 1 && ` (${invoice.daysCount} hari)`}
+                          {invoice.daysCount &&
+                            invoice.daysCount > 1 &&
+                            ` (${invoice.daysCount} hari)`}
                         </div>
                       )}
                       {invoice.dailyRate && (
@@ -1162,10 +1422,14 @@ export default function ContractDetailPage() {
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <Button variant="outline" size="sm" onClick={() => showQR(invoice)}>
-                        {invoice.status === "PAID" ? (
-                          <><CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Bukti</>
+                        {invoice.status === 'PAID' ? (
+                          <>
+                            <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Bukti
+                          </>
                         ) : (
-                          <><QrCode className="h-3.5 w-3.5 mr-1" /> QR</>
+                          <>
+                            <QrCode className="h-3.5 w-3.5 mr-1" /> QR
+                          </>
                         )}
                       </Button>
                       <Button
@@ -1175,26 +1439,26 @@ export default function ContractDetailPage() {
                           try {
                             const blob = await api.downloadPaymentPdf(invoice.id);
                             const url = URL.createObjectURL(blob);
-                            const a = document.createElement("a");
+                            const a = document.createElement('a');
                             a.href = url;
                             a.download = `invoice-${invoice.invoiceNumber}.pdf`;
                             a.click();
                             URL.revokeObjectURL(url);
                           } catch (err: any) {
-                            toastError("Gagal", err?.message || "Gagal mengunduh PDF.");
+                            toastError('Gagal', err?.message || 'Gagal mengunduh PDF.');
                           }
                         }}
                         title="Download PDF"
                       >
                         <FileDown className="h-3.5 w-3.5 mr-1" /> PDF
                       </Button>
-                      {invoice.status === "PENDING" && (
+                      {invoice.status === 'PENDING' && (
                         <>
                           <Button
                             variant="success"
                             size="sm"
                             disabled={processing}
-                            onClick={() => simulatePayment(invoice.id, "PAID")}
+                            onClick={() => simulatePayment(invoice.id, 'PAID')}
                           >
                             <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Bayar
                           </Button>
@@ -1202,7 +1466,7 @@ export default function ContractDetailPage() {
                             variant="destructive"
                             size="sm"
                             disabled={processing}
-                            onClick={() => simulatePayment(invoice.id, "FAILED")}
+                            onClick={() => simulatePayment(invoice.id, 'FAILED')}
                           >
                             <XCircle className="h-3.5 w-3.5 mr-1" /> Gagal
                           </Button>
@@ -1210,19 +1474,25 @@ export default function ContractDetailPage() {
                             variant="outline"
                             size="sm"
                             disabled={processing}
-                            onClick={() => { setVoidInvoiceTarget(invoice); setVoidDialogOpen(true); }}
+                            onClick={() => {
+                              setVoidInvoiceTarget(invoice);
+                              setVoidDialogOpen(true);
+                            }}
                           >
                             <FileX className="h-3.5 w-3.5 mr-1" /> Void
                           </Button>
                         </>
                       )}
-                      {invoice.status === "FAILED" && (
+                      {invoice.status === 'FAILED' && (
                         <>
                           <Button
                             variant="success"
                             size="sm"
                             disabled={processing}
-                            onClick={() => { setMarkPaidTarget(invoice); setMarkPaidDialogOpen(true); }}
+                            onClick={() => {
+                              setMarkPaidTarget(invoice);
+                              setMarkPaidDialogOpen(true);
+                            }}
                           >
                             <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Tandai Lunas
                           </Button>
@@ -1230,18 +1500,24 @@ export default function ContractDetailPage() {
                             variant="outline"
                             size="sm"
                             disabled={processing}
-                            onClick={() => { setVoidInvoiceTarget(invoice); setVoidDialogOpen(true); }}
+                            onClick={() => {
+                              setVoidInvoiceTarget(invoice);
+                              setVoidDialogOpen(true);
+                            }}
                           >
                             <FileX className="h-3.5 w-3.5 mr-1" /> Void
                           </Button>
                         </>
                       )}
-                      {(invoice.status === "PAID" || invoice.status === "VOID") && (
+                      {(invoice.status === 'PAID' || invoice.status === 'VOID') && (
                         <Button
                           variant="outline"
                           size="sm"
                           disabled={processing}
-                          onClick={() => { setRevertTarget(invoice); setRevertDialogOpen(true); }}
+                          onClick={() => {
+                            setRevertTarget(invoice);
+                            setRevertDialogOpen(true);
+                          }}
                         >
                           <Undo2 className="h-3.5 w-3.5 mr-1" /> Revert
                         </Button>
@@ -1252,13 +1528,186 @@ export default function ContractDetailPage() {
                 {/* Pagination */}
                 {tagihanTotalPages > 1 && (
                   <div className="flex items-center justify-center gap-2 pt-2">
-                    <Button variant="outline" size="sm" disabled={tagihanPage <= 1} onClick={() => setTagihanPage(tagihanPage - 1)}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={tagihanPage <= 1}
+                      onClick={() => setTagihanPage(tagihanPage - 1)}
+                    >
                       Sebelumnya
                     </Button>
                     <span className="text-xs text-muted-foreground">
                       {tagihanPage} / {tagihanTotalPages}
                     </span>
-                    <Button variant="outline" size="sm" disabled={tagihanPage >= tagihanTotalPages} onClick={() => setTagihanPage(tagihanPage + 1)}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={tagihanPage >= tagihanTotalPages}
+                      onClick={() => setTagihanPage(tagihanPage + 1)}
+                    >
+                      Selanjutnya
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        )}
+      </Card>
+
+      {/* Riwayat Servis */}
+      <Card>
+        <CardHeader className="cursor-pointer" onClick={() => setServisOpen(!servisOpen)}>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Wrench className="h-5 w-5" /> Riwayat Servis ({serviceRecords.length})
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              {(contract.status === 'ACTIVE' || contract.status === 'OVERDUE') && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setAddServisDialogOpen(true);
+                  }}
+                >
+                  <Plus className="h-3.5 w-3.5 mr-1" /> Tambah Record Servis
+                </Button>
+              )}
+              {servisOpen ? (
+                <ChevronUp className="h-5 w-5 text-muted-foreground" />
+              ) : (
+                <ChevronDown className="h-5 w-5 text-muted-foreground" />
+              )}
+            </div>
+          </div>
+        </CardHeader>
+        {servisOpen && (
+          <CardContent>
+            {serviceRecords.length === 0 ? (
+              <p className="text-muted-foreground text-center py-4">Belum ada riwayat servis.</p>
+            ) : (
+              <div className="space-y-3">
+                {servisSlice.map((record) => {
+                  const linkedSaving = savingByServiceRecord.get(record.id);
+                  return (
+                    <div key={record.id} className="border rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Badge
+                            variant={
+                              record.serviceType === ServiceType.MAJOR ? 'default' : 'outline'
+                            }
+                          >
+                            {record.serviceType === ServiceType.MAJOR ? 'Major' : 'Minor'}
+                          </Badge>
+                          <Badge
+                            variant={
+                              record.status === ServiceRecordStatus.ACTIVE ? 'success' : 'secondary'
+                            }
+                          >
+                            {record.status === ServiceRecordStatus.ACTIVE ? 'Aktif' : 'Dibatalkan'}
+                          </Badge>
+                          {record.replacementProvided && (
+                            <Badge variant="outline" className="text-violet-600 border-violet-300">
+                              Motor Pengganti
+                            </Badge>
+                          )}
+                          {linkedSaving && (
+                            <Badge variant="outline" className="text-green-600 border-green-300">
+                              <Wallet className="h-3 w-3 mr-1" />
+                              Dana Sisihan: {formatCurrency(linkedSaving.amount)}
+                            </Badge>
+                          )}
+                        </div>
+                        {record.status === ServiceRecordStatus.ACTIVE && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-orange-600 border-orange-300 hover:bg-orange-50"
+                            onClick={() => {
+                              setRevokeServisTarget(record);
+                              setRevokeServisDialogOpen(true);
+                            }}
+                          >
+                            <ShieldOff className="h-3.5 w-3.5 mr-1" /> Revoke
+                          </Button>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                        <div>
+                          <p className="text-xs text-muted-foreground">Tanggal Mulai</p>
+                          <p className="font-medium">{formatDate(record.startDate)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Tanggal Selesai</p>
+                          <p className="font-medium">{formatDate(record.endDate)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Hari Kompensasi</p>
+                          <p className="font-medium text-violet-600">
+                            {record.compensationDays} hari
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Dibuat</p>
+                          <p className="font-medium text-xs">{formatDate(record.createdAt)}</p>
+                        </div>
+                      </div>
+                      {record.notes && (
+                        <p className="text-sm text-muted-foreground mt-2">{record.notes}</p>
+                      )}
+                      {((record.serviceCost ?? 0) > 0 ||
+                        record.partsReplaced ||
+                        record.partsRepaired) && (
+                        <div className="mt-2 text-xs text-muted-foreground space-y-0.5">
+                          {(record.serviceCost ?? 0) > 0 && (
+                            <p>
+                              <span className="font-medium">Biaya:</span>{' '}
+                              {formatCurrency(record.serviceCost)}
+                            </p>
+                          )}
+                          {record.partsReplaced && (
+                            <p>
+                              <span className="font-medium">Pergantian:</span>{' '}
+                              {record.partsReplaced}
+                            </p>
+                          )}
+                          {record.partsRepaired && (
+                            <p>
+                              <span className="font-medium">Perbaikan:</span> {record.partsRepaired}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      {record.status === ServiceRecordStatus.REVOKED && record.revokeReason && (
+                        <div className="mt-2 bg-gray-50 dark:bg-gray-900/30 rounded p-2 text-xs text-muted-foreground">
+                          <span className="font-medium">Alasan revoke:</span> {record.revokeReason}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                {servisTotalPages > 1 && (
+                  <div className="flex items-center justify-center gap-2 pt-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={servisPage <= 1}
+                      onClick={() => setServisPage(servisPage - 1)}
+                    >
+                      Sebelumnya
+                    </Button>
+                    <span className="text-xs text-muted-foreground">
+                      {servisPage} / {servisTotalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={servisPage >= servisTotalPages}
+                      onClick={() => setServisPage(servisPage + 1)}
+                    >
                       Selanjutnya
                     </Button>
                   </div>
@@ -1284,7 +1733,9 @@ export default function ContractDetailPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <p className="text-xs text-muted-foreground">Skema DP</p>
-                  <p className="font-medium mt-0.5">{contract.dpScheme === "FULL" ? "Lunas" : "Cicilan 2x"}</p>
+                  <p className="font-medium mt-0.5">
+                    {contract.dpScheme === 'FULL' ? 'Lunas' : 'Cicilan 2x'}
+                  </p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Total DP</p>
@@ -1296,8 +1747,8 @@ export default function ContractDetailPage() {
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Status</p>
-                  <Badge variant={contract.dpFullyPaid ? "success" : "warning"} className="mt-0.5">
-                    {contract.dpFullyPaid ? "Lunas" : "Belum Lunas"}
+                  <Badge variant={contract.dpFullyPaid ? 'success' : 'warning'} className="mt-0.5">
+                    {contract.dpFullyPaid ? 'Lunas' : 'Belum Lunas'}
                   </Badge>
                 </div>
               </div>
@@ -1305,10 +1756,13 @@ export default function ContractDetailPage() {
               {dpInvoices.length > 0 && (
                 <div className="space-y-1.5 pt-2">
                   {dpInvoices.map((inv, idx) => (
-                    <div key={inv.id} className="flex items-center justify-between text-sm bg-muted/30 rounded-lg p-2.5">
+                    <div
+                      key={inv.id}
+                      className="flex items-center justify-between text-sm bg-muted/30 rounded-lg p-2.5"
+                    >
                       <div className="flex items-center gap-2">
                         <span className="font-mono text-xs">{inv.invoiceNumber}</span>
-                        {inv.type === "DP_INSTALLMENT" && (
+                        {inv.type === 'DP_INSTALLMENT' && (
                           <span className="text-xs text-muted-foreground">Cicilan {idx + 1}</span>
                         )}
                       </div>
@@ -1331,7 +1785,9 @@ export default function ContractDetailPage() {
                 <div className="bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-900 rounded-lg p-3">
                   <div className="flex items-center gap-2">
                     <CheckCircle2 className="h-4 w-4 text-green-600" />
-                    <span className="text-sm font-medium text-green-700 dark:text-green-400">Unit Diterima</span>
+                    <span className="text-sm font-medium text-green-700 dark:text-green-400">
+                      Unit Diterima
+                    </span>
                   </div>
                   <p className="text-xs text-green-600 dark:text-green-500 mt-1">
                     {formatDate(contract.unitReceivedDate)}
@@ -1342,9 +1798,7 @@ export default function ContractDetailPage() {
                     </p>
                   )}
                   {contract.bastPhoto && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      BAST: Foto tersimpan
-                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">BAST: Foto tersimpan</p>
                   )}
                   {contract.bastNotes && (
                     <p className="text-xs text-muted-foreground mt-0.5">
@@ -1356,12 +1810,14 @@ export default function ContractDetailPage() {
                 <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-lg p-3">
                   <div className="flex items-center gap-2">
                     <Package className="h-4 w-4 text-amber-600" />
-                    <span className="text-sm font-medium text-amber-700 dark:text-amber-400">Menunggu Pengiriman</span>
+                    <span className="text-sm font-medium text-amber-700 dark:text-amber-400">
+                      Menunggu Pengiriman
+                    </span>
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
                     DP harus dibayar sebelum unit bisa dikirim.
                   </p>
-                  {contract.status === "ACTIVE" && (
+                  {contract.status === 'ACTIVE' && (
                     <Button
                       size="sm"
                       className="mt-2"
@@ -1374,41 +1830,6 @@ export default function ContractDetailPage() {
               )}
             </div>
           </div>
-
-          {/* Payment History */}
-          {payments.length > 0 && (
-            <div className="mt-4 pt-4 border-t">
-              <p className="text-xs text-muted-foreground font-medium mb-2">Riwayat Pembayaran ({payments.length})</p>
-              <div className="space-y-1 max-h-48 overflow-y-auto">
-                {payments.slice(0, 20).map((b) => (
-                  <div key={b.id} className="flex items-center justify-between text-xs bg-muted/20 rounded px-3 py-2">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono">{b.invoiceNumber}</span>
-                      <Badge
-                        variant={
-                          b.status === "PAID" ? "success" :
-                          b.status === "PENDING" ? "default" :
-                          b.status === "EXPIRED" ? "warning" :
-                          "secondary"
-                        }
-                        className="text-[10px]"
-                      >
-                        {b.status}
-                      </Badge>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      {b.daysCount === 0 ? (
-                        <span className="text-muted-foreground">Libur</span>
-                      ) : (
-                        <span>{b.daysCount} hari</span>
-                      )}
-                      <span className="font-medium">{formatCurrency(b.amount)}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </CardContent>
       </Card>
 
@@ -1419,20 +1840,20 @@ export default function ContractDetailPage() {
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>
-              {qrInvoice?.status === "PAID" ? "Bukti Pembayaran" : "QR Pembayaran"}
+              {qrInvoice?.status === 'PAID' ? 'Bukti Pembayaran' : 'QR Pembayaran'}
             </DialogTitle>
-            <DialogDescription>
-              Invoice: {qrInvoice?.invoiceNumber}
-            </DialogDescription>
+            <DialogDescription>Invoice: {qrInvoice?.invoiceNumber}</DialogDescription>
           </DialogHeader>
-          {qrInvoice?.status === "PAID" ? (
+          {qrInvoice?.status === 'PAID' ? (
             <div className="space-y-4">
               <div className="bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-900 rounded-lg p-4 flex items-center gap-3">
                 <CheckCircle2 className="h-6 w-6 text-green-600" />
                 <div>
-                  <p className="font-bold text-green-700 dark:text-green-400">Pembayaran Berhasil</p>
+                  <p className="font-bold text-green-700 dark:text-green-400">
+                    Pembayaran Berhasil
+                  </p>
                   <p className="text-sm text-green-600 dark:text-green-500">
-                    {qrInvoice.paidAt ? formatDateTime(qrInvoice.paidAt) : "-"}
+                    {qrInvoice.paidAt ? formatDateTime(qrInvoice.paidAt) : '-'}
                   </p>
                 </div>
               </div>
@@ -1541,14 +1962,13 @@ export default function ContractDetailPage() {
                   )}
                   <div className="border-t pt-2 flex justify-between font-bold">
                     <span>Total</span>
-                    <span className="text-primary">
-                      {formatCurrency(paymentPreview.total)}
-                    </span>
+                    <span className="text-primary">{formatCurrency(paymentPreview.total)}</span>
                   </div>
                   <div className="border-t pt-2 flex justify-between text-muted-foreground">
                     <span>Progress setelah pembayaran</span>
                     <span>
-                      {contract.totalDaysPaid + paymentPreview.daysCount} / {contract.ownershipTargetDays} hari
+                      {contract.totalDaysPaid + paymentPreview.daysCount} /{' '}
+                      {contract.ownershipTargetDays} hari
                     </span>
                   </div>
                 </>
@@ -1577,7 +1997,7 @@ export default function ContractDetailPage() {
               Batal
             </Button>
             <Button onClick={handleExtend} disabled={processing}>
-              {processing ? "Memproses..." : "Bayar"}
+              {processing ? 'Memproses...' : 'Bayar'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1596,16 +2016,23 @@ export default function ContractDetailPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="bg-destructive/10 rounded-lg p-4 text-sm space-y-1">
-            <p><strong>Customer:</strong> {customer.fullName}</p>
-            <p><strong>Motor:</strong> {contract.motorModel}</p>
-            <p><strong>Progress:</strong> {contract.ownershipProgress}% ({contract.totalDaysPaid}/{contract.ownershipTargetDays} hari)</p>
+            <p>
+              <strong>Customer:</strong> {customer.fullName}
+            </p>
+            <p>
+              <strong>Motor:</strong> {contract.motorModel}
+            </p>
+            <p>
+              <strong>Progress:</strong> {contract.ownershipProgress}% ({contract.totalDaysPaid}/
+              {contract.ownershipTargetDays} hari)
+            </p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setRepossessDialogOpen(false)}>
               Batal
             </Button>
             <Button variant="destructive" onClick={handleRepossess} disabled={processing}>
-              {processing ? "Memproses..." : "Ya, Tarik Motor"}
+              {processing ? 'Memproses...' : 'Ya, Tarik Motor'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1616,54 +2043,96 @@ export default function ContractDetailPage() {
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Kontrak</DialogTitle>
-            <DialogDescription>
-              Edit kontrak {contract.contractNumber}
-            </DialogDescription>
+            <DialogDescription>Edit kontrak {contract.contractNumber}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Detail Unit</h3>
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+              Detail Unit
+            </h3>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Warna</Label>
-                <Input value={editColor} onChange={(e) => setEditColor(e.target.value)} placeholder="Warna motor" />
+                <Input
+                  value={editColor}
+                  onChange={(e) => setEditColor(e.target.value)}
+                  placeholder="Warna motor"
+                />
               </div>
               <div className="space-y-2">
                 <Label>Tahun</Label>
-                <Input type="number" value={editYear} onChange={(e) => setEditYear(e.target.value)} placeholder="2025" />
+                <Input
+                  type="number"
+                  value={editYear}
+                  onChange={(e) => setEditYear(e.target.value)}
+                  placeholder="2025"
+                />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>VIN Number</Label>
-                <Input value={editVinNumber} onChange={(e) => setEditVinNumber(e.target.value)} placeholder="Nomor VIN" />
+                <Input
+                  value={editVinNumber}
+                  onChange={(e) => setEditVinNumber(e.target.value)}
+                  placeholder="Nomor VIN"
+                />
               </div>
               <div className="space-y-2">
                 <Label>Nomor Mesin</Label>
-                <Input value={editEngineNumber} onChange={(e) => setEditEngineNumber(e.target.value)} placeholder="Nomor mesin" />
+                <Input
+                  value={editEngineNumber}
+                  onChange={(e) => setEditEngineNumber(e.target.value)}
+                  placeholder="Nomor mesin"
+                />
               </div>
             </div>
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider pt-2">Pengaturan</h3>
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider pt-2">
+              Pengaturan
+            </h3>
             <div className="space-y-2">
               <Label>Grace Period (hari)</Label>
-              <Input type="number" min={0} value={editGracePeriod} onChange={(e) => setEditGracePeriod(e.target.value)} />
+              <Input
+                type="number"
+                min={0}
+                value={editGracePeriod}
+                onChange={(e) => setEditGracePeriod(e.target.value)}
+              />
             </div>
             <div className="space-y-2">
               <Label>Target Kepemilikan (hari)</Label>
-              <Input type="number" min={1} value={editOwnershipTarget} onChange={(e) => setEditOwnershipTarget(e.target.value)} />
+              <Input
+                type="number"
+                min={1}
+                value={editOwnershipTarget}
+                onChange={(e) => setEditOwnershipTarget(e.target.value)}
+              />
               <p className="text-xs text-muted-foreground">
-                Progress saat ini: {contract.totalDaysPaid} / {editOwnershipTarget || contract.ownershipTargetDays} hari
-                ({editOwnershipTarget ? ((contract.totalDaysPaid / parseInt(editOwnershipTarget || "1")) * 100).toFixed(1) : contract.ownershipProgress}%)
+                Progress saat ini: {contract.totalDaysPaid} /{' '}
+                {editOwnershipTarget || contract.ownershipTargetDays} hari (
+                {editOwnershipTarget
+                  ? ((contract.totalDaysPaid / parseInt(editOwnershipTarget || '1')) * 100).toFixed(
+                      1,
+                    )
+                  : contract.ownershipProgress}
+                %)
               </p>
             </div>
             <div className="space-y-2">
               <Label>Catatan</Label>
-              <Textarea value={editNotes} onChange={(e) => setEditNotes(e.target.value)} placeholder="Catatan kontrak..." rows={3} />
+              <Textarea
+                value={editNotes}
+                onChange={(e) => setEditNotes(e.target.value)}
+                placeholder="Catatan kontrak..."
+                rows={3}
+              />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>Batal</Button>
+            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
+              Batal
+            </Button>
             <Button onClick={handleEdit} disabled={processing}>
-              {processing ? "Menyimpan..." : "Simpan"}
+              {processing ? 'Menyimpan...' : 'Simpan'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1682,101 +2151,194 @@ export default function ContractDetailPage() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-900 rounded-lg p-4 text-sm space-y-1">
-              <p><strong>Customer:</strong> {customer.fullName}</p>
-              <p><strong>Motor:</strong> {contract.motorModel}</p>
-              <p><strong>Progress:</strong> {contract.ownershipProgress}%</p>
+              <p>
+                <strong>Customer:</strong> {customer.fullName}
+              </p>
+              <p>
+                <strong>Motor:</strong> {contract.motorModel}
+              </p>
+              <p>
+                <strong>Progress:</strong> {contract.ownershipProgress}%
+              </p>
             </div>
             <div className="space-y-2">
-              <Label>Alasan Pembatalan <span className="text-destructive">*</span></Label>
-              <Textarea value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} placeholder="Masukkan alasan pembatalan..." rows={3} />
+              <Label>
+                Alasan Pembatalan <span className="text-destructive">*</span>
+              </Label>
+              <Textarea
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                placeholder="Masukkan alasan pembatalan..."
+                rows={3}
+              />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setCancelDialogOpen(false); setCancelReason(""); }}>Kembali</Button>
-            <Button className="bg-orange-600 hover:bg-orange-700 text-white" onClick={handleCancel} disabled={processing || !cancelReason.trim()}>
-              {processing ? "Memproses..." : "Ya, Batalkan"}
+            <Button
+              variant="outline"
+              onClick={() => {
+                setCancelDialogOpen(false);
+                setCancelReason('');
+              }}
+            >
+              Kembali
+            </Button>
+            <Button
+              className="bg-orange-600 hover:bg-orange-700 text-white"
+              onClick={handleCancel}
+              disabled={processing || !cancelReason.trim()}
+            >
+              {processing ? 'Memproses...' : 'Ya, Batalkan'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Void Invoice Confirmation Dialog */}
-      <Dialog open={voidDialogOpen} onOpenChange={(open) => { setVoidDialogOpen(open); if (!open) setVoidInvoiceTarget(null); }}>
+      <Dialog
+        open={voidDialogOpen}
+        onOpenChange={(open) => {
+          setVoidDialogOpen(open);
+          if (!open) setVoidInvoiceTarget(null);
+        }}
+      >
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileX className="h-5 w-5" /> Void Tagihan
             </DialogTitle>
             <DialogDescription>
-              Void tagihan {voidInvoiceTarget?.invoiceNumber}? Tagihan yang di-void tidak dapat dibayar.
+              Void tagihan {voidInvoiceTarget?.invoiceNumber}? Tagihan yang di-void tidak dapat
+              dibayar.
             </DialogDescription>
           </DialogHeader>
           <div className="bg-muted/50 rounded-lg p-4 text-sm space-y-1">
-            <p><strong>Tagihan:</strong> {voidInvoiceTarget?.invoiceNumber}</p>
-            <p><strong>Jumlah:</strong> {voidInvoiceTarget && formatCurrency(voidInvoiceTarget.amount)}</p>
+            <p>
+              <strong>Tagihan:</strong> {voidInvoiceTarget?.invoiceNumber}
+            </p>
+            <p>
+              <strong>Jumlah:</strong>{' '}
+              {voidInvoiceTarget && formatCurrency(voidInvoiceTarget.amount)}
+            </p>
             {voidInvoiceTarget?.extensionDays && (
-              <p><strong>Tagihan Harian:</strong> {voidInvoiceTarget.extensionDays} hari</p>
+              <p>
+                <strong>Tagihan Harian:</strong> {voidInvoiceTarget.extensionDays} hari
+              </p>
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setVoidDialogOpen(false); setVoidInvoiceTarget(null); }}>Batal</Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setVoidDialogOpen(false);
+                setVoidInvoiceTarget(null);
+              }}
+            >
+              Batal
+            </Button>
             <Button variant="destructive" onClick={handleVoidInvoice} disabled={processing}>
-              {processing ? "Memproses..." : "Ya, Void Tagihan"}
+              {processing ? 'Memproses...' : 'Ya, Void Tagihan'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Receive Unit Confirmation Dialog */}
-      <Dialog open={receiveUnitDialogOpen} onOpenChange={(open) => { setReceiveUnitDialogOpen(open); if (!open) { setBastPhoto(""); setBastNotes(""); } }}>
+      <Dialog
+        open={receiveUnitDialogOpen}
+        onOpenChange={(open) => {
+          setReceiveUnitDialogOpen(open);
+          if (!open) {
+            setBastPhoto('');
+            setBastNotes('');
+          }
+        }}
+      >
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Package className="h-5 w-5" /> Serah Terima Unit (BAST)
             </DialogTitle>
             <DialogDescription>
-              Konfirmasi penerimaan unit motor untuk kontrak {contract.contractNumber}.
-              Tagihan harian akan dimulai H+1.
+              Konfirmasi penerimaan unit motor untuk kontrak {contract.contractNumber}. Tagihan
+              harian akan dimulai H+1.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="bg-muted/50 rounded-lg p-4 text-sm space-y-1">
-              <p><strong>Customer:</strong> {customer.fullName}</p>
-              <p><strong>Motor:</strong> {contract.motorModel} ({contract.batteryType === "EXTENDED" ? "Extended" : "Regular"})</p>
-              <p><strong>Skema DP:</strong> {contract.dpScheme === "FULL" ? "Lunas" : "Cicilan 2x"}</p>
-              <p><strong>Status DP:</strong> {contract.dpFullyPaid ? "Lunas" : `Terbayar ${formatCurrency(contract.dpPaidAmount)} / ${formatCurrency(contract.dpAmount)}`}</p>
+              <p>
+                <strong>Customer:</strong> {customer.fullName}
+              </p>
+              <p>
+                <strong>Motor:</strong> {contract.motorModel} (
+                {contract.batteryType === 'EXTENDED' ? 'Extended' : 'Regular'})
+              </p>
+              <p>
+                <strong>Skema DP:</strong> {contract.dpScheme === 'FULL' ? 'Lunas' : 'Cicilan 2x'}
+              </p>
+              <p>
+                <strong>Status DP:</strong>{' '}
+                {contract.dpFullyPaid
+                  ? 'Lunas'
+                  : `Terbayar ${formatCurrency(contract.dpPaidAmount)} / ${formatCurrency(contract.dpAmount)}`}
+              </p>
             </div>
-            {!contract.dpFullyPaid && contract.dpScheme === "FULL" && (
+            {!contract.dpFullyPaid && contract.dpScheme === 'FULL' && (
               <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 rounded-lg p-3 text-sm text-red-700 dark:text-red-400">
-                <strong>DP belum lunas!</strong> Customer harus membayar DP terlebih dahulu sebelum unit bisa diserahkan.
+                <strong>DP belum lunas!</strong> Customer harus membayar DP terlebih dahulu sebelum
+                unit bisa diserahkan.
               </div>
             )}
-            {!contract.dpFullyPaid && contract.dpScheme === "INSTALLMENT" && (
+            {!contract.dpFullyPaid && contract.dpScheme === 'INSTALLMENT' && (
               <div className="bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-200 dark:border-yellow-900 rounded-lg p-3 text-sm text-yellow-700 dark:text-yellow-400">
-                <strong>Perhatian:</strong> DP cicilan pertama harus sudah dibayar sebelum unit bisa diserahkan.
+                <strong>Perhatian:</strong> DP cicilan pertama harus sudah dibayar sebelum unit bisa
+                diserahkan.
               </div>
             )}
             <div>
-              <Label className="text-sm font-medium">Foto BAST <span className="text-red-500">*</span></Label>
-              <Input value={bastPhoto} onChange={(e) => setBastPhoto(e.target.value)} placeholder="URL foto bukti serah terima..." className="mt-1" />
-              <p className="text-xs text-muted-foreground mt-1">Masukkan URL foto Berita Acara Serah Terima (BAST)</p>
+              <Label className="text-sm font-medium">
+                Foto BAST <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                value={bastPhoto}
+                onChange={(e) => setBastPhoto(e.target.value)}
+                placeholder="URL foto bukti serah terima..."
+                className="mt-1"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Masukkan URL foto Berita Acara Serah Terima (BAST)
+              </p>
             </div>
             <div>
               <Label className="text-sm font-medium">Catatan BAST</Label>
-              <Textarea value={bastNotes} onChange={(e) => setBastNotes(e.target.value)} placeholder="Catatan tambahan serah terima (opsional)..." className="mt-1" rows={3} />
+              <Textarea
+                value={bastNotes}
+                onChange={(e) => setBastNotes(e.target.value)}
+                placeholder="Catatan tambahan serah terima (opsional)..."
+                className="mt-1"
+                rows={3}
+              />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setReceiveUnitDialogOpen(false)}>Batal</Button>
+            <Button variant="outline" onClick={() => setReceiveUnitDialogOpen(false)}>
+              Batal
+            </Button>
             <Button onClick={handleReceiveUnit} disabled={processing || !bastPhoto.trim()}>
-              {processing ? "Memproses..." : "Ya, Terima Unit"}
+              {processing ? 'Memproses...' : 'Ya, Terima Unit'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Mark Paid Confirmation Dialog */}
-      <Dialog open={markPaidDialogOpen} onOpenChange={(open) => { setMarkPaidDialogOpen(open); if (!open) setMarkPaidTarget(null); }}>
+      <Dialog
+        open={markPaidDialogOpen}
+        onOpenChange={(open) => {
+          setMarkPaidDialogOpen(open);
+          if (!open) setMarkPaidTarget(null);
+        }}
+      >
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -1787,23 +2349,44 @@ export default function ContractDetailPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-900 rounded-lg p-4 text-sm space-y-1">
-            <p><strong>Tagihan:</strong> {markPaidTarget?.invoiceNumber}</p>
-            <p><strong>Jumlah:</strong> {markPaidTarget && formatCurrency(markPaidTarget.amount)}</p>
+            <p>
+              <strong>Tagihan:</strong> {markPaidTarget?.invoiceNumber}
+            </p>
+            <p>
+              <strong>Jumlah:</strong> {markPaidTarget && formatCurrency(markPaidTarget.amount)}
+            </p>
             {markPaidTarget?.extensionDays && (
-              <p><strong>Tagihan Harian:</strong> {markPaidTarget.extensionDays} hari (akan diterapkan ke kontrak)</p>
+              <p>
+                <strong>Tagihan Harian:</strong> {markPaidTarget.extensionDays} hari (akan
+                diterapkan ke kontrak)
+              </p>
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setMarkPaidDialogOpen(false); setMarkPaidTarget(null); }}>Batal</Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setMarkPaidDialogOpen(false);
+                setMarkPaidTarget(null);
+              }}
+            >
+              Batal
+            </Button>
             <Button variant="success" onClick={handleMarkPaid} disabled={processing}>
-              {processing ? "Memproses..." : "Ya, Tandai Lunas"}
+              {processing ? 'Memproses...' : 'Ya, Tandai Lunas'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Revert Invoice Confirmation Dialog */}
-      <Dialog open={revertDialogOpen} onOpenChange={(open) => { setRevertDialogOpen(open); if (!open) setRevertTarget(null); }}>
+      <Dialog
+        open={revertDialogOpen}
+        onOpenChange={(open) => {
+          setRevertDialogOpen(open);
+          if (!open) setRevertTarget(null);
+        }}
+      >
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -1811,21 +2394,39 @@ export default function ContractDetailPage() {
             </DialogTitle>
             <DialogDescription>
               Kembalikan tagihan {revertTarget?.invoiceNumber} ke status PENDING?
-              {revertTarget?.status === "PAID" && " Perubahan pada kontrak akan di-revert."}
+              {revertTarget?.status === 'PAID' && ' Perubahan pada kontrak akan di-revert.'}
             </DialogDescription>
           </DialogHeader>
           <div className="bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-900 rounded-lg p-4 text-sm space-y-1">
-            <p><strong>Tagihan:</strong> {revertTarget?.invoiceNumber}</p>
-            <p><strong>Status saat ini:</strong> {revertTarget?.status}</p>
-            <p><strong>Jumlah:</strong> {revertTarget && formatCurrency(revertTarget.amount + (revertTarget.lateFee || 0))}</p>
-            {revertTarget?.status === "PAID" && revertTarget?.extensionDays && (
-              <p className="text-orange-700 dark:text-orange-400"><strong>Perhatian:</strong> {revertTarget.extensionDays} hari yang sudah dikreditkan akan dikurangi dari kontrak.</p>
+            <p>
+              <strong>Tagihan:</strong> {revertTarget?.invoiceNumber}
+            </p>
+            <p>
+              <strong>Status saat ini:</strong> {revertTarget?.status}
+            </p>
+            <p>
+              <strong>Jumlah:</strong>{' '}
+              {revertTarget && formatCurrency(revertTarget.amount + (revertTarget.lateFee || 0))}
+            </p>
+            {revertTarget?.status === 'PAID' && revertTarget?.extensionDays && (
+              <p className="text-orange-700 dark:text-orange-400">
+                <strong>Perhatian:</strong> {revertTarget.extensionDays} hari yang sudah dikreditkan
+                akan dikurangi dari kontrak.
+              </p>
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setRevertDialogOpen(false); setRevertTarget(null); }}>Batal</Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setRevertDialogOpen(false);
+                setRevertTarget(null);
+              }}
+            >
+              Batal
+            </Button>
             <Button variant="destructive" onClick={handleRevertInvoice} disabled={processing}>
-              {processing ? "Memproses..." : "Ya, Revert"}
+              {processing ? 'Memproses...' : 'Ya, Revert'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1837,38 +2438,75 @@ export default function ContractDetailPage() {
           <DialogHeader>
             <DialogTitle>Gunakan Saving untuk Servis Motor</DialogTitle>
             <DialogDescription>
-              Saldo saat ini: {contract ? formatCurrency(contract.savingBalance) : "-"}
+              Saldo saat ini: {contract ? formatCurrency(contract.savingBalance) : '-'}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
               <Label>Nominal *</Label>
-              <Input type="number" placeholder="Masukkan nominal" value={savingAmount} onChange={(e) => setSavingAmount(e.target.value)} />
+              <Input
+                type="number"
+                placeholder="Masukkan nominal"
+                value={savingAmount}
+                onChange={(e) => setSavingAmount(e.target.value)}
+              />
             </div>
             <div>
               <Label>Deskripsi *</Label>
-              <Input placeholder="Contoh: Service rem depan + ganti kampas" value={savingDescription} onChange={(e) => setSavingDescription(e.target.value)} />
+              <Input
+                placeholder="Contoh: Service rem depan + ganti kampas"
+                value={savingDescription}
+                onChange={(e) => setSavingDescription(e.target.value)}
+              />
             </div>
             <div>
               <Label>Foto Bukti</Label>
-              <Input placeholder="URL foto nota servis" value={savingPhoto} onChange={(e) => setSavingPhoto(e.target.value)} />
+              <Input
+                placeholder="URL foto nota servis"
+                value={savingPhoto}
+                onChange={(e) => setSavingPhoto(e.target.value)}
+              />
             </div>
             <div>
               <Label>Catatan</Label>
-              <Textarea placeholder="Catatan tambahan (opsional)" value={savingNotes} onChange={(e) => setSavingNotes(e.target.value)} />
+              <Textarea
+                placeholder="Catatan tambahan (opsional)"
+                value={savingNotes}
+                onChange={(e) => setSavingNotes(e.target.value)}
+              />
             </div>
             {savingAmount && parseInt(savingAmount) > 0 && contract && (
               <div className="bg-muted/50 rounded-lg p-3 text-sm space-y-1">
-                <p>Saldo saat ini: <strong>{formatCurrency(contract.savingBalance)}</strong></p>
-                <p>Akan digunakan: <strong>{formatCurrency(parseInt(savingAmount))}</strong></p>
-                <p>Sisa setelah: <strong>{formatCurrency(Math.max(0, contract.savingBalance - parseInt(savingAmount)))}</strong></p>
+                <p>
+                  Saldo saat ini: <strong>{formatCurrency(contract.savingBalance)}</strong>
+                </p>
+                <p>
+                  Akan digunakan: <strong>{formatCurrency(parseInt(savingAmount))}</strong>
+                </p>
+                <p>
+                  Sisa setelah:{' '}
+                  <strong>
+                    {formatCurrency(Math.max(0, contract.savingBalance - parseInt(savingAmount)))}
+                  </strong>
+                </p>
               </div>
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setServiceDialogOpen(false); setSavingAmount(""); setSavingDescription(""); setSavingPhoto(""); setSavingNotes(""); }}>Batal</Button>
-            <Button onClick={() => handleDebitSaving("service")} disabled={processing}>
-              {processing ? "Memproses..." : "Konfirmasi"}
+            <Button
+              variant="outline"
+              onClick={() => {
+                setServiceDialogOpen(false);
+                setSavingAmount('');
+                setSavingDescription('');
+                setSavingPhoto('');
+                setSavingNotes('');
+              }}
+            >
+              Batal
+            </Button>
+            <Button onClick={() => handleDebitSaving('service')} disabled={processing}>
+              {processing ? 'Memproses...' : 'Konfirmasi'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1880,38 +2518,75 @@ export default function ContractDetailPage() {
           <DialogHeader>
             <DialogTitle>Gunakan Saving untuk Balik Nama</DialogTitle>
             <DialogDescription>
-              Saldo saat ini: {contract ? formatCurrency(contract.savingBalance) : "-"}
+              Saldo saat ini: {contract ? formatCurrency(contract.savingBalance) : '-'}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
               <Label>Nominal *</Label>
-              <Input type="number" placeholder="Masukkan nominal" value={savingAmount} onChange={(e) => setSavingAmount(e.target.value)} />
+              <Input
+                type="number"
+                placeholder="Masukkan nominal"
+                value={savingAmount}
+                onChange={(e) => setSavingAmount(e.target.value)}
+              />
             </div>
             <div>
               <Label>Deskripsi *</Label>
-              <Input placeholder="Contoh: Biaya balik nama STNK + BPKB" value={savingDescription} onChange={(e) => setSavingDescription(e.target.value)} />
+              <Input
+                placeholder="Contoh: Biaya balik nama STNK + BPKB"
+                value={savingDescription}
+                onChange={(e) => setSavingDescription(e.target.value)}
+              />
             </div>
             <div>
               <Label>Foto Bukti</Label>
-              <Input placeholder="URL foto kwitansi" value={savingPhoto} onChange={(e) => setSavingPhoto(e.target.value)} />
+              <Input
+                placeholder="URL foto kwitansi"
+                value={savingPhoto}
+                onChange={(e) => setSavingPhoto(e.target.value)}
+              />
             </div>
             <div>
               <Label>Catatan</Label>
-              <Textarea placeholder="Catatan tambahan (opsional)" value={savingNotes} onChange={(e) => setSavingNotes(e.target.value)} />
+              <Textarea
+                placeholder="Catatan tambahan (opsional)"
+                value={savingNotes}
+                onChange={(e) => setSavingNotes(e.target.value)}
+              />
             </div>
             {savingAmount && parseInt(savingAmount) > 0 && contract && (
               <div className="bg-muted/50 rounded-lg p-3 text-sm space-y-1">
-                <p>Saldo saat ini: <strong>{formatCurrency(contract.savingBalance)}</strong></p>
-                <p>Akan digunakan: <strong>{formatCurrency(parseInt(savingAmount))}</strong></p>
-                <p>Sisa setelah: <strong>{formatCurrency(Math.max(0, contract.savingBalance - parseInt(savingAmount)))}</strong></p>
+                <p>
+                  Saldo saat ini: <strong>{formatCurrency(contract.savingBalance)}</strong>
+                </p>
+                <p>
+                  Akan digunakan: <strong>{formatCurrency(parseInt(savingAmount))}</strong>
+                </p>
+                <p>
+                  Sisa setelah:{' '}
+                  <strong>
+                    {formatCurrency(Math.max(0, contract.savingBalance - parseInt(savingAmount)))}
+                  </strong>
+                </p>
               </div>
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setTransferDialogOpen(false); setSavingAmount(""); setSavingDescription(""); setSavingPhoto(""); setSavingNotes(""); }}>Batal</Button>
-            <Button onClick={() => handleDebitSaving("transfer")} disabled={processing}>
-              {processing ? "Memproses..." : "Konfirmasi"}
+            <Button
+              variant="outline"
+              onClick={() => {
+                setTransferDialogOpen(false);
+                setSavingAmount('');
+                setSavingDescription('');
+                setSavingPhoto('');
+                setSavingNotes('');
+              }}
+            >
+              Batal
+            </Button>
+            <Button onClick={() => handleDebitSaving('transfer')} disabled={processing}>
+              {processing ? 'Memproses...' : 'Konfirmasi'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1923,24 +2598,305 @@ export default function ContractDetailPage() {
           <DialogHeader>
             <DialogTitle>Claim Sisa Saving</DialogTitle>
             <DialogDescription>
-              Saldo saat ini: {contract ? formatCurrency(contract.savingBalance) : "-"}
+              Saldo saat ini: {contract ? formatCurrency(contract.savingBalance) : '-'}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
               <Label>Nominal Claim</Label>
-              <Input type="number" placeholder={contract ? `Kosongkan untuk claim semua (${formatCurrency(contract.savingBalance)})` : ""} value={claimAmount} onChange={(e) => setClaimAmount(e.target.value)} />
-              <p className="text-xs text-muted-foreground mt-1">Kosongkan untuk claim semua sisa saving.</p>
+              <Input
+                type="number"
+                placeholder={
+                  contract
+                    ? `Kosongkan untuk claim semua (${formatCurrency(contract.savingBalance)})`
+                    : ''
+                }
+                value={claimAmount}
+                onChange={(e) => setClaimAmount(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Kosongkan untuk claim semua sisa saving.
+              </p>
             </div>
             <div>
               <Label>Catatan</Label>
-              <Textarea placeholder="Catatan tambahan (opsional)" value={claimNotes} onChange={(e) => setClaimNotes(e.target.value)} />
+              <Textarea
+                placeholder="Catatan tambahan (opsional)"
+                value={claimNotes}
+                onChange={(e) => setClaimNotes(e.target.value)}
+              />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setClaimDialogOpen(false); setClaimAmount(""); setClaimNotes(""); }}>Batal</Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setClaimDialogOpen(false);
+                setClaimAmount('');
+                setClaimNotes('');
+              }}
+            >
+              Batal
+            </Button>
             <Button onClick={handleClaimSaving} disabled={processing}>
-              {processing ? "Memproses..." : "Claim"}
+              {processing ? 'Memproses...' : 'Claim'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Tambah Record Servis */}
+      <Dialog
+        open={addServisDialogOpen}
+        onOpenChange={(open) => {
+          setAddServisDialogOpen(open);
+          if (!open) {
+            setServisType(ServiceType.MINOR);
+            setServisReplacement(false);
+            setServisStartDate('');
+            setServisEndDate('');
+            setServisNotes('');
+            setServisAttachment('');
+            setServisServiceCost('0');
+            setServisPartsReplaced('');
+            setServisPartsRepaired('');
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Wrench className="h-5 w-5" /> Tambah Record Servis
+            </DialogTitle>
+            <DialogDescription>
+              Catat servis motor untuk kontrak {contract.contractNumber}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>
+                Jenis Servis <span className="text-destructive">*</span>
+              </Label>
+              <select
+                className="w-full border border-input rounded-md px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                value={servisType}
+                onChange={(e) => {
+                  setServisType(e.target.value as ServiceType);
+                  if (e.target.value === ServiceType.MINOR) {
+                    setServisReplacement(false);
+                  }
+                }}
+              >
+                <option value={ServiceType.MINOR}>Minor</option>
+                <option value={ServiceType.MAJOR}>Major</option>
+              </select>
+            </div>
+            {servisType === ServiceType.MAJOR && (
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="servis-replacement"
+                  checked={servisReplacement}
+                  onChange={(e) => setServisReplacement(e.target.checked)}
+                  className="h-4 w-4 rounded border-input"
+                />
+                <Label htmlFor="servis-replacement">Motor pengganti tersedia?</Label>
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>
+                  Tanggal Mulai <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  type="date"
+                  value={servisStartDate}
+                  onChange={(e) => setServisStartDate(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>
+                  Tanggal Selesai <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  type="date"
+                  value={servisEndDate}
+                  onChange={(e) => setServisEndDate(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Catatan</Label>
+              <Textarea
+                placeholder="Deskripsi servis (opsional)..."
+                value={servisNotes}
+                onChange={(e) => setServisNotes(e.target.value)}
+                rows={3}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>URL Lampiran</Label>
+              <Input
+                placeholder="URL foto/dokumen (opsional)"
+                value={servisAttachment}
+                onChange={(e) => setServisAttachment(e.target.value)}
+              />
+            </div>
+
+            {/* Biaya Servis & Info Part */}
+            <div className="border-t pt-4 space-y-4">
+              <div className="space-y-2">
+                <Label>Biaya Servis (Rp)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  placeholder="0"
+                  value={servisServiceCost}
+                  onChange={(e) => setServisServiceCost(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Jika ada biaya, akan dipotong otomatis dari saldo saving (jika tersedia).
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Pergantian Part</Label>
+                  <Input
+                    placeholder="Kampas rem, Ban, dll."
+                    value={servisPartsReplaced}
+                    onChange={(e) => setServisPartsReplaced(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Perbaikan Part</Label>
+                  <Input
+                    placeholder="Rantai, Bearing, dll."
+                    value={servisPartsRepaired}
+                    onChange={(e) => setServisPartsRepaired(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Info pemotongan saving — tampil jika ada biaya dan ada saldo */}
+              {contract && parseInt(servisServiceCost) > 0 && contract.savingBalance > 0 && (
+                <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-lg p-3 text-sm space-y-1">
+                  <p className="text-blue-700 dark:text-blue-400">
+                    Saldo saving saat ini:{' '}
+                    <span className="font-medium">{formatCurrency(contract.savingBalance)}</span>
+                  </p>
+                  <p className="text-blue-700 dark:text-blue-400">
+                    Dipotong dari saving:{' '}
+                    <span className="font-medium">
+                      {formatCurrency(
+                        Math.min(parseInt(servisServiceCost), contract.savingBalance),
+                      )}
+                    </span>
+                  </p>
+                  {parseInt(servisServiceCost) > contract.savingBalance && (
+                    <p className="text-orange-600 dark:text-orange-400 font-medium">
+                      Customer membayar sisa:{' '}
+                      {formatCurrency(parseInt(servisServiceCost) - contract.savingBalance)}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setAddServisDialogOpen(false)}
+              disabled={processing}
+            >
+              Batal
+            </Button>
+            <Button
+              onClick={handleCreateServiceRecord}
+              disabled={processing || !servisStartDate || !servisEndDate}
+            >
+              {processing ? 'Menyimpan...' : 'Simpan'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Konfirmasi Revoke Servis */}
+      <Dialog
+        open={revokeServisDialogOpen}
+        onOpenChange={(open) => {
+          setRevokeServisDialogOpen(open);
+          if (!open) {
+            setRevokeServisTarget(null);
+            setRevokeReason('');
+          }
+        }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-orange-600">
+              <ShieldOff className="h-5 w-5" /> Revoke Record Servis
+            </DialogTitle>
+            <DialogDescription>
+              Batalkan record servis ini? Kompensasi hari yang sudah diberikan akan dikembalikan.
+            </DialogDescription>
+          </DialogHeader>
+          {revokeServisTarget && (
+            <>
+              <div className="bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-900 rounded-lg p-4 text-sm space-y-1">
+                <p>
+                  <strong>Jenis:</strong>{' '}
+                  {revokeServisTarget.serviceType === ServiceType.MAJOR ? 'Major' : 'Minor'}
+                </p>
+                <p>
+                  <strong>Periode:</strong> {formatDate(revokeServisTarget.startDate)} —{' '}
+                  {formatDate(revokeServisTarget.endDate)}
+                </p>
+                <p>
+                  <strong>Kompensasi:</strong> {revokeServisTarget.compensationDays} hari
+                </p>
+              </div>
+              {(() => {
+                const ls = savingByServiceRecord.get(revokeServisTarget.id);
+                return ls ? (
+                  <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-lg p-3 text-sm flex items-start gap-2">
+                    <Wallet className="h-4 w-4 text-blue-600 mt-0.5 shrink-0" />
+                    <p className="text-blue-700 dark:text-blue-400">
+                      Dana sisihan <span className="font-medium">{formatCurrency(ls.amount)}</span>{' '}
+                      akan dikembalikan ke saldo secara otomatis.
+                    </p>
+                  </div>
+                ) : null;
+              })()}
+            </>
+          )}
+          <div className="space-y-2">
+            <Label>
+              Alasan Revoke <span className="text-destructive">*</span>
+            </Label>
+            <Textarea
+              value={revokeReason}
+              onChange={(e) => setRevokeReason(e.target.value)}
+              placeholder="Masukkan alasan revoke..."
+              rows={3}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setRevokeServisDialogOpen(false);
+                setRevokeServisTarget(null);
+                setRevokeReason('');
+              }}
+            >
+              Batal
+            </Button>
+            <Button
+              className="bg-orange-600 hover:bg-orange-700 text-white"
+              onClick={handleRevokeServiceRecord}
+              disabled={processing || !revokeReason.trim()}
+            >
+              {processing ? 'Memproses...' : 'Ya, Revoke'}
             </Button>
           </DialogFooter>
         </DialogContent>

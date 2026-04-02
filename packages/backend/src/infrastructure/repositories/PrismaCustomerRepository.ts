@@ -1,4 +1,4 @@
-import { PrismaClient, Prisma } from '@prisma/client';
+import { PrismaClient, Prisma, $Enums } from '@prisma/client';
 import { Customer } from '../../domain/entities';
 import { ICustomerRepository } from '../../domain/interfaces';
 import { PaginationParams, PaginatedResult } from '../../domain/interfaces/Pagination';
@@ -6,8 +6,8 @@ import { PaginationParams, PaginatedResult } from '../../domain/interfaces/Pagin
 export class PrismaCustomerRepository implements ICustomerRepository {
   constructor(private prisma: PrismaClient) {}
 
-  private toEntity(raw: any): Customer {
-    return raw as Customer;
+  private toEntity(raw: Prisma.CustomerGetPayload<object>): Customer {
+    return raw as unknown as Customer;
   }
 
   async findAll(): Promise<Customer[]> {
@@ -15,7 +15,7 @@ export class PrismaCustomerRepository implements ICustomerRepository {
       where: { isDeleted: false },
       orderBy: { createdAt: 'desc' },
     });
-    return rows.map(r => this.toEntity(r));
+    return rows.map((r) => this.toEntity(r));
   }
 
   async findAllPaginated(params: PaginationParams): Promise<PaginatedResult<Customer>> {
@@ -30,7 +30,7 @@ export class PrismaCustomerRepository implements ICustomerRepository {
       ];
     }
     if (params.gender && params.gender !== 'ALL') {
-      where.gender = params.gender as any;
+      where.gender = params.gender as string as $Enums.Gender;
     }
 
     const page = params.page || 1;
@@ -49,7 +49,7 @@ export class PrismaCustomerRepository implements ICustomerRepository {
     ]);
 
     return {
-      data: rows.map(r => this.toEntity(r)),
+      data: rows.map((r) => this.toEntity(r)),
       total,
       page,
       limit,
@@ -81,7 +81,7 @@ export class PrismaCustomerRepository implements ICustomerRepository {
         ],
       },
     });
-    return rows.map(r => this.toEntity(r));
+    return rows.map((r) => this.toEntity(r));
   }
 
   async create(customer: Customer): Promise<Customer> {
@@ -116,14 +116,21 @@ export class PrismaCustomerRepository implements ICustomerRepository {
 
   async update(id: string, data: Partial<Customer>): Promise<Customer | null> {
     try {
-      const { id: _id, ...updateData } = data as any;
+      const { id: _id, ...updateData } = data;
       const row = await this.prisma.customer.update({
         where: { id },
         data: updateData,
       });
       return this.toEntity(row);
-    } catch {
-      return null;
+    } catch (error: unknown) {
+      if (
+        error instanceof Error &&
+        'code' in error &&
+        (error as Record<string, unknown>).code === 'P2025'
+      ) {
+        return null;
+      }
+      throw error;
     }
   }
 
@@ -131,12 +138,27 @@ export class PrismaCustomerRepository implements ICustomerRepository {
     try {
       await this.prisma.customer.delete({ where: { id } });
       return true;
-    } catch {
-      return false;
+    } catch (error: unknown) {
+      if (
+        error instanceof Error &&
+        'code' in error &&
+        (error as Record<string, unknown>).code === 'P2025'
+      ) {
+        return false;
+      }
+      throw error;
     }
   }
 
   async count(): Promise<number> {
     return this.prisma.customer.count({ where: { isDeleted: false } });
+  }
+
+  async findByIds(ids: string[]): Promise<Customer[]> {
+    if (ids.length === 0) return [];
+    const rows = await this.prisma.customer.findMany({
+      where: { id: { in: ids } },
+    });
+    return rows.map((r) => this.toEntity(r));
   }
 }

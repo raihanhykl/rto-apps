@@ -15,15 +15,26 @@ export class InMemoryPaymentDayRepository implements IPaymentDayRepository {
 
   async findByContractId(contractId: string): Promise<PaymentDay[]> {
     return Array.from(this.data.values())
-      .filter(pd => pd.contractId === contractId)
+      .filter((pd) => pd.contractId === contractId)
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }
 
-  async findByContractAndDateRange(contractId: string, startDate: Date, endDate: Date): Promise<PaymentDay[]> {
+  async findByContractIds(contractIds: string[]): Promise<PaymentDay[]> {
+    const idSet = new Set(contractIds);
+    return Array.from(this.data.values())
+      .filter((pd) => idSet.has(pd.contractId))
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  }
+
+  async findByContractAndDateRange(
+    contractId: string,
+    startDate: Date,
+    endDate: Date,
+  ): Promise<PaymentDay[]> {
     const startKey = this.toDateKey(startDate);
     const endKey = this.toDateKey(endDate);
     return Array.from(this.data.values())
-      .filter(pd => {
+      .filter((pd) => {
         if (pd.contractId !== contractId) return false;
         const key = this.toDateKey(pd.date);
         return key >= startKey && key <= endKey;
@@ -33,7 +44,7 @@ export class InMemoryPaymentDayRepository implements IPaymentDayRepository {
 
   async findByPaymentId(paymentId: string): Promise<PaymentDay[]> {
     return Array.from(this.data.values())
-      .filter(pd => pd.paymentId === paymentId)
+      .filter((pd) => pd.paymentId === paymentId)
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }
 
@@ -47,9 +58,12 @@ export class InMemoryPaymentDayRepository implements IPaymentDayRepository {
     return null;
   }
 
-  async findByContractAndStatus(contractId: string, status: PaymentDayStatus): Promise<PaymentDay[]> {
+  async findByContractAndStatus(
+    contractId: string,
+    status: PaymentDayStatus,
+  ): Promise<PaymentDay[]> {
     return Array.from(this.data.values())
-      .filter(pd => pd.contractId === contractId && pd.status === status)
+      .filter((pd) => pd.contractId === contractId && pd.status === status)
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }
 
@@ -79,7 +93,11 @@ export class InMemoryPaymentDayRepository implements IPaymentDayRepository {
     return { ...updated };
   }
 
-  async updateByContractAndDate(contractId: string, date: Date, data: Partial<PaymentDay>): Promise<PaymentDay | null> {
+  async updateByContractAndDate(
+    contractId: string,
+    date: Date,
+    data: Partial<PaymentDay>,
+  ): Promise<PaymentDay | null> {
     const pd = await this.findByContractAndDate(contractId, date);
     if (!pd) return null;
     return this.update(pd.id, data);
@@ -97,18 +115,27 @@ export class InMemoryPaymentDayRepository implements IPaymentDayRepository {
   }
 
   async countByContractAndStatus(contractId: string, status: PaymentDayStatus): Promise<number> {
-    return Array.from(this.data.values())
-      .filter(pd => pd.contractId === contractId && pd.status === status).length;
+    return Array.from(this.data.values()).filter(
+      (pd) => pd.contractId === contractId && pd.status === status,
+    ).length;
   }
 
-  async countByContractAndStatuses(contractId: string, statuses: PaymentDayStatus[]): Promise<number> {
-    return Array.from(this.data.values())
-      .filter(pd => pd.contractId === contractId && statuses.includes(pd.status)).length;
+  async countByContractAndStatuses(
+    contractId: string,
+    statuses: PaymentDayStatus[],
+  ): Promise<number> {
+    return Array.from(this.data.values()).filter(
+      (pd) => pd.contractId === contractId && statuses.includes(pd.status),
+    ).length;
   }
 
   async findLastPaidOrHolidayDate(contractId: string): Promise<Date | null> {
     const matching = Array.from(this.data.values())
-      .filter(pd => pd.contractId === contractId && (pd.status === PaymentDayStatus.PAID || pd.status === PaymentDayStatus.HOLIDAY))
+      .filter(
+        (pd) =>
+          pd.contractId === contractId &&
+          (pd.status === PaymentDayStatus.PAID || pd.status === PaymentDayStatus.HOLIDAY),
+      )
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     return matching.length > 0 ? new Date(matching[0].date) : null;
   }

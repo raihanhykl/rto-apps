@@ -16,6 +16,7 @@ fn calculate_size(count: usize, element_size: usize) -> usize {
 **The Problem**: Behavior differs between debug and release. Bugs may only manifest in production.
 
 **Fix**: Use explicit methods:
+
 ```rust
 // Wrapping (explicitly allows overflow)
 let y = x.wrapping_add(1);
@@ -259,14 +260,14 @@ double!(x + 1)  // Doesn't do what you expect
 
 ## Detection Patterns
 
-| Pattern | Risk |
-|---------|------|
-| `+`, `-`, `*` on integers | Overflow (release wraps) |
-| `unsafe { }` | All bets off - audit carefully |
-| `mem::forget()` | Resource leak, deadlock |
-| `.unwrap()`, `.expect()` | Panic on None/Err |
-| `RefCell::borrow_mut()` | Runtime panic on double borrow |
-| `unsafe impl Send/Sync` | Potential data races |
-| `extern "C" fn` without catch_unwind | UB on panic |
-| Drop impl with panic | Double panic = abort |
-| Complex deref chains | Method resolution confusion |
+| Pattern                              | Risk                           |
+| ------------------------------------ | ------------------------------ |
+| `+`, `-`, `*` on integers            | Overflow (release wraps)       |
+| `unsafe { }`                         | All bets off - audit carefully |
+| `mem::forget()`                      | Resource leak, deadlock        |
+| `.unwrap()`, `.expect()`             | Panic on None/Err              |
+| `RefCell::borrow_mut()`              | Runtime panic on double borrow |
+| `unsafe impl Send/Sync`              | Potential data races           |
+| `extern "C" fn` without catch_unwind | UB on panic                    |
+| Drop impl with panic                 | Double panic = abort           |
+| Complex deref chains                 | Method resolution confusion    |

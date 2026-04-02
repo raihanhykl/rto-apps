@@ -43,6 +43,7 @@ When a user requests web assets:
 **User request**: "I need web assets"
 
 **Claude uses AskUserQuestion** (not plain text):
+
 ```
 What type of web assets do you need?                    [Asset type]
 ○ Favicons only - Browser tab icons (16x16, 32x32, 96x96) and favicon.ico
@@ -64,6 +65,7 @@ When the user's request is vague (e.g., "create web assets", "I need icons"), us
 **Question**: "What type of web assets do you need?"
 **Header**: "Asset type"
 **Options**:
+
 - **"Favicons only"** - Description: "Browser tab icons (16x16, 32x32, 96x96) and favicon.ico"
 - **"App icons only"** - Description: "PWA icons for iOS/Android (180x180, 192x192, 512x512)"
 - **"Social images only"** - Description: "Open Graph images for Facebook, Twitter, WhatsApp, LinkedIn"
@@ -76,6 +78,7 @@ When the asset type is determined but source is unclear:
 **Question**: "What source material will you provide?"
 **Header**: "Source"
 **Options**:
+
 - **"Logo image"** - Description: "I have or will upload a logo/image file"
 - **"Emoji"** - Description: "Generate favicon from an emoji character"
 - **"Text/slogan"** - Description: "Create images from text only"
@@ -89,6 +92,7 @@ When user requests social images but doesn't specify platforms:
 **Header**: "Platforms"
 **Multi-select**: true
 **Options**:
+
 - **"Facebook/WhatsApp/LinkedIn"** - Description: "Standard 1200x630 Open Graph format"
 - **"Twitter"** - Description: "1200x675 (16:9 ratio) for large image cards"
 - **"All platforms"** - Description: "Generate all variants including square format"
@@ -100,6 +104,7 @@ When generating text-based social images:
 **Question**: "What colors should we use for your social images?"
 **Header**: "Colors"
 **Options**:
+
 - **"I'll provide colors"** - Description: "Let me specify exact hex codes for brand colors"
 - **"Default theme"** - Description: "Use default purple background (#4F46E5) with white text"
 - **"Extract from logo"** - Description: "Auto-detect brand colors from uploaded logo"
@@ -112,6 +117,7 @@ When user says "create icons" or "generate icons" (ambiguous):
 **Question**: "What kind of icons do you need?"
 **Header**: "Icon type"
 **Options**:
+
 - **"Website favicon"** - Description: "Small browser tab icon"
 - **"App icons (PWA)"** - Description: "Mobile home screen icons"
 - **"Both"** - Description: "Favicon + app icons"
@@ -121,6 +127,7 @@ When user says "create icons" or "generate icons" (ambiguous):
 When user selects "Emoji" as source material:
 
 **Step 1**: Ask for project description (free text):
+
 - "What is your website/app about?"
 - Use this to generate emoji suggestions
 
@@ -129,12 +136,14 @@ When user selects "Emoji" as source material:
 **Question**: "Which emoji best represents your project?"
 **Header**: "Emoji"
 **Options**: (Dynamically generated based on project description)
+
 - Example: **"🚀 Rocket"** - Description: "Rocket, launch, startup, space"
 - Example: **"☕ Coffee"** - Description: "Coffee, cafe, beverage, drink"
 - Example: **"💻 Laptop"** - Description: "Computer, laptop, code, dev"
 - Example: **"🎨 Art"** - Description: "Art, design, creative, paint"
 
 **Implementation**:
+
 ```bash
 # Get suggestions
 python scripts/generate_favicons.py --suggest "coffee shop" output/ all
@@ -148,6 +157,7 @@ python scripts/generate_favicons.py --emoji "☕" output/ all
 **Question**: "Do you want a background color for app icons?"
 **Header**: "Background"
 **Options**:
+
 - **"Transparent"** - Description: "No background (favicons only)"
 - **"White"** - Description: "White background (recommended for app icons)"
 - **"Custom color"** - Description: "I'll provide a color"
@@ -159,11 +169,13 @@ python scripts/generate_favicons.py --emoji "☕" output/ all
 **Question**: "Would you like me to add these HTML tags to your codebase?"
 **Header**: "Integration"
 **Options**:
+
 - **"Yes, auto-detect my setup"** - Description: "Find and update my HTML/framework files automatically"
 - **"Yes, I'll tell you where"** - Description: "I'll specify which file to update"
 - **"No, I'll do it manually"** - Description: "Just show me the code, I'll add it myself"
 
 **If user selects "Yes, auto-detect":**
+
 1. Search for framework config files (next.config.js, astro.config.mjs, etc.)
 2. Detect framework type
 3. Find appropriate target file (layout.tsx, index.html, etc.)
@@ -172,12 +184,14 @@ python scripts/generate_favicons.py --emoji "☕" output/ all
 6. Insert tags if user confirms
 
 **If user selects "Yes, I'll tell you where":**
+
 1. Ask user for file path
 2. Verify file exists
 3. Show diff of proposed changes
 4. Insert tags if user confirms
 
 **Framework Detection Priority:**
+
 - Next.js: Look for `next.config.js`, update `app/layout.tsx` or `pages/_app.tsx`
 - Astro: Look for `astro.config.mjs`, update layout files in `src/layouts/`
 - SvelteKit: Look for `svelte.config.js`, update `src/app.html`
@@ -192,6 +206,7 @@ python scripts/generate_favicons.py --emoji "☕" output/ all
 **Question**: "Would you like to test your meta tags now?"
 **Header**: "Testing"
 **Options**:
+
 - **"Facebook Debugger"** - Description: "Test Open Graph tags on Facebook"
 - **"Twitter Card Validator"** - Description: "Test Twitter card appearance"
 - **"LinkedIn Post Inspector"** - Description: "Test LinkedIn sharing preview"
@@ -199,6 +214,7 @@ python scripts/generate_favicons.py --emoji "☕" output/ all
 - **"No, skip testing"** - Description: "I'll test later myself"
 
 **Provide appropriate testing URLs:**
+
 - Facebook: https://developers.facebook.com/tools/debug/
 - Twitter: https://cards-dev.twitter.com/validator
 - LinkedIn: https://www.linkedin.com/post-inspector/
@@ -215,16 +231,19 @@ python scripts/generate_favicons.py <source_image> <output_dir> [icon_type]
 ```
 
 Arguments:
+
 - `source_image`: Path to the logo/image file
 - `output_dir`: Where to save generated icons
 - `icon_type`: Optional - 'favicon', 'app', or 'all' (default: 'all')
 
 Example:
+
 ```bash
 python scripts/generate_favicons.py /mnt/user-data/uploads/logo.png /home/claude/output all
 ```
 
 Generates:
+
 - `favicon-16x16.png`, `favicon-32x32.png`, `favicon-96x96.png`
 - `favicon.ico` (multi-resolution)
 - `apple-touch-icon.png` (180x180)
@@ -243,6 +262,7 @@ python scripts/generate_favicons.py --suggest "coffee shop" /home/claude/output 
 ```
 
 This returns 4 emoji suggestions based on the description:
+
 ```
 1. ☕  Coffee               - coffee, cafe, beverage
 2. 🌐  Globe                - web, website, global
@@ -257,12 +277,14 @@ python scripts/generate_favicons.py --emoji "☕" <output_dir> [icon_type] [--em
 ```
 
 Arguments:
+
 - `--emoji`: Emoji character to use
 - `output_dir`: Where to save generated icons
 - `icon_type`: Optional - 'favicon', 'app', or 'all' (default: 'all')
 - `--emoji-bg`: Optional background color (default: transparent for favicons, white for app icons)
 
 Examples:
+
 ```bash
 # Basic emoji favicon (transparent background)
 python scripts/generate_favicons.py --emoji "🚀" /home/claude/output favicon
@@ -275,6 +297,7 @@ python scripts/generate_favicons.py --emoji "💻" --emoji-bg "white" /home/clau
 ```
 
 Generates same files as logo-based generation:
+
 - All standard favicon sizes (16x16, 32x32, 96x96)
 - favicon.ico
 - App icon sizes (180x180, 192x192, 512x512)
@@ -290,11 +313,13 @@ python scripts/generate_og_images.py <output_dir> --image <source_image>
 ```
 
 Example:
+
 ```bash
 python scripts/generate_og_images.py /home/claude/output --image /mnt/user-data/uploads/logo.png
 ```
 
 Generates:
+
 - `og-image.png` (1200x630 - Facebook, WhatsApp, LinkedIn)
 - `twitter-image.png` (1200x675 - Twitter)
 - `og-square.png` (1200x1200 - Square variant)
@@ -308,11 +333,13 @@ python scripts/generate_og_images.py <output_dir> --text "Your text here" [optio
 ```
 
 Options:
+
 - `--logo <path>`: Include a logo with the text
 - `--bg-color <color>`: Background color (hex or name, default: '#4F46E5')
 - `--text-color <color>`: Text color (default: 'white')
 
 Example:
+
 ```bash
 python scripts/generate_og_images.py /home/claude/output \
   --text "Transform Your Business with AI" \
@@ -333,6 +360,7 @@ python scripts/generate_og_images.py /home/claude/output --image /mnt/user-data/
 ```
 
 Or for text-based:
+
 ```bash
 # Generate favicons from logo
 python scripts/generate_favicons.py /mnt/user-data/uploads/logo.png /home/claude/output all
@@ -348,6 +376,7 @@ python scripts/generate_og_images.py /home/claude/output \
 After generating assets, follow this workflow:
 
 ### 1. Move to Outputs Directory
+
 ```bash
 cp /home/claude/output/* /mnt/user-data/outputs/
 ```
@@ -357,28 +386,30 @@ cp /home/claude/output/* /mnt/user-data/outputs/
 Display the HTML tags that were automatically generated by the scripts.
 
 Example output for favicons:
+
 ```html
 <!-- Favicons -->
-<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
-<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
-<link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png">
-<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
-<link rel="icon" type="image/png" sizes="192x192" href="/android-chrome-192x192.png">
-<link rel="icon" type="image/png" sizes="512x512" href="/android-chrome-512x512.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+<link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+<link rel="icon" type="image/png" sizes="192x192" href="/android-chrome-192x192.png" />
+<link rel="icon" type="image/png" sizes="512x512" href="/android-chrome-512x512.png" />
 ```
 
 Example output for Open Graph images:
+
 ```html
 <!-- Open Graph / Facebook -->
-<meta property="og:image" content="/og-image.png">
-<meta property="og:image:width" content="1200">
-<meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Your description here">
+<meta property="og:image" content="/og-image.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="Your description here" />
 
 <!-- Twitter -->
-<meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:image" content="/twitter-image.png">
-<meta name="twitter:image:alt" content="Your description here">
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:image" content="/twitter-image.png" />
+<meta name="twitter:image:alt" content="Your description here" />
 ```
 
 ### 3. Offer Code Integration (Use AskUserQuestion - Pattern 7)
@@ -388,6 +419,7 @@ Example output for Open Graph images:
 **Question**: "Would you like me to add these HTML tags to your codebase?"
 **Header**: "Integration"
 **Options**:
+
 - "Yes, auto-detect my setup"
 - "Yes, I'll tell you where"
 - "No, I'll do it manually"
@@ -395,6 +427,7 @@ Example output for Open Graph images:
 #### If User Selects "Yes, auto-detect my setup":
 
 **A. Detect Framework:**
+
 ```bash
 # Search for framework config files
 find . -maxdepth 2 -name "next.config.js" -o -name "astro.config.mjs" -o -name "svelte.config.js" -o -name "nuxt.config.js" -o -name "gatsby-config.js"
@@ -416,6 +449,7 @@ grep -E "next|astro|nuxt|svelte|gatsby" package.json
 **C. Confirm with User:**
 
 Use AskUserQuestion to confirm detected file:
+
 ```
 Question: "I found [Framework Name]. Should I update [file_path]?"
 Header: "Confirm"
@@ -435,16 +469,18 @@ Options:
 **Framework-Specific Insertion Examples:**
 
 **For Plain HTML** (insert before `</head>`):
+
 ```html
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <!-- INSERT TAGS HERE -->
-  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
   ...
 </head>
 ```
 
 **For Next.js App Router** (add to metadata export):
+
 ```typescript
 export const metadata = {
   icons: {
@@ -452,9 +488,7 @@ export const metadata = {
       { url: '/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
       { url: '/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
     ],
-    apple: [
-      { url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
-    ],
+    apple: [{ url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }],
   },
   openGraph: {
     images: ['/og-image.png'],
@@ -463,10 +497,11 @@ export const metadata = {
     card: 'summary_large_image',
     images: ['/twitter-image.png'],
   },
-}
+};
 ```
 
 **For Astro** (insert in `<head>` of layout file):
+
 ```astro
 <head>
   <meta charset="UTF-8">
@@ -487,6 +522,7 @@ export const metadata = {
 #### If User Selects "No, I'll do it manually":
 
 Provide brief instructions:
+
 - Place asset files in the public/static directory of your website
 - Add the HTML tags to the `<head>` section of your HTML
 - Update placeholder values (title, description, URL, alt text)
@@ -496,6 +532,7 @@ Provide brief instructions:
 **Question**: "Would you like to test your meta tags now?"
 **Header**: "Testing"
 **Options**:
+
 - "Facebook Debugger"
 - "Twitter Card Validator"
 - "LinkedIn Post Inspector"
@@ -520,12 +557,14 @@ Provide brief instructions:
 ### 5. Final Instructions
 
 Remind user to:
+
 - ✅ Copy asset files to their public/static directory
 - ✅ Update dynamic values in meta tags (og:title, og:description, og:url)
 - ✅ Test on actual platforms after deployment
 - ✅ Update alt text to be descriptive and accessible
 
 **Important Notes:**
+
 - OG images must be accessible via HTTPS URLs (not localhost)
 - URLs in meta tags should be absolute (https://yourdomain.com/og-image.png)
 - Test after deploying to production/staging environment
@@ -533,12 +572,14 @@ Remind user to:
 ## Best Practices
 
 ### Image Requirements
+
 - **Logos**: Should be square or nearly square for best results
 - **High resolution**: Provide largest available version (scripts will downscale)
 - **Transparent backgrounds**: PNG with transparency works best for favicons
 - **Solid backgrounds**: Recommended for app icons and social images
 
 ### Text Content
+
 - **Text length affects font size automatically**:
   - Short text (≤20 chars): 144px font - Large and impactful
   - Medium text (21-40 chars): 120px font - Standard readable size
@@ -549,6 +590,7 @@ Remind user to:
 - Avoid special characters that may not render well
 
 ### Color Choices
+
 - Ensure sufficient contrast (4.5:1 minimum for readability)
 - Use brand colors consistently
 - Consider both light and dark mode contexts
@@ -560,12 +602,14 @@ Both `generate_og_images.py` and `generate_favicons.py` support automated valida
 ### When to Use Validation
 
 **Always recommend validation** when:
+
 - User is generating for production/deployment
 - User asks about file sizes or quality
 - User mentions platform requirements (Facebook, Twitter, etc.)
 - User is new to web assets and may not know requirements
 
 **Validation is optional** for:
+
 - Quick prototypes or testing
 - Users who explicitly decline
 - When time is a concern
@@ -575,11 +619,13 @@ Both `generate_og_images.py` and `generate_favicons.py` support automated valida
 #### For Social Media Images (OG Images)
 
 **File Size Validation**:
+
 - Facebook/LinkedIn/WhatsApp: Must be <8MB
 - Twitter: Must be <5MB
 - Warning if within 80% of limit
 
 **Dimension Validation**:
+
 - Checks against platform-specific recommended sizes:
   - Facebook/LinkedIn: 1200x630 (1.91:1 ratio)
   - Twitter: 1200x675 (16:9 ratio)
@@ -588,11 +634,13 @@ Both `generate_og_images.py` and `generate_favicons.py` support automated valida
 - Errors if below minimum dimensions
 
 **Format Validation**:
+
 - Facebook/LinkedIn: PNG, JPG, JPEG
 - Twitter: PNG, JPG, JPEG, WebP
 - Errors if unsupported format
 
 **Accessibility (Contrast Ratio)**:
+
 - Only for text-based images
 - Calculates WCAG 2.0 contrast ratio
 - Reports compliance level:
@@ -603,30 +651,36 @@ Both `generate_og_images.py` and `generate_favicons.py` support automated valida
 #### For Favicons and App Icons
 
 **File Size Validation**:
+
 - Favicons: Warns if >100KB (recommended for fast loading)
 - App icons: Warns if >500KB (recommended for mobile)
 - No hard limits, but warnings help optimize performance
 
 **Dimension Validation**:
+
 - Verifies each icon matches expected size (16x16, 32x32, etc.)
 - Ensures square aspect ratio
 
 **Format Validation**:
+
 - Checks all files are PNG (or ICO for favicon.ico)
 
 ### How to Use Validation
 
 **In generate_og_images.py**:
+
 ```bash
 python scripts/generate_og_images.py output/ --text "My Site" --validate
 ```
 
 **In generate_favicons.py**:
+
 ```bash
 python scripts/generate_favicons.py logo.png output/ all --validate
 ```
 
 **Output Format**:
+
 - ✓ Success (green): All checks passed
 - ⚠ Warning (yellow): Issues to consider but not critical
 - ❌ Error (red): Must be fixed before deployment
@@ -665,21 +719,25 @@ Summary: 9/9 checks passed
 ### Integrating Validation into Workflows
 
 **After generating assets**, if validation was NOT run:
+
 1. Show the tip message: "💡 Tip: Use --validate to check file sizes, dimensions, and accessibility"
 2. Optionally ask: "Would you like me to run validation on these files now?"
 
 **If validation was run and issues found**:
+
 1. Explain any errors or warnings
 2. Offer to fix issues (e.g., resize, recompress, adjust colors)
 3. Re-run generation with fixes if user agrees
 
 **If validation passes**:
+
 1. Confirm: "✅ All validation checks passed!"
 2. Proceed with code integration and testing links
 
 ## Specifications and Platform Details
 
 For detailed platform specifications, size requirements, and implementation guidelines, read:
+
 - `references/specifications.md`: Comprehensive specs for all platforms
 
 ## Handling Common Requests
@@ -687,6 +745,7 @@ For detailed platform specifications, size requirements, and implementation guid
 ### "Create a favicon for my site"
 
 **Use AskUserQuestion**:
+
 - Question: "Do you have a logo image, or should I create a text-based favicon?"
 - Header: "Source"
 - Options:
@@ -694,6 +753,7 @@ For detailed platform specifications, size requirements, and implementation guid
   - "Text-based" - Description: "Generate from text or initials"
 
 **Then ask**:
+
 - Question: "Do you also need PWA app icons for mobile devices?"
 - Header: "Scope"
 - Options:
@@ -705,6 +765,7 @@ For detailed platform specifications, size requirements, and implementation guid
 ### "Make social sharing images"
 
 **Use AskUserQuestion**:
+
 - Question: "Which social media platforms do you need images for?"
 - Header: "Platforms"
 - Multi-select: true
@@ -714,6 +775,7 @@ For detailed platform specifications, size requirements, and implementation guid
   - "All platforms" - Description: "Generate all variants"
 
 **Then ask**:
+
 - Question: "What should the images contain?"
 - Header: "Content"
 - Options:
@@ -726,6 +788,7 @@ For detailed platform specifications, size requirements, and implementation guid
 ### "I need everything for my website"
 
 **Use AskUserQuestion**:
+
 - Question: "What source material will you provide?"
 - Header: "Source"
 - Options:
@@ -734,12 +797,14 @@ For detailed platform specifications, size requirements, and implementation guid
   - "Text only" - Description: "Generate all assets from text/initials"
 
 **Generate**:
+
 - Both favicons and Open Graph images with complete HTML implementation
 - Provide instructions for file placement and testing
 
 ### User provides both logo and tagline
 
 **Use AskUserQuestion**:
+
 - Question: "How should I use your logo and tagline?"
 - Header: "Layout"
 - Options:
@@ -753,6 +818,7 @@ For detailed platform specifications, size requirements, and implementation guid
 ## Dependencies
 
 The scripts require:
+
 - Python 3.6+
 - Pillow (PIL): `pip install Pillow --break-system-packages`
 - **Pilmoji** (for emoji support): `pip install pilmoji` (optional, only needed for emoji-based generation)
@@ -761,6 +827,7 @@ The scripts require:
 Install if needed before running scripts.
 
 **For emoji features**, install both:
+
 ```bash
 pip install pilmoji emoji --break-system-packages
 ```

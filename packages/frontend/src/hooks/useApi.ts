@@ -1,15 +1,15 @@
-"use client";
+'use client';
 
-import useSWR, { useSWRConfig } from "swr";
-import { useCallback } from "react";
-import { api } from "@/lib/api";
+import useSWR, { useSWRConfig } from 'swr';
+import { useCallback, useMemo } from 'react';
+import { api } from '@/lib/api';
 
 // --- TTL Constants (dedupingInterval in ms) ---
 const TTL = {
-  LONG: 10 * 60 * 1000,   // 10 min - settings, motor rates
-  MEDIUM: 5 * 60 * 1000,  // 5 min  - dashboard
-  DEFAULT: 60 * 1000,     // 1 min  - paginated lists, detail pages
-  SHORT: 15 * 1000,       // 15 sec - payments, calendar
+  LONG: 10 * 60 * 1000, // 10 min - settings, motor rates
+  MEDIUM: 5 * 60 * 1000, // 5 min  - dashboard
+  DEFAULT: 60 * 1000, // 1 min  - paginated lists, detail pages
+  SHORT: 15 * 1000, // 15 sec - payments, calendar
 };
 
 // --- Helper: build cache key from path + params ---
@@ -17,7 +17,7 @@ function buildKey(path: string, params?: Record<string, unknown>): string {
   if (!params) return path;
   const query = new URLSearchParams();
   Object.entries(params).forEach(([k, v]) => {
-    if (v !== undefined && v !== null && v !== "") query.set(k, String(v));
+    if (v !== undefined && v !== null && v !== '') query.set(k, String(v));
   });
   const qs = query.toString();
   return qs ? `${path}?${qs}` : path;
@@ -27,7 +27,7 @@ function buildKey(path: string, params?: Record<string, unknown>): string {
 
 // --- Dashboard ---
 export function useDashboardStats() {
-  return useSWR("/dashboard/stats", () => api.getDashboardStats(), {
+  return useSWR('/dashboard/stats', () => api.getDashboardStats(), {
     dedupingInterval: TTL.MEDIUM,
   });
 }
@@ -37,11 +37,11 @@ export function useCustomersPaginated(params: {
   page?: number;
   limit?: number;
   sortBy?: string;
-  sortOrder?: "asc" | "desc";
+  sortOrder?: 'asc' | 'desc';
   search?: string;
   gender?: string;
 }) {
-  const key = buildKey("/customers", params);
+  const key = buildKey('/customers', params);
   return useSWR(key, () => api.getCustomersPaginated(params), {
     dedupingInterval: TTL.DEFAULT,
   });
@@ -54,7 +54,7 @@ export function useCustomer(id: string | undefined) {
 }
 
 export function useCustomersList(search?: string) {
-  const key = search ? `/customers?search=${encodeURIComponent(search)}` : "/customers";
+  const key = search ? `/customers?search=${encodeURIComponent(search)}` : '/customers';
   return useSWR(key, () => api.getCustomers(search), {
     dedupingInterval: TTL.DEFAULT,
   });
@@ -65,7 +65,7 @@ export function useContractsPaginated(params: {
   page?: number;
   limit?: number;
   sortBy?: string;
-  sortOrder?: "asc" | "desc";
+  sortOrder?: 'asc' | 'desc';
   search?: string;
   status?: string;
   motorModel?: string;
@@ -73,8 +73,19 @@ export function useContractsPaginated(params: {
   dpScheme?: string;
   dpFullyPaid?: string;
 }) {
-  const key = buildKey("/contracts", params);
+  const key = buildKey('/contracts', params);
   return useSWR(key, () => api.getContractsPaginated(params), {
+    dedupingInterval: TTL.DEFAULT,
+  });
+}
+
+/**
+ * Search contracts with an optional search query.
+ * Pass null as `query` to disable fetching (e.g. when CommandPalette is closed).
+ */
+export function useContractsSearch(query: string | null, limit = 10) {
+  const key = query !== null ? buildKey('/contracts', { search: query, limit }) : null;
+  return useSWR(key, () => api.getContractsPaginated({ search: query ?? undefined, limit }), {
     dedupingInterval: TTL.DEFAULT,
   });
 }
@@ -89,14 +100,34 @@ export function useContractsByCustomer(customerId: string | undefined) {
   return useSWR(
     customerId ? `/contracts/customer/${customerId}` : null,
     () => api.getContractsByCustomer(customerId!),
-    { dedupingInterval: TTL.DEFAULT }
+    { dedupingInterval: TTL.DEFAULT },
   );
 }
 
 export function useContractsList() {
-  return useSWR("/contracts", () => api.getContracts(), {
+  return useSWR('/contracts', () => api.getContracts(), {
     dedupingInterval: TTL.DEFAULT,
   });
+}
+
+/**
+ * Fetch contracts with a bounded limit for lookup purposes (e.g. contractId → contractNumber mapping).
+ * Uses paginated endpoint with limit=200 to avoid unbounded fetches.
+ * Returns a Map<contractId, contractNumber> for O(1) lookup.
+ */
+export function useContractsLookup() {
+  const { data, ...rest } = useSWR(
+    '/contracts?page=1&limit=200',
+    () => api.getContractsPaginated({ page: 1, limit: 200 }),
+    { dedupingInterval: TTL.MEDIUM },
+  );
+
+  const lookupMap = useMemo<Map<string, string>>(() => {
+    const contracts: Array<{ id: string; contractNumber: string }> = data?.data ?? [];
+    return new Map(contracts.map((c) => [c.id, c.contractNumber]));
+  }, [data]);
+
+  return { lookupMap, ...rest };
 }
 
 // --- Payments (unified billing + invoice) ---
@@ -104,7 +135,7 @@ export function usePaymentsPaginated(params: {
   page?: number;
   limit?: number;
   sortBy?: string;
-  sortOrder?: "asc" | "desc";
+  sortOrder?: 'asc' | 'desc';
   search?: string;
   status?: string;
   customerId?: string;
@@ -112,7 +143,7 @@ export function usePaymentsPaginated(params: {
   startDate?: string;
   endDate?: string;
 }) {
-  const key = buildKey("/payments", params);
+  const key = buildKey('/payments', params);
   return useSWR(key, () => api.getPaymentsPaginated(params), {
     dedupingInterval: TTL.DEFAULT,
   });
@@ -122,7 +153,7 @@ export function usePaymentsByContract(contractId: string | undefined) {
   return useSWR(
     contractId ? `/payments/contract/${contractId}` : null,
     () => api.getPaymentsByContract(contractId!),
-    { dedupingInterval: TTL.SHORT }
+    { dedupingInterval: TTL.SHORT },
   );
 }
 
@@ -130,7 +161,7 @@ export function useActivePayment(contractId: string | undefined) {
   return useSWR(
     contractId ? `/payments/contract/${contractId}/active` : null,
     () => api.getActivePaymentByContract(contractId!),
-    { dedupingInterval: TTL.SHORT }
+    { dedupingInterval: TTL.SHORT },
   );
 }
 
@@ -138,7 +169,7 @@ export function useCalendarData(contractId: string | undefined, year: number, mo
   return useSWR(
     contractId ? `/payments/contract/${contractId}/calendar?year=${year}&month=${month}` : null,
     () => api.getCalendarData(contractId!, year, month),
-    { dedupingInterval: TTL.SHORT }
+    { dedupingInterval: TTL.SHORT },
   );
 }
 
@@ -150,7 +181,7 @@ export function useReport(filters?: {
   motorModel?: string;
   batteryType?: string;
 }) {
-  const key = buildKey("/reports", filters);
+  const key = buildKey('/reports', filters);
   return useSWR(key, () => api.getReport(filters), {
     dedupingInterval: TTL.DEFAULT,
   });
@@ -161,11 +192,11 @@ export function useAuditLogsPaginated(params: {
   page?: number;
   limit?: number;
   sortBy?: string;
-  sortOrder?: "asc" | "desc";
+  sortOrder?: 'asc' | 'desc';
   search?: string;
   module?: string;
 }) {
-  const key = buildKey("/audit-logs", params);
+  const key = buildKey('/audit-logs', params);
   return useSWR(key, () => api.getAuditLogsPaginated(params), {
     dedupingInterval: TTL.DEFAULT,
   });
@@ -173,13 +204,13 @@ export function useAuditLogsPaginated(params: {
 
 // --- Settings ---
 export function useSettings() {
-  return useSWR("/settings", () => api.getSettings(), {
+  return useSWR('/settings', () => api.getSettings(), {
     dedupingInterval: TTL.LONG,
   });
 }
 
 export function useMotorRates() {
-  return useSWR("/settings/rates", () => api.getMotorRates(), {
+  return useSWR('/settings/rates', () => api.getMotorRates(), {
     dedupingInterval: TTL.LONG,
   });
 }
@@ -189,7 +220,7 @@ export function useSavingByContract(contractId: string | undefined) {
   return useSWR(
     contractId ? `/savings/contract/${contractId}` : null,
     () => api.getSavingByContract(contractId!),
-    { dedupingInterval: TTL.SHORT }
+    { dedupingInterval: TTL.SHORT },
   );
 }
 
@@ -197,7 +228,16 @@ export function useSavingBalance(contractId: string | undefined) {
   return useSWR(
     contractId ? `/savings/contract/${contractId}/balance` : null,
     () => api.getSavingBalance(contractId!),
-    { dedupingInterval: TTL.SHORT }
+    { dedupingInterval: TTL.SHORT },
+  );
+}
+
+// --- Service Records ---
+export function useServiceRecords(contractId: string | null) {
+  return useSWR(
+    contractId ? `/service-records/contract/${contractId}` : null,
+    contractId ? () => api.getServiceRecordsByContract(contractId) : null,
+    { dedupingInterval: TTL.DEFAULT },
   );
 }
 
@@ -209,13 +249,12 @@ export function useInvalidate() {
   const invalidate = useCallback(
     (...prefixes: string[]) => {
       mutate(
-        (key: unknown) =>
-          typeof key === "string" && prefixes.some((p) => key.startsWith(p)),
+        (key: unknown) => typeof key === 'string' && prefixes.some((p) => key.startsWith(p)),
         undefined,
-        { revalidate: true }
+        { revalidate: true },
       );
     },
-    [mutate]
+    [mutate],
   );
 
   return invalidate;

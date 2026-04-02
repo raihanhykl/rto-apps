@@ -36,6 +36,7 @@ Sistem kalender pembayaran saat ini menghitung status setiap tanggal secara **di
 **Alasan**: Sejalan dengan mekanisme rollover existing. Jika ada gap (misal tanggal 7 = UNPAID, tanggal 8 = HOLIDAY, tanggal 9 = PAID, tanggal 10 = hari ini), maka tagihan baru akan mengcover tanggal 7 + 10 (semua UNPAID where date ≤ today).
 
 **Flow detail:**
+
 1. Scheduler jam 00:01 → `generateDailyPayments()`
 2. Untuk setiap kontrak ACTIVE/OVERDUE:
    a. Buat PaymentDay record hari ini (jika belum ada)
@@ -47,6 +48,7 @@ Sistem kalender pembayaran saat ini menghitung status setiap tanggal secara **di
 5. `periodStart` = tanggal UNPAID paling awal, `periodEnd` = tanggal UNPAID paling akhir
 
 **Contoh skenario gap:**
+
 ```
 6 Mar = PAID     (sudah dibayar)
 7 Mar = UNPAID   (revert/koreksi admin)
@@ -54,6 +56,7 @@ Sistem kalender pembayaran saat ini menghitung status setiap tanggal secara **di
 9 Mar = PAID     (sudah dibayar)
 10 Mar = hari ini, PaymentDay baru dibuat → UNPAID
 ```
+
 Tagihan baru: cover tanggal 7 + 10 (2 hari kerja), amount = 2 × dailyRate.
 Tanggal 6 dan 9 tidak terpengaruh (sudah PAID). Tanggal 8 tidak terpengaruh (HOLIDAY).
 
@@ -66,6 +69,7 @@ Tanggal 6 dan 9 tidak terpengaruh (sudah PAID). Tanggal 8 tidak terpengaruh (HOL
 **Flow detail:**
 
 **Situasi awal:**
+
 ```
 Tanggal 8:  PENDING → linked ke PMT-001 (4 hari × Rp58.000 = Rp232.000)
 Tanggal 9:  PENDING → linked ke PMT-001
@@ -76,20 +80,24 @@ Tanggal 11: PENDING → linked ke PMT-001 ← hari ini
 **Admin action: "Kurangi tagihan jadi 2 hari" (tanggal 8-9 saja):**
 
 Step 1 — Void invoice lama:
+
 - PMT-001 → status `VOID`
 - PaymentDay tanggal 8-11: `invoiceId = null`, `status = UNPAID`
 
 Step 2 — Buat invoice baru untuk 2 hari:
+
 - PMT-002: 2 hari (tanggal 8-9), amount = Rp116.000, status `PENDING`
 - PaymentDay tanggal 8-9: `invoiceId = PMT-002`, `status = PENDING`
 - PaymentDay tanggal 10-11: tetap `UNPAID` (belum di-bill)
 
 **Customer bayar PMT-002:**
+
 - PMT-002 → `PAID`
 - PaymentDay tanggal 8-9 → `PAID`
 - Contract: `workingDaysPaid += 2`, `totalDaysPaid += 2`
 
 **Keesokan hari (tanggal 12) — Rollover otomatis:**
+
 - Scheduler cek semua UNPAID ≤ today → tanggal 10, 11, 12
 - Buat PMT-003: 3 hari × Rp58.000 = Rp174.000
 - PaymentDay tanggal 10-12 → `PENDING`, linked ke PMT-003
@@ -128,27 +136,27 @@ Presentation (controllers, routes) — hanya panggil Application services
 
 ### File-File Kunci yang Akan Dimodifikasi
 
-| File | Perubahan |
-|------|-----------|
-| `packages/backend/prisma/schema.prisma` | Tambah enum + model + relasi |
-| `packages/backend/src/domain/enums/index.ts` | Tambah `PaymentDayStatus` enum |
-| `packages/backend/src/domain/entities/PaymentDay.ts` | **BARU** — entity interface |
-| `packages/backend/src/domain/entities/index.ts` | Tambah export |
-| `packages/backend/src/domain/interfaces/IPaymentDayRepository.ts` | **BARU** — repo interface |
-| `packages/backend/src/domain/interfaces/index.ts` | Tambah export |
-| `packages/backend/src/infrastructure/repositories/InMemoryPaymentDayRepository.ts` | **BARU** |
-| `packages/backend/src/infrastructure/repositories/PrismaPaymentDayRepository.ts` | **BARU** |
-| `packages/backend/src/infrastructure/repositories/index.ts` | Tambah export |
-| `packages/backend/src/index.ts` | Wire repo baru, inject ke services |
-| `packages/backend/src/application/services/PaymentService.ts` | Update 10+ methods |
-| `packages/backend/src/application/services/ContractService.ts` | Update receiveUnit, cancel, repossess |
-| `packages/backend/src/infrastructure/scheduler.ts` | Tambah extend records step |
-| `packages/backend/src/presentation/controllers/PaymentController.ts` | Tambah admin correction endpoint |
-| `packages/backend/src/presentation/routes/index.ts` | Tambah route |
-| `packages/backend/src/__tests__/PaymentService.test.ts` | Update setup + tambah test cases |
-| `packages/frontend/src/components/PaymentCalendar.tsx` | Tambah status `voided` |
-| `packages/frontend/src/types/index.ts` | Tambah `PaymentDayStatus` enum |
-| `packages/frontend/src/lib/api.ts` | Tambah method admin correction |
+| File                                                                               | Perubahan                             |
+| ---------------------------------------------------------------------------------- | ------------------------------------- |
+| `packages/backend/prisma/schema.prisma`                                            | Tambah enum + model + relasi          |
+| `packages/backend/src/domain/enums/index.ts`                                       | Tambah `PaymentDayStatus` enum        |
+| `packages/backend/src/domain/entities/PaymentDay.ts`                               | **BARU** — entity interface           |
+| `packages/backend/src/domain/entities/index.ts`                                    | Tambah export                         |
+| `packages/backend/src/domain/interfaces/IPaymentDayRepository.ts`                  | **BARU** — repo interface             |
+| `packages/backend/src/domain/interfaces/index.ts`                                  | Tambah export                         |
+| `packages/backend/src/infrastructure/repositories/InMemoryPaymentDayRepository.ts` | **BARU**                              |
+| `packages/backend/src/infrastructure/repositories/PrismaPaymentDayRepository.ts`   | **BARU**                              |
+| `packages/backend/src/infrastructure/repositories/index.ts`                        | Tambah export                         |
+| `packages/backend/src/index.ts`                                                    | Wire repo baru, inject ke services    |
+| `packages/backend/src/application/services/PaymentService.ts`                      | Update 10+ methods                    |
+| `packages/backend/src/application/services/ContractService.ts`                     | Update receiveUnit, cancel, repossess |
+| `packages/backend/src/infrastructure/scheduler.ts`                                 | Tambah extend records step            |
+| `packages/backend/src/presentation/controllers/PaymentController.ts`               | Tambah admin correction endpoint      |
+| `packages/backend/src/presentation/routes/index.ts`                                | Tambah route                          |
+| `packages/backend/src/__tests__/PaymentService.test.ts`                            | Update setup + tambah test cases      |
+| `packages/frontend/src/components/PaymentCalendar.tsx`                             | Tambah status `voided`                |
+| `packages/frontend/src/types/index.ts`                                             | Tambah `PaymentDayStatus` enum        |
+| `packages/frontend/src/lib/api.ts`                                                 | Tambah method admin correction        |
 
 ---
 
@@ -170,6 +178,7 @@ enum PaymentDayStatus {
 ```
 
 **Alasan setiap status:**
+
 - `UNPAID` — Default saat record dibuat. Hari kerja belum ter-cover pembayaran. Di frontend: `date < today` → merah (overdue), `date >= today` → abu-abu (belum terbit).
 - `PENDING` — Ada tagihan aktif (PMT-xxx, status PENDING) yang mencakup hari ini. Kuning di frontend.
 - `PAID` — Sudah dibayar & dikonfirmasi. Hijau di frontend.
@@ -208,6 +217,7 @@ model PaymentDay {
 ```
 
 **Penjelasan field-by-field:**
+
 - `id`: UUID primary key, konsisten dengan semua model lain di project.
 - `contractId`: FK ke Contract. Setiap PaymentDay milik tepat 1 kontrak.
 - `date`: Tanggal spesifik. `@@unique([contractId, date])` menjamin tidak ada duplikat. Selalu midnight (00:00:00).
@@ -220,11 +230,13 @@ model PaymentDay {
 ### 1C. Update Relasi di Model Existing
 
 **Di model `Contract`** (sekitar line 170), sebelum `@@index`, tambah:
+
 ```prisma
   paymentDays PaymentDay[]
 ```
 
 **Di model `Invoice`** (sekitar line 211), sebelum `@@index`, tambah:
+
 ```prisma
   paymentDays PaymentDay[]
 ```
@@ -282,6 +294,7 @@ export interface PaymentDay {
 **File**: `packages/backend/src/domain/entities/index.ts`
 
 Tambah di akhir file:
+
 ```typescript
 export type { PaymentDay } from './PaymentDay';
 ```
@@ -297,7 +310,11 @@ import { PaymentDayStatus } from '../enums';
 export interface IPaymentDayRepository {
   findById(id: string): Promise<PaymentDay | null>;
   findByContractId(contractId: string): Promise<PaymentDay[]>;
-  findByContractAndDateRange(contractId: string, startDate: Date, endDate: Date): Promise<PaymentDay[]>;
+  findByContractAndDateRange(
+    contractId: string,
+    startDate: Date,
+    endDate: Date,
+  ): Promise<PaymentDay[]>;
   findByPaymentId(paymentId: string): Promise<PaymentDay[]>;
   findByContractAndDate(contractId: string, date: Date): Promise<PaymentDay | null>;
   findByContractAndStatus(contractId: string, status: PaymentDayStatus): Promise<PaymentDay[]>;
@@ -305,7 +322,11 @@ export interface IPaymentDayRepository {
   create(paymentDay: PaymentDay): Promise<PaymentDay>;
   createMany(paymentDays: PaymentDay[]): Promise<number>;
   update(id: string, data: Partial<PaymentDay>): Promise<PaymentDay | null>;
-  updateByContractAndDate(contractId: string, date: Date, data: Partial<PaymentDay>): Promise<PaymentDay | null>;
+  updateByContractAndDate(
+    contractId: string,
+    date: Date,
+    data: Partial<PaymentDay>,
+  ): Promise<PaymentDay | null>;
   updateManyByPaymentId(paymentId: string, data: Partial<PaymentDay>): Promise<number>;
 
   countByContractAndStatus(contractId: string, status: PaymentDayStatus): Promise<number>;
@@ -319,6 +340,7 @@ export interface IPaymentDayRepository {
 **File**: `packages/backend/src/domain/interfaces/index.ts`
 
 Tambah di akhir file:
+
 ```typescript
 export type { IPaymentDayRepository } from './IPaymentDayRepository';
 ```
@@ -334,6 +356,7 @@ export type { IPaymentDayRepository } from './IPaymentDayRepository';
 Implementasikan semua methods dari `IPaymentDayRepository` menggunakan `Map<string, PaymentDay>`.
 
 **Pattern yang WAJIB diikuti** (referensi: `InMemoryInvoiceRepository.ts`):
+
 - Private `private data = new Map<string, PaymentDay>();`
 - Semua method async (return Promise)
 - **Date comparison**: SELALU normalize ke midnight sebelum compare. Buat helper internal:
@@ -356,6 +379,7 @@ Implementasikan semua methods dari `IPaymentDayRepository` menggunakan `Map<stri
 **File BARU**: `packages/backend/src/infrastructure/repositories/PrismaPaymentDayRepository.ts`
 
 **Pattern yang WAJIB diikuti** (referensi: `PrismaInvoiceRepository.ts`):
+
 - Constructor menerima `PrismaClient`
 - Private `toEntity(raw: any): PaymentDay` method — cast Prisma types ke domain PaymentDay, termasuk enum casting:
   ```typescript
@@ -379,6 +403,7 @@ Implementasikan semua methods dari `IPaymentDayRepository` menggunakan `Map<stri
 **File**: `packages/backend/src/infrastructure/repositories/index.ts`
 
 Tambah:
+
 ```typescript
 export { InMemoryPaymentDayRepository } from './InMemoryPaymentDayRepository';
 export { PrismaPaymentDayRepository } from './PrismaPaymentDayRepository';
@@ -393,24 +418,31 @@ export { PrismaPaymentDayRepository } from './PrismaPaymentDayRepository';
 ### 4A. Import
 
 Tambah import di bagian atas (setelah existing imports dari repositories):
+
 ```typescript
-import { InMemoryPaymentDayRepository, PrismaPaymentDayRepository } from './infrastructure/repositories';
+import {
+  InMemoryPaymentDayRepository,
+  PrismaPaymentDayRepository,
+} from './infrastructure/repositories';
 import { IPaymentDayRepository } from './domain/interfaces/IPaymentDayRepository';
 ```
 
 ### 4B. Declare & Initialize Repository
 
 Di bagian repository declaration (line 58-63), tambah:
+
 ```typescript
 let paymentDayRepo: IPaymentDayRepository;
 ```
 
 Di blok `if (usePrisma)` (line 65-75), tambah:
+
 ```typescript
 paymentDayRepo = new PrismaPaymentDayRepository(prisma);
 ```
 
 Di blok `else` InMemory (line 76-84), tambah:
+
 ```typescript
 paymentDayRepo = new InMemoryPaymentDayRepository();
 ```
@@ -418,21 +450,42 @@ paymentDayRepo = new InMemoryPaymentDayRepository();
 ### 4C. Inject ke Services
 
 Ubah inisialisasi PaymentService (line 91):
+
 ```typescript
 // SEBELUM:
 const paymentService = new PaymentService(invoiceRepo, contractRepo, auditRepo, settingService);
 
 // SESUDAH:
-const paymentService = new PaymentService(invoiceRepo, contractRepo, paymentDayRepo, auditRepo, settingService);
+const paymentService = new PaymentService(
+  invoiceRepo,
+  contractRepo,
+  paymentDayRepo,
+  auditRepo,
+  settingService,
+);
 ```
 
 Ubah inisialisasi ContractService (line 90):
+
 ```typescript
 // SEBELUM:
-const contractService = new ContractService(contractRepo, customerRepo, invoiceRepo, auditRepo, settingService);
+const contractService = new ContractService(
+  contractRepo,
+  customerRepo,
+  invoiceRepo,
+  auditRepo,
+  settingService,
+);
 
 // SESUDAH:
-const contractService = new ContractService(contractRepo, customerRepo, invoiceRepo, paymentDayRepo, auditRepo, settingService);
+const contractService = new ContractService(
+  contractRepo,
+  customerRepo,
+  invoiceRepo,
+  paymentDayRepo,
+  auditRepo,
+  settingService,
+);
 ```
 
 ---
@@ -465,6 +518,7 @@ constructor(
 ```
 
 Import yang perlu ditambah di bagian atas file:
+
 ```typescript
 import { IPaymentDayRepository } from '../../domain/interfaces';
 import { PaymentDay } from '../../domain/entities';
@@ -592,6 +646,7 @@ private async syncContractFromPaymentDays(contractId: string): Promise<void> {
 **PENTING — Opsi B (Akumulasi Gap):** Method ini HARUS mengikuti prinsip: kumpulkan SEMUA PaymentDay `UNPAID` yang `date <= today` menjadi satu invoice, bukan hanya hari ini. Ini menangani skenario gap (lihat KEPUTUSAN DESAIN #1).
 
 **Flow baru per kontrak:**
+
 1. Ensure PaymentDay record hari ini exist → `generatePaymentDaysForPeriod(contract, today, 1)`
 2. Jika hari ini HOLIDAY → buat holiday payment (amount=0, auto-PAID), skip ke kontrak berikutnya
 3. Query semua PaymentDay `status = UNPAID` dan `date <= today` untuk kontrak ini
@@ -602,6 +657,7 @@ private async syncContractFromPaymentDays(contractId: string): Promise<void> {
    d. Update semua PaymentDay UNPAID → `status = PENDING`, `paymentId = newInvoice.id`
 
 **Contoh penanganan gap:**
+
 ```
 // Tanggal 7 = UNPAID (revert/koreksi), 8 = HOLIDAY, 9 = PAID, 10 = hari ini (baru dibuat, UNPAID)
 // Query UNPAID ≤ today → [7, 10]
@@ -610,6 +666,7 @@ private async syncContractFromPaymentDays(contractId: string): Promise<void> {
 ```
 
 **Setelah holiday handling** (setelah `await this.createHolidayPayment(contract, now)`):
+
 ```typescript
 // BARU: Ensure record exists dan link holiday payment
 await this.generatePaymentDaysForPeriod(contract, now, 1);
@@ -618,12 +675,17 @@ await this.paymentDayRepo.updateByContractAndDate(contract.id, now, {
 });
 // Note: holiday payment is auto-PAID, PaymentDay tetap HOLIDAY (sudah di-set saat generate)
 ```
+
 > Catatan: createHolidayPayment() sudah memanggil creditDayToContract(). Setelah PaymentDay fully working, panggil `syncContractFromPaymentDays()` di sini sebagai pengganti.
 
 **Setelah accumulated/daily payment created:**
+
 ```typescript
 // BARU: Link semua UNPAID days ke payment baru
-const unpaidDays = await this.paymentDayRepo.findByContractAndStatus(contract.id, PaymentDayStatus.UNPAID);
+const unpaidDays = await this.paymentDayRepo.findByContractAndStatus(
+  contract.id,
+  PaymentDayStatus.UNPAID,
+);
 const todayDate = getWibToday();
 for (const pd of unpaidDays) {
   const pdDate = new Date(pd.date);
@@ -642,6 +704,7 @@ for (const pd of unpaidDays) {
 **PENTING — Opsi B**: Rollover juga HARUS mengikuti prinsip akumulasi gap. Saat expired payment di-unlink, semua UNPAID days (termasuk gap dari periode sebelumnya) harus masuk ke invoice baru.
 
 Setelah expired payment di-mark EXPIRED (line 271-274):
+
 ```typescript
 // BARU: Unlink semua PaymentDay dari expired payment → kembali ke UNPAID
 await this.paymentDayRepo.updateManyByPaymentId(expiredPayment.id, {
@@ -651,12 +714,16 @@ await this.paymentDayRepo.updateManyByPaymentId(expiredPayment.id, {
 ```
 
 Setelah new payment created:
+
 ```typescript
 // BARU: Pastikan PaymentDay hari ini sudah exist
 await this.generatePaymentDaysForPeriod(contract, today, 1);
 
 // Link SEMUA UNPAID days (termasuk gap) ke new payment — Opsi B
-const allUnpaid = await this.paymentDayRepo.findByContractAndStatus(contract.id, PaymentDayStatus.UNPAID);
+const allUnpaid = await this.paymentDayRepo.findByContractAndStatus(
+  contract.id,
+  PaymentDayStatus.UNPAID,
+);
 for (const pd of allUnpaid) {
   const pdDate = new Date(pd.date);
   pdDate.setHours(0, 0, 0, 0);
@@ -672,6 +739,7 @@ for (const pd of allUnpaid) {
 ### 5G. Update: `payPayment()` (line 362-417)
 
 Setelah invoice di-mark PAID (line 380-383), tambah sebelum creditDayToContract:
+
 ```typescript
 // BARU: Update PaymentDay records → PAID
 if (payment.type === InvoiceType.DAILY_BILLING || payment.type === InvoiceType.MANUAL_PAYMENT) {
@@ -686,6 +754,7 @@ if (payment.type === InvoiceType.DAILY_BILLING || payment.type === InvoiceType.M
 ### 5H. Update: `voidPayment()` (line 817-844)
 
 Setelah invoice di-mark VOID (line 828):
+
 ```typescript
 // BARU: Kembalikan PaymentDay ke UNPAID
 await this.paymentDayRepo.updateManyByPaymentId(paymentId, {
@@ -697,6 +766,7 @@ await this.paymentDayRepo.updateManyByPaymentId(paymentId, {
 ### 5I. Update: `cancelPayment()` (line 573-609)
 
 Setelah payment di-void (line 578-580):
+
 ```typescript
 // BARU: Kembalikan PaymentDay ke UNPAID
 await this.paymentDayRepo.updateManyByPaymentId(paymentId, {
@@ -706,6 +776,7 @@ await this.paymentDayRepo.updateManyByPaymentId(paymentId, {
 ```
 
 Jika previous payment reactivated (line 583-590), setelah reactivation:
+
 ```typescript
 // BARU: Link PaymentDay ke reactivated previous payment
 if (previous && previous.periodStart && previous.periodEnd) {
@@ -714,7 +785,7 @@ if (previous && previous.periodStart && previous.periodEnd) {
   const end = new Date(previous.periodEnd);
   end.setHours(0, 0, 0, 0);
   while (d <= end) {
-    if (!this.isLiburBayar(await this.contractRepo.findById(payment.contractId) as Contract, d)) {
+    if (!this.isLiburBayar((await this.contractRepo.findById(payment.contractId)) as Contract, d)) {
       await this.paymentDayRepo.updateByContractAndDate(payment.contractId, d, {
         status: PaymentDayStatus.PENDING,
         paymentId: previous.id,
@@ -728,6 +799,7 @@ if (previous && previous.periodStart && previous.periodEnd) {
 ### 5J. Update: `revertPaymentStatus()` (line 884-923)
 
 Jika reverting dari PAID (line 894-896), tambah sebelum `revertPaymentFromContract`:
+
 ```typescript
 // BARU: Kembalikan PaymentDay ke UNPAID
 await this.paymentDayRepo.updateManyByPaymentId(payment.id, {
@@ -739,6 +811,7 @@ await this.paymentDayRepo.updateManyByPaymentId(payment.id, {
 ### 5K. Update: `createManualPayment()` (line 473-569)
 
 Setelah period calculation (setelah line 501, sebelum check existingActive):
+
 ```typescript
 // BARU: Ensure PaymentDay records exist untuk seluruh period
 const periodDays = Math.ceil((periodEnd.getTime() - periodStart.getTime()) / 86400000) + 1;
@@ -746,6 +819,7 @@ await this.generatePaymentDaysForPeriod(contract, periodStart, periodDays);
 ```
 
 Jika existingActive di-void (line 512-513):
+
 ```typescript
 // BARU: Unlink PaymentDay dari existing active
 await this.paymentDayRepo.updateManyByPaymentId(existingActive.id, {
@@ -755,6 +829,7 @@ await this.paymentDayRepo.updateManyByPaymentId(existingActive.id, {
 ```
 
 Setelah new merged payment created (line 548):
+
 ```typescript
 // BARU: Link semua working days ke new payment
 let linkCursor = new Date(mergedPeriodStart);
@@ -838,6 +913,7 @@ async getCalendarData(contractId: string, year: number, month: number): Promise<
 ```
 
 Update interface `CalendarDay` (line 21-25) juga:
+
 ```typescript
 export interface CalendarDay {
   date: string;
@@ -1010,6 +1086,7 @@ async reducePayment(
 ```
 
 **Sisa hari yang tidak ter-cover:**
+
 - Tetap `UNPAID` di PaymentDay → terlihat merah di kalender (karena `date < today`)
 - Besok saat scheduler `generateDailyPayments()` jalan, semua UNPAID days (termasuk sisa ini + hari baru) akan otomatis akumulasi ke invoice baru (Opsi B)
 - Tidak perlu logic tambahan — rollover existing sudah handle ini
@@ -1046,6 +1123,7 @@ constructor(
 ```
 
 Import yang perlu ditambah:
+
 ```typescript
 import { IPaymentDayRepository } from '../../domain/interfaces';
 import { PaymentDayStatus } from '../../domain/enums';
@@ -1098,8 +1176,14 @@ Setelah void semua pending/failed invoices, tambah:
 
 ```typescript
 // BARU: Void semua UNPAID dan PENDING PaymentDays
-const unpaidDays = await this.paymentDayRepo.findByContractAndStatus(contractId, PaymentDayStatus.UNPAID);
-const pendingDays = await this.paymentDayRepo.findByContractAndStatus(contractId, PaymentDayStatus.PENDING);
+const unpaidDays = await this.paymentDayRepo.findByContractAndStatus(
+  contractId,
+  PaymentDayStatus.UNPAID,
+);
+const pendingDays = await this.paymentDayRepo.findByContractAndStatus(
+  contractId,
+  PaymentDayStatus.PENDING,
+);
 for (const day of [...unpaidDays, ...pendingDays]) {
   await this.paymentDayRepo.update(day.id, {
     status: PaymentDayStatus.VOIDED,
@@ -1180,7 +1264,11 @@ Tambah setelah route calendar (setelah line yang berisi `/payments/contract/:con
 
 ```typescript
 // Admin correction: ubah status PaymentDay tertentu
-router.patch('/payments/contract/:contractId/day/:date', authMiddleware, controllers.paymentController.updatePaymentDayStatus);
+router.patch(
+  '/payments/contract/:contractId/day/:date',
+  authMiddleware,
+  controllers.paymentController.updatePaymentDayStatus,
+);
 
 // Partial payment: kurangi jumlah hari pada tagihan aktif
 router.post('/payments/:id/reduce', authMiddleware, controllers.paymentController.reducePayment);
@@ -1215,6 +1303,7 @@ async runDailyTasks(): Promise<void> {
 **File**: `packages/frontend/src/types/index.ts`
 
 Tambah enum:
+
 ```typescript
 export enum PaymentDayStatus {
   UNPAID = 'UNPAID',
@@ -1230,6 +1319,7 @@ export enum PaymentDayStatus {
 **File**: `packages/frontend/src/components/PaymentCalendar.tsx`
 
 Update `CalendarDay` interface:
+
 ```typescript
 interface CalendarDay {
   date: string;
@@ -1239,6 +1329,7 @@ interface CalendarDay {
 ```
 
 Tambah handling warna untuk `voided` di mapping status → CSS class:
+
 ```typescript
 // Di bagian status color mapping, tambah case:
 case 'voided':
@@ -1246,6 +1337,7 @@ case 'voided':
 ```
 
 Tambah di legend:
+
 ```typescript
 { key: 'voided', label: 'Dibatalkan', color: 'bg-gray-400', count: /* hitung dari data */ }
 ```
@@ -1255,6 +1347,7 @@ Tambah di legend:
 **File**: `packages/frontend/src/lib/api.ts`
 
 Tambah method:
+
 ```typescript
 async updatePaymentDayStatus(contractId: string, date: string, status: string, notes?: string) {
   return this.request<any>(`/payments/contract/${contractId}/day/${date}`, {
@@ -1304,7 +1397,14 @@ let paymentDayRepo: InMemoryPaymentDayRepository;
 beforeEach(() => {
   // ... existing ...
   paymentDayRepo = new InMemoryPaymentDayRepository();
-  contractService = new ContractService(contractRepo, customerRepo, invoiceRepo, paymentDayRepo, auditRepo, settingService);
+  contractService = new ContractService(
+    contractRepo,
+    customerRepo,
+    invoiceRepo,
+    paymentDayRepo,
+    auditRepo,
+    settingService,
+  );
 });
 ```
 

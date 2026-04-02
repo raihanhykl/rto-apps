@@ -1,8 +1,8 @@
-"use client";
+'use client';
 
-import { useToastStore } from "@/stores/toastStore";
-import { X, CheckCircle2, AlertCircle, Info } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { useToastStore } from '@/stores/toastStore';
+import { X, CheckCircle2, AlertCircle, Info } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 export function Toaster() {
   const { toasts, removeToast } = useToastStore();
@@ -15,19 +15,21 @@ export function Toaster() {
         <div
           key={t.id}
           className={cn(
-            "flex items-start gap-3 rounded-lg border p-4 shadow-lg animate-in slide-in-from-bottom-5 fade-in-0 bg-card",
-            t.variant === "destructive" && "border-destructive/50 text-destructive",
-            t.variant === "success" && "border-success/50"
+            'flex items-start gap-3 rounded-lg border p-4 shadow-lg animate-in slide-in-from-bottom-5 fade-in-0 bg-card',
+            t.variant === 'destructive' && 'border-destructive/50 text-destructive',
+            t.variant === 'success' && 'border-success/50',
           )}
         >
-          {t.variant === "success" && <CheckCircle2 className="h-5 w-5 text-success shrink-0 mt-0.5" />}
-          {t.variant === "destructive" && <AlertCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />}
-          {t.variant === "default" && <Info className="h-5 w-5 text-primary shrink-0 mt-0.5" />}
+          {t.variant === 'success' && (
+            <CheckCircle2 className="h-5 w-5 text-success shrink-0 mt-0.5" />
+          )}
+          {t.variant === 'destructive' && (
+            <AlertCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+          )}
+          {t.variant === 'default' && <Info className="h-5 w-5 text-primary shrink-0 mt-0.5" />}
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold">{t.title}</p>
-            {t.description && (
-              <p className="text-sm text-muted-foreground mt-1">{t.description}</p>
-            )}
+            {t.description && <p className="text-sm text-muted-foreground mt-1">{t.description}</p>}
           </div>
           <button
             onClick={() => removeToast(t.id)}

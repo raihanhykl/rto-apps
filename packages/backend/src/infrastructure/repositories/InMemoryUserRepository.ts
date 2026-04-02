@@ -13,7 +13,7 @@ export class InMemoryUserRepository implements IUserRepository {
   }
 
   async findByUsername(username: string): Promise<User | null> {
-    return Array.from(this.users.values()).find(u => u.username === username) || null;
+    return Array.from(this.users.values()).find((u) => u.username === username) || null;
   }
 
   async create(user: User): Promise<User> {

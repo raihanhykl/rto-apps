@@ -2,29 +2,36 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
 
 class ApiClient {
   private token: string | null = null;
+  private refreshing: Promise<boolean> | null = null;
 
   setToken(token: string | null) {
     this.token = token;
-    if (token) {
-      if (typeof window !== 'undefined') localStorage.setItem('token', token);
-    } else {
-      if (typeof window !== 'undefined') localStorage.removeItem('token');
-    }
   }
 
   getToken(): string | null {
-    if (this.token) return this.token;
-    if (typeof window !== 'undefined') {
-      this.token = localStorage.getItem('token');
-    }
     return this.token;
+  }
+
+  private async tryRefresh(): Promise<boolean> {
+    try {
+      const res = await fetch(`${API_BASE}/auth/refresh`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      if (!res.ok) return false;
+      const data = await res.json();
+      this.token = data.token;
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   private async request<T>(path: string, options: RequestInit = {}): Promise<T> {
     const token = this.getToken();
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      ...(options.headers as Record<string, string> || {}),
+      ...((options.headers as Record<string, string>) || {}),
     };
 
     if (token) {
@@ -34,10 +41,49 @@ class ApiClient {
     const res = await fetch(`${API_BASE}${path}`, {
       ...options,
       headers,
+      credentials: 'include',
     });
 
-    if (res.status === 401) {
-      this.setToken(null);
+    if (res.status === 401 && path !== '/auth/login' && path !== '/auth/refresh') {
+      // Attempt token refresh (deduplicate concurrent refreshes)
+      if (!this.refreshing) {
+        this.refreshing = this.tryRefresh().finally(() => {
+          this.refreshing = null;
+        });
+      }
+      const refreshed = await this.refreshing;
+
+      if (refreshed) {
+        // Retry original request with new token
+        const retryHeaders: Record<string, string> = {
+          'Content-Type': 'application/json',
+          ...((options.headers as Record<string, string>) || {}),
+          Authorization: `Bearer ${this.token}`,
+        };
+        const retryRes = await fetch(`${API_BASE}${path}`, {
+          ...options,
+          headers: retryHeaders,
+          credentials: 'include',
+        });
+
+        if (retryRes.ok) {
+          return this.parseResponse<T>(retryRes);
+        }
+
+        if (retryRes.status === 401) {
+          this.token = null;
+          if (typeof window !== 'undefined') {
+            window.location.href = '/login';
+          }
+          throw new Error('Unauthorized');
+        }
+
+        const data = await retryRes.json().catch(() => ({ error: 'Request failed' }));
+        throw new Error(data.error || 'Request failed');
+      }
+
+      // Refresh failed — redirect to login
+      this.token = null;
       if (typeof window !== 'undefined') {
         window.location.href = '/login';
       }
@@ -49,7 +95,10 @@ class ApiClient {
       throw new Error(data.error || 'Request failed');
     }
 
-    // Handle download responses
+    return this.parseResponse<T>(res);
+  }
+
+  private async parseResponse<T>(res: Response): Promise<T> {
     const contentType = res.headers.get('content-type');
     if (contentType?.includes('text/csv') || contentType?.includes('text/tab-separated-values')) {
       return (await res.text()) as unknown as T;
@@ -57,20 +106,30 @@ class ApiClient {
     if (contentType?.includes('application/pdf')) {
       return (await res.blob()) as unknown as T;
     }
-
     return res.json();
   }
 
   // Auth
   async login(username: string, password: string) {
-    return this.request<{ token: string; user: any }>('/auth/login', {
+    const result = await this.request<{ token: string; user: any }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ username, password }),
     });
+    // Store access token in memory
+    this.token = result.token;
+    return result;
   }
 
   async logout() {
-    return this.request('/auth/logout', { method: 'POST' });
+    try {
+      await this.request('/auth/logout', { method: 'POST' });
+    } finally {
+      this.token = null;
+    }
+  }
+
+  async refreshToken(): Promise<boolean> {
+    return this.tryRefresh();
   }
 
   async getMe() {
@@ -88,7 +147,14 @@ class ApiClient {
     return this.request<any[]>(`/customers${query}`);
   }
 
-  async getCustomersPaginated(params: { page?: number; limit?: number; sortBy?: string; sortOrder?: 'asc' | 'desc'; search?: string; gender?: string }) {
+  async getCustomersPaginated(params: {
+    page?: number;
+    limit?: number;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
+    search?: string;
+    gender?: string;
+  }) {
     const query = new URLSearchParams();
     query.set('page', String(params.page || 1));
     query.set('limit', String(params.limit || 20));
@@ -126,7 +192,18 @@ class ApiClient {
     return this.request<any[]>('/contracts');
   }
 
-  async getContractsPaginated(params: { page?: number; limit?: number; sortBy?: string; sortOrder?: 'asc' | 'desc'; search?: string; status?: string; motorModel?: string; batteryType?: string; dpScheme?: string; dpFullyPaid?: string }) {
+  async getContractsPaginated(params: {
+    page?: number;
+    limit?: number;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
+    search?: string;
+    status?: string;
+    motorModel?: string;
+    batteryType?: string;
+    dpScheme?: string;
+    dpFullyPaid?: string;
+  }) {
     const query = new URLSearchParams();
     query.set('page', String(params.page || 1));
     query.set('limit', String(params.limit || 20));
@@ -181,7 +258,18 @@ class ApiClient {
     });
   }
 
-  async editContract(id: string, data: { notes?: string; gracePeriodDays?: number; ownershipTargetDays?: number; color?: string; year?: number | null; vinNumber?: string; engineNumber?: string }) {
+  async editContract(
+    id: string,
+    data: {
+      notes?: string;
+      gracePeriodDays?: number;
+      ownershipTargetDays?: number;
+      color?: string;
+      year?: number | null;
+      vinNumber?: string;
+      engineNumber?: string;
+    },
+  ) {
     return this.request<any>(`/contracts/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
@@ -216,7 +304,18 @@ class ApiClient {
     return this.request<any[]>('/payments');
   }
 
-  async getPaymentsPaginated(params: { page?: number; limit?: number; sortBy?: string; sortOrder?: 'asc' | 'desc'; search?: string; status?: string; customerId?: string; invoiceType?: string; startDate?: string; endDate?: string }) {
+  async getPaymentsPaginated(params: {
+    page?: number;
+    limit?: number;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
+    search?: string;
+    status?: string;
+    customerId?: string;
+    invoiceType?: string;
+    startDate?: string;
+    endDate?: string;
+  }) {
     const query = new URLSearchParams();
     query.set('page', String(params.page || 1));
     query.set('limit', String(params.limit || 20));
@@ -269,10 +368,13 @@ class ApiClient {
   }
 
   async bulkMarkPaid(paymentIds: string[]) {
-    return this.request<{ success: string[]; failed: Array<{ id: string; error: string }> }>('/payments/bulk-pay', {
-      method: 'POST',
-      body: JSON.stringify({ paymentIds }),
-    });
+    return this.request<{ success: string[]; failed: Array<{ id: string; error: string }> }>(
+      '/payments/bulk-pay',
+      {
+        method: 'POST',
+        body: JSON.stringify({ paymentIds }),
+      },
+    );
   }
 
   async payPayment(id: string) {
@@ -291,14 +393,18 @@ class ApiClient {
 
   async getCalendarData(contractId: string, year: number, month: number) {
     return this.request<Array<{ date: string; status: string; amount?: number }>>(
-      `/payments/contract/${contractId}/calendar?year=${year}&month=${month}`
+      `/payments/contract/${contractId}/calendar?year=${year}&month=${month}`,
     );
   }
 
   async previewManualPayment(contractId: string, days: number) {
-    return this.request<{ amount: number; lateFee: number; total: number; daysCount: number; dailyRate: number }>(
-      `/payments/contract/${contractId}/manual-preview?days=${days}`
-    );
+    return this.request<{
+      amount: number;
+      lateFee: number;
+      total: number;
+      daysCount: number;
+      dailyRate: number;
+    }>(`/payments/contract/${contractId}/manual-preview?days=${days}`);
   }
 
   async createManualPayment(contractId: string, days: number) {
@@ -333,7 +439,13 @@ class ApiClient {
   }
 
   // Reports
-  async getReport(filters?: { startDate?: string; endDate?: string; status?: string; motorModel?: string; batteryType?: string }) {
+  async getReport(filters?: {
+    startDate?: string;
+    endDate?: string;
+    status?: string;
+    motorModel?: string;
+    batteryType?: string;
+  }) {
     const query = new URLSearchParams();
     if (filters?.startDate) query.set('startDate', filters.startDate);
     if (filters?.endDate) query.set('endDate', filters.endDate);
@@ -344,7 +456,13 @@ class ApiClient {
     return this.request<any>(`/reports${queryStr}`);
   }
 
-  async exportReportJSON(filters?: { startDate?: string; endDate?: string; status?: string; motorModel?: string; batteryType?: string }) {
+  async exportReportJSON(filters?: {
+    startDate?: string;
+    endDate?: string;
+    status?: string;
+    motorModel?: string;
+    batteryType?: string;
+  }) {
     const query = new URLSearchParams();
     if (filters?.startDate) query.set('startDate', filters.startDate);
     if (filters?.endDate) query.set('endDate', filters.endDate);
@@ -355,7 +473,13 @@ class ApiClient {
     return this.request<string>(`/reports/export/json${queryStr}`);
   }
 
-  async exportReportCSV(filters?: { startDate?: string; endDate?: string; status?: string; motorModel?: string; batteryType?: string }) {
+  async exportReportCSV(filters?: {
+    startDate?: string;
+    endDate?: string;
+    status?: string;
+    motorModel?: string;
+    batteryType?: string;
+  }) {
     const query = new URLSearchParams();
     if (filters?.startDate) query.set('startDate', filters.startDate);
     if (filters?.endDate) query.set('endDate', filters.endDate);
@@ -366,7 +490,13 @@ class ApiClient {
     return this.request<string>(`/reports/export/csv${queryStr}`);
   }
 
-  async exportReportXLSV(filters?: { startDate?: string; endDate?: string; status?: string; motorModel?: string; batteryType?: string }) {
+  async exportReportXLSV(filters?: {
+    startDate?: string;
+    endDate?: string;
+    status?: string;
+    motorModel?: string;
+    batteryType?: string;
+  }) {
     const query = new URLSearchParams();
     if (filters?.startDate) query.set('startDate', filters.startDate);
     if (filters?.endDate) query.set('endDate', filters.endDate);
@@ -386,7 +516,14 @@ class ApiClient {
     return this.request<any[]>(`/audit-logs${queryStr}`);
   }
 
-  async getAuditLogsPaginated(params: { page?: number; limit?: number; sortBy?: string; sortOrder?: 'asc' | 'desc'; search?: string; module?: string }) {
+  async getAuditLogsPaginated(params: {
+    page?: number;
+    limit?: number;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
+    search?: string;
+    module?: string;
+  }) {
     const query = new URLSearchParams();
     query.set('page', String(params.page || 1));
     query.set('limit', String(params.limit || 20));
@@ -419,21 +556,29 @@ class ApiClient {
 
   // Saving
   async getSavingByContract(contractId: string) {
-    return this.request<{ balance: number; transactions: any[] }>(`/savings/contract/${contractId}`);
+    return this.request<{ balance: number; transactions: any[] }>(
+      `/savings/contract/${contractId}`,
+    );
   }
 
   async getSavingBalance(contractId: string) {
     return this.request<{ balance: number }>(`/savings/contract/${contractId}/balance`);
   }
 
-  async debitSavingForService(contractId: string, data: { amount: number; description: string; photo?: string; notes?: string }) {
+  async debitSavingForService(
+    contractId: string,
+    data: { amount: number; description: string; photo?: string; notes?: string },
+  ) {
     return this.request<any>(`/savings/contract/${contractId}/debit/service`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async debitSavingForTransfer(contractId: string, data: { amount: number; description: string; photo?: string; notes?: string }) {
+  async debitSavingForTransfer(
+    contractId: string,
+    data: { amount: number; description: string; photo?: string; notes?: string },
+  ) {
     return this.request<any>(`/savings/contract/${contractId}/debit/transfer`, {
       method: 'POST',
       body: JSON.stringify(data),
@@ -451,6 +596,56 @@ class ApiClient {
     return this.request<{ balance: number }>(`/savings/contract/${contractId}/recalculate`, {
       method: 'POST',
     });
+  }
+
+  // Service Records
+  async getServiceRecordsByContract(contractId: string) {
+    return this.request<any[]>(`/service-records/contract/${contractId}`);
+  }
+
+  async getServiceRecordById(id: string) {
+    return this.request<any>(`/service-records/${id}`);
+  }
+
+  async createServiceRecord(data: {
+    contractId: string;
+    serviceType: string;
+    replacementProvided: boolean;
+    startDate: string;
+    endDate: string;
+    notes?: string;
+    attachment?: string | null;
+    serviceCost?: number;
+    partsReplaced?: string | null;
+    partsRepaired?: string | null;
+  }) {
+    return this.request<any>('/service-records', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async revokeServiceRecord(id: string, reason: string) {
+    return this.request<any>(`/service-records/${id}/revoke`, {
+      method: 'PATCH',
+      body: JSON.stringify({ reason }),
+    });
+  }
+
+  // Scheduler
+  async runDailyTasks() {
+    return this.request<{ success: boolean; message: string }>('/scheduler/run-daily-tasks', {
+      method: 'POST',
+    });
+  }
+
+  async getSchedulerStatus() {
+    return this.request<{
+      isStarted: boolean;
+      isJobRunning: boolean;
+      lastRunAt: string | null;
+      lastRunResult: 'success' | 'error' | null;
+    }>('/scheduler/status');
   }
 }
 
