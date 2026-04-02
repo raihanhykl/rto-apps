@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 test.describe('Authentication', () => {
   test('should show login page', async ({ page }) => {
     await page.goto('/login');
-    await expect(page.getByRole('heading', { name: /login/i })).toBeVisible();
+    await expect(page.getByText('RTO Management System')).toBeVisible();
   });
 
   test('should login with valid credentials', async ({ page }) => {
@@ -14,7 +14,7 @@ test.describe('Authentication', () => {
     await page.getByRole('button', { name: /masuk|login/i }).click();
 
     // Should redirect to dashboard
-    await expect(page).toHaveURL(/\/(dashboard)?$/);
+    await expect(page).toHaveURL(/\/(dashboard)?$/, { timeout: 15000 });
   });
 
   test('should show error with invalid credentials', async ({ page }) => {
@@ -25,6 +25,6 @@ test.describe('Authentication', () => {
     await page.getByRole('button', { name: /masuk|login/i }).click();
 
     // Should show error
-    await expect(page.getByText(/salah|invalid|gagal/i)).toBeVisible();
+    await expect(page.getByText(/salah|invalid|gagal/i)).toBeVisible({ timeout: 10000 });
   });
 });

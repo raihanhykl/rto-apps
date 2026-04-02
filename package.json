@@ -27,6 +27,9 @@
     "packages/frontend/src/**/*.{ts,tsx}": [
       "prettier --write"
     ],
+    "packages/frontend/e2e/**/*.ts": [
+      "prettier --write"
+    ],
     "*.{json,md,yml,yaml}": [
       "prettier --write"
     ]

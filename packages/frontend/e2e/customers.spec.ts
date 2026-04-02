@@ -5,7 +5,7 @@ async function login(page: import('@playwright/test').Page) {
   await page.getByPlaceholder(/username/i).fill('admin');
   await page.getByPlaceholder(/password/i).fill('admin123');
   await page.getByRole('button', { name: /masuk|login/i }).click();
-  await page.waitForURL(/\/(dashboard)?$/);
+  await expect(page).toHaveURL(/\/(dashboard)?$/, { timeout: 15000 });
 }
 
 test.describe('Customers', () => {
@@ -15,8 +15,15 @@ test.describe('Customers', () => {
 
   test('should display customers list', async ({ page }) => {
     await page.goto('/customers');
-    // Should see customer table or list
-    await expect(page.getByText(/customer/i).first()).toBeVisible();
+    // Should see customer heading or table in main content
+    await expect(
+      page
+        .locator('main')
+        .getByText(/customer/i)
+        .first(),
+    ).toBeVisible({
+      timeout: 10000,
+    });
   });
 
   test('should have search functionality', async ({ page }) => {

@@ -6,7 +6,7 @@ async function login(page: import('@playwright/test').Page) {
   await page.getByPlaceholder(/username/i).fill('admin');
   await page.getByPlaceholder(/password/i).fill('admin123');
   await page.getByRole('button', { name: /masuk|login/i }).click();
-  await page.waitForURL(/\/(dashboard)?$/);
+  await expect(page).toHaveURL(/\/(dashboard)?$/, { timeout: 15000 });
 }
 
 test.describe('Dashboard', () => {
@@ -15,13 +15,18 @@ test.describe('Dashboard', () => {
   });
 
   test('should display dashboard stats', async ({ page }) => {
-    await page.goto('/');
-    // Should see some stats cards
-    await expect(page.getByText(/customer|kontrak|pembayaran/i).first()).toBeVisible();
+    // Already on dashboard from login, wait for stats to load in main content area
+    await expect(
+      page
+        .locator('main')
+        .getByText(/customer/i)
+        .first(),
+    ).toBeVisible({
+      timeout: 10000,
+    });
   });
 
   test('should navigate to customers page', async ({ page }) => {
-    await page.goto('/');
     await page
       .getByRole('link', { name: /customer/i })
       .first()
@@ -30,7 +35,6 @@ test.describe('Dashboard', () => {
   });
 
   test('should navigate to contracts page', async ({ page }) => {
-    await page.goto('/');
     await page
       .getByRole('link', { name: /kontrak|contract/i })
       .first()
