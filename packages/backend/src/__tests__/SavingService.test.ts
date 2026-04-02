@@ -203,9 +203,34 @@ describe('SavingService', () => {
       expect(tx.balanceBefore).toBe(500000);
       expect(tx.balanceAfter).toBe(200000);
       expect(tx.description).toBe('Service rem depan + ganti kampas');
+      expect(tx.serviceRecordId).toBeNull(); // no serviceRecordId provided
 
       const updated = await contractRepo.findById(contract.id);
       expect(updated!.savingBalance).toBe(200000);
+    });
+
+    it('should save serviceRecordId when provided in debitForService', async () => {
+      const contract = await createContract({ savingBalance: 500000 });
+      const serviceRecordId = 'service-record-123';
+
+      const tx = await savingService.debitForService(
+        contract.id,
+        {
+          amount: 100000,
+          description: 'Service terkait record',
+          serviceRecordId,
+        },
+        'admin',
+      );
+
+      expect(tx.serviceRecordId).toBe(serviceRecordId);
+      expect(tx.balanceAfter).toBe(400000);
+
+      // Verify the transaction can be found by serviceRecordId
+      const found = await savingTxRepo.findByServiceRecordId(serviceRecordId);
+      expect(found).not.toBeNull();
+      expect(found!.id).toBe(tx.id);
+      expect(found!.serviceRecordId).toBe(serviceRecordId);
     });
 
     it('should throw error if amount exceeds saving balance', async () => {
@@ -490,6 +515,67 @@ describe('SavingService', () => {
     });
   });
 
+  // ============ REVERSE SERVICE DEBIT ============
+  describe('reverseServiceDebit', () => {
+    it('should reverse debit and restore saving balance when service record is revoked', async () => {
+      const contract = await createContract({ savingBalance: 500000 });
+      const serviceRecordId = 'service-record-to-revoke';
+
+      // Create a debit linked to the service record
+      await savingService.debitForService(
+        contract.id,
+        {
+          amount: 200000,
+          description: 'Service besar',
+          serviceRecordId,
+        },
+        'admin',
+      );
+
+      // Verify balance after debit
+      const afterDebit = await contractRepo.findById(contract.id);
+      expect(afterDebit!.savingBalance).toBe(300000);
+
+      // Act: reverse the service debit
+      const reversalTx = await savingService.reverseServiceDebit(serviceRecordId, 'admin');
+
+      // Assert
+      expect(reversalTx).not.toBeNull();
+      expect(reversalTx!.type).toBe(SavingTransactionType.REVERSAL);
+      expect(reversalTx!.amount).toBe(200000);
+      expect(reversalTx!.balanceBefore).toBe(300000);
+      expect(reversalTx!.balanceAfter).toBe(500000);
+      expect(reversalTx!.serviceRecordId).toBe(serviceRecordId);
+
+      // Verify contract balance restored
+      const afterReversal = await contractRepo.findById(contract.id);
+      expect(afterReversal!.savingBalance).toBe(500000);
+    });
+
+    it('should return null when no debit found for serviceRecordId', async () => {
+      const result = await savingService.reverseServiceDebit('nonexistent-service-record', 'admin');
+      expect(result).toBeNull();
+    });
+
+    it('should create audit log for service debit reversal', async () => {
+      const contract = await createContract({ savingBalance: 300000 });
+      const serviceRecordId = 'service-record-audit';
+
+      await savingService.debitForService(
+        contract.id,
+        { amount: 100000, description: 'Service', serviceRecordId },
+        'admin',
+      );
+
+      await savingService.reverseServiceDebit(serviceRecordId, 'admin');
+
+      const logs = await auditRepo.findRecent(10);
+      const reversalLog = logs.find((l) => l.description.includes('service record revoked'));
+      expect(reversalLog).toBeDefined();
+      expect(reversalLog!.module).toBe('saving');
+    });
+  });
+
   // ============ TRANSACTION HISTORY ============
   describe('getTransactionHistory', () => {
     it('should return transactions ordered by createdAt DESC', async () => {
@@ -527,6 +613,7 @@ describe('SavingService', () => {
         balanceBefore: 0,
         balanceAfter: 50000,
         paymentId: null,
+        serviceRecordId: null,
         daysCount: 10,
         description: null,
         photo: null,
@@ -543,6 +630,7 @@ describe('SavingService', () => {
         balanceBefore: 50000,
         balanceAfter: 30000,
         paymentId: null,
+        serviceRecordId: null,
         daysCount: null,
         description: 'Service',
         photo: null,

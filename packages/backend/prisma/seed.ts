@@ -4,6 +4,31 @@ import bcryptjs from 'bcryptjs';
 import { customers } from './data/customers';
 import { contracts, DateTuple } from './data/contracts';
 import { users } from './data/users';
+// Graceful import — jika file serviceRecords tidak ada atau kosong, seed tetap jalan
+import type { ServiceRecordSeed } from './data/serviceRecords';
+let serviceRecordSeeds: ServiceRecordSeed[] = [];
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const mod = require('./data/serviceRecords');
+  serviceRecordSeeds = mod.serviceRecords || [];
+} catch {
+  // File tidak ada atau error → skip service records
+}
+
+// Service imports untuk seeding ServiceRecords via business logic
+import { PrismaServiceRecordRepository } from '../src/infrastructure/repositories/PrismaServiceRecordRepository';
+import { PrismaPaymentDayRepository } from '../src/infrastructure/repositories/PrismaPaymentDayRepository';
+import { PrismaContractRepository } from '../src/infrastructure/repositories/PrismaContractRepository';
+import { PrismaInvoiceRepository } from '../src/infrastructure/repositories/PrismaInvoiceRepository';
+import { PrismaAuditLogRepository } from '../src/infrastructure/repositories/PrismaAuditLogRepository';
+import { PrismaSettingRepository } from '../src/infrastructure/repositories/PrismaSettingRepository';
+import { PrismaSavingTransactionRepository } from '../src/infrastructure/repositories/PrismaSavingTransactionRepository';
+import { PrismaTransactionManager } from '../src/infrastructure/transactions/PrismaTransactionManager';
+import { SettingService } from '../src/application/services/SettingService';
+import { PaymentService } from '../src/application/services/PaymentService';
+import { SavingService } from '../src/application/services/SavingService';
+import { ServiceCompensationService } from '../src/application/services/ServiceCompensationService';
+import { ServiceType } from '../src/domain/enums';
 
 const prisma = new PrismaClient();
 
@@ -109,6 +134,7 @@ function countCalendarDays(
 // ====== Constants ======
 const OWN_TARGET = 1278;
 const GRACE_DAYS = 7;
+const SAVING_PER_DAY = 5000;
 
 const RATES: Record<string, number> = {
   ATHENA_REGULAR: 58000,
@@ -211,6 +237,7 @@ async function seedSettings() {
 async function resetData() {
   console.log('\n[RESET] Deleting existing data...');
   const counts = {
+    serviceRecords: await prisma.serviceRecord.deleteMany({}),
     savingTransactions: await prisma.savingTransaction.deleteMany({}),
     paymentDays: await prisma.paymentDay.deleteMany({}),
     auditLogs: await prisma.auditLog.deleteMany({}),
@@ -219,7 +246,7 @@ async function resetData() {
     customers: await prisma.customer.deleteMany({}),
   };
   console.log(
-    `  Deleted: ${counts.savingTransactions.count} saving txns, ${counts.paymentDays.count} payment days, ${counts.auditLogs.count} audit logs, ${counts.invoices.count} payments, ${counts.contracts.count} contracts, ${counts.customers.count} customers`,
+    `  Deleted: ${counts.serviceRecords.count} service records, ${counts.savingTransactions.count} saving txns, ${counts.paymentDays.count} payment days, ${counts.auditLogs.count} audit logs, ${counts.invoices.count} payments, ${counts.contracts.count} contracts, ${counts.customers.count} customers`,
   );
 }
 
@@ -260,6 +287,134 @@ async function seedCustomers(): Promise<number> {
 
   console.log(`  Customers: ${created} created, ${skipped} skipped (already exist)`);
   return created;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function buildSavingTransactions(
+  allPayments: any[],
+  adminId: string,
+): { txs: any[]; balanceMap: Map<string, number> } {
+  const allSavingTxs: any[] = [];
+  const balanceMap = new Map<string, number>();
+
+  // Group qualifying payments by contractId (DAILY_BILLING + PAID + !holiday + daysCount>0)
+  const paymentsByContract = new Map<string, any[]>();
+  for (const pmt of allPayments) {
+    if (pmt.type !== 'DAILY_BILLING') continue;
+    if (pmt.status !== 'PAID') continue;
+    if (pmt.isHoliday) continue;
+    if (!pmt.daysCount || pmt.daysCount <= 0) continue;
+    const arr = paymentsByContract.get(pmt.contractId) || [];
+    arr.push(pmt);
+    paymentsByContract.set(pmt.contractId, arr);
+  }
+
+  // Process each contract — only CREDITs (debits come from seedServiceRecords)
+  for (const row of contracts) {
+    const pmts = paymentsByContract.get(row.id) || [];
+    if (pmts.length === 0) continue;
+
+    let balance = 0;
+    for (const pmt of pmts) {
+      const amount = SAVING_PER_DAY * pmt.daysCount;
+      allSavingTxs.push({
+        id: uuidv4(),
+        contractId: row.id,
+        type: 'CREDIT',
+        amount,
+        balanceBefore: balance,
+        balanceAfter: balance + amount,
+        paymentId: pmt.id,
+        serviceRecordId: null,
+        daysCount: pmt.daysCount,
+        description: null,
+        photo: null,
+        createdBy: adminId,
+        notes: null,
+        createdAt: pmt.paidAt,
+      });
+      balance += amount;
+    }
+
+    balanceMap.set(row.id, balance);
+  }
+
+  return { txs: allSavingTxs, balanceMap };
+}
+
+// Helper: DateTuple → "YYYY-MM-DD" string (ServiceCompensationService expects string format)
+function toDateString(dt: [number, number, number]): string {
+  return `${dt[0]}-${String(dt[1]).padStart(2, '0')}-${String(dt[2]).padStart(2, '0')}`;
+}
+
+async function seedServiceRecords(
+  adminId: string,
+  service: ServiceCompensationService,
+): Promise<{ created: number; skipped: number }> {
+  if (serviceRecordSeeds.length === 0) {
+    console.log('  ⏭ No service record seed data, skipping');
+    return { created: 0, skipped: 0 };
+  }
+
+  // Build contractNumber → contractId lookup
+  const allContracts = await prisma.contract.findMany({
+    select: { id: true, contractNumber: true },
+  });
+  const contractLookup = new Map(allContracts.map((c) => [c.contractNumber, c.id]));
+
+  // Build existing service record lookup: "contractId|startDate" → already exists
+  // Use getFullYear/getMonth/getDate to avoid timezone shift from toISOString()
+  const existingRecords = await prisma.serviceRecord.findMany({
+    select: { contractId: true, startDate: true },
+  });
+  const dateToKey = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const existingKeys = new Set(
+    existingRecords.map((r) => `${r.contractId}|${dateToKey(r.startDate)}`),
+  );
+
+  let created = 0;
+  let skipped = 0;
+  for (const sr of serviceRecordSeeds) {
+    const contractId = contractLookup.get(sr.contractNumber);
+    if (!contractId) {
+      console.warn(`  ⚠ Service record: contract ${sr.contractNumber} not found, skipping`);
+      skipped++;
+      continue;
+    }
+
+    // Incremental check: skip jika sudah ada record untuk kontrak + tanggal ini
+    const key = `${contractId}|${toDateString(sr.startDate)}`;
+    if (existingKeys.has(key)) {
+      skipped++;
+      continue;
+    }
+
+    try {
+      await service.createServiceRecord(
+        {
+          contractId,
+          serviceType: sr.serviceType === 'MAJOR' ? ServiceType.MAJOR : ServiceType.MINOR,
+          replacementProvided: sr.replacementProvided,
+          startDate: toDateString(sr.startDate),
+          endDate: toDateString(sr.endDate),
+          serviceCost: sr.serviceCost,
+          partsReplaced: sr.partsReplaced || null,
+          partsRepaired: sr.partsRepaired || null,
+          notes: sr.notes,
+        },
+        adminId,
+      );
+      created++;
+      existingKeys.add(key); // Prevent duplicate within same seed run
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`  ⚠ Service record for ${sr.contractNumber}: ${msg}`);
+    }
+  }
+
+  console.log(`  Service records: ${created} created, ${skipped} skipped (already exist)`);
+  return { created, skipped };
 }
 
 async function seedContracts(adminId: string): Promise<{
@@ -591,10 +746,41 @@ async function seedContracts(adminId: string): Promise<{
     });
   }
 
+  // ====== Saving Transactions ======
+  const { txs: allSavingTxs, balanceMap: savingBalances } = buildSavingTransactions(
+    allPayments,
+    adminId,
+  );
+
+  for (let i = 0; i < allSavingTxs.length; i += BATCH) {
+    await prisma.savingTransaction.createMany({ data: allSavingTxs.slice(i, i + BATCH) });
+  }
+
+  // Update denormalized savingBalance on contracts
+  for (const [contractId, balance] of savingBalances) {
+    await prisma.contract.update({
+      where: { id: contractId },
+      data: { savingBalance: balance },
+    });
+  }
+
+  // Verification: CREDIT total should match workingDaysPaid × SAVING_PER_DAY
+  const totalCredit = allSavingTxs
+    .filter((t) => t.type === 'CREDIT')
+    .reduce((sum: number, t: any) => sum + t.amount, 0);
+  const totalDebit = allSavingTxs
+    .filter((t) => t.type !== 'CREDIT')
+    .reduce((sum: number, t: any) => sum + t.amount, 0);
+  const netBalance = Array.from(savingBalances.values()).reduce((sum, b) => sum + b, 0);
+
   console.log(`  Contracts: ${contractsCreated} created`);
   console.log(`  Payments: ${allPayments.length} (DP + daily)`);
   console.log(`  Payment days: ${allPaymentDays.length}`);
   console.log(`  Audit logs: ${allAuditLogs.length}`);
+  console.log(`  Saving transactions: ${allSavingTxs.length} (${savingBalances.size} contracts)`);
+  console.log(
+    `    Credits: Rp ${totalCredit.toLocaleString('id-ID')} | Debits: Rp ${totalDebit.toLocaleString('id-ID')} | Net: Rp ${netBalance.toLocaleString('id-ID')}`,
+  );
 
   return {
     contractCount: contractsCreated,
@@ -614,39 +800,76 @@ async function main() {
   const adminId = await seedUsers();
   await seedSettings();
 
-  // Step 2: Check if data already exists
-  const existingContracts = await prisma.contract.count();
-  if (existingContracts > 0 && !RESET) {
-    console.log(`\n[SKIP] Database already has ${existingContracts} contracts.`);
-    console.log('  To re-seed, run with --reset flag:');
-    console.log('  npx ts-node prisma/seed.ts --reset');
-    console.log('\n  Reference data (admin + settings) was updated.');
-    return;
-  }
-
-  // Step 3: Reset if requested
+  // Step 2: Reset if requested, then seed incrementally
   if (RESET) {
     await resetData();
   }
 
-  // Step 4: Seed master data + derived data
-  console.log('\n[2/4] Seeding customers:');
+  console.log('\n[2/5] Seeding customers:');
   await seedCustomers();
 
-  console.log('\n[3/4] Seeding contracts + payment history:');
+  console.log('\n[3/5] Seeding contracts + payment history:');
   const { paymentCount } = await seedContracts(adminId);
+
+  // Step 3: Seed service records (incremental — per-entry check)
+  console.log('\n[4/5] Seeding service records:');
+
+  // Wire up services for service record seeding
+  const txManager = new PrismaTransactionManager(prisma);
+  const serviceRecordRepo = new PrismaServiceRecordRepository(prisma);
+  const paymentDayRepo = new PrismaPaymentDayRepository(prisma);
+  const contractRepo = new PrismaContractRepository(prisma);
+  const invoiceRepo = new PrismaInvoiceRepository(prisma);
+  const auditRepo = new PrismaAuditLogRepository(prisma);
+  const settingRepo = new PrismaSettingRepository(prisma);
+  const savingTxRepo = new PrismaSavingTransactionRepository(prisma);
+
+  const settingService = new SettingService(settingRepo, auditRepo, contractRepo);
+  const paymentService = new PaymentService(
+    invoiceRepo,
+    contractRepo,
+    paymentDayRepo,
+    auditRepo,
+    settingService,
+    txManager,
+  );
+  const savingService = new SavingService(
+    savingTxRepo,
+    contractRepo,
+    invoiceRepo,
+    auditRepo,
+    txManager,
+  );
+  paymentService.setSavingService(savingService);
+
+  const serviceCompensationService = new ServiceCompensationService(
+    serviceRecordRepo,
+    paymentDayRepo,
+    contractRepo,
+    invoiceRepo,
+    auditRepo,
+    paymentService,
+    txManager,
+  );
+  serviceCompensationService.setSavingService(savingService);
+
+  const { created: serviceRecordCount } = await seedServiceRecords(
+    adminId,
+    serviceCompensationService,
+  );
 
   // Summary
   const activeCount = contracts.filter((c) => c.status === 'ACTIVE').length;
   const repossessedCount = contracts.filter((c) => c.status === 'REPOSSESSED').length;
   const cancelledCount = contracts.filter((c) => c.status === 'CANCELLED').length;
 
-  console.log('\n[4/4] Summary:');
+  console.log('\n[5/5] Summary:');
   console.log(`  ${customers.length} customers in data file`);
   console.log(
     `  ${contracts.length} contracts (${activeCount} active, ${repossessedCount} repossessed, ${cancelledCount} cancelled)`,
   );
   console.log(`  ${paymentCount} payments`);
+  console.log(`  ${serviceRecordCount} service records`);
   console.log('\nSeed complete!');
 }
 

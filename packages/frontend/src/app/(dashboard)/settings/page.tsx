@@ -46,6 +46,8 @@ export default function SettingsPage() {
       } else {
         toastError('Gagal', result.message);
       }
+      // Invalidate semua cache yang terpengaruh oleh daily tasks
+      invalidate('/contracts', '/payments', '/dashboard', '/invoices', '/savings');
       await fetchSchedulerStatus();
       // 30 second cooldown
       setCooldown(true);

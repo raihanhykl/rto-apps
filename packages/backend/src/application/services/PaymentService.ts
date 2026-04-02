@@ -455,121 +455,140 @@ export class PaymentService {
     const todayKey = toDateKey(now);
 
     for (const contract of eligible) {
-      const billingStart = toLocalMidnightWib(new Date(contract.billingStartDate!));
+      try {
+        const billingStart = toLocalMidnightWib(new Date(contract.billingStartDate!));
 
-      // Ensure PaymentDay records exist from billingStartDate to today (for gap billing)
-      const daysFromStart = Math.floor((now.getTime() - billingStart.getTime()) / 86400000) + 1;
-      const existingDateKeys = existingDateKeysByContract.get(contract.id) || new Set<string>();
-      const newRecords = await this.generatePaymentDaysForPeriodWithCache(
-        contract,
-        billingStart,
-        daysFromStart,
-        existingDateKeys,
-      );
-
-      // Update in-memory cache with newly created records
-      if (newRecords.length > 0) {
-        let contractPds = pdByContract.get(contract.id);
-        if (!contractPds) {
-          contractPds = [];
-          pdByContract.set(contract.id, contractPds);
-        }
-        contractPds.push(...newRecords);
-      }
-
-      // Check if today is a Libur Bayar
-      if (this.isLiburBayar(contract, now)) {
-        // Check if holiday payment already exists for today (use in-memory data)
-        const contractPds = pdByContract.get(contract.id) || [];
-        const todayPd = contractPds.find(
-          (pd) => toDateKey(pd.date) === todayKey && pd.contractId === contract.id,
+        // Ensure PaymentDay records exist from billingStartDate to today (for gap billing)
+        const daysFromStart = Math.floor((now.getTime() - billingStart.getTime()) / 86400000) + 1;
+        const existingDateKeys = existingDateKeysByContract.get(contract.id) || new Set<string>();
+        const newRecords = await this.generatePaymentDaysForPeriodWithCache(
+          contract,
+          billingStart,
+          daysFromStart,
+          existingDateKeys,
         );
-        if (todayPd && todayPd.status === PaymentDayStatus.HOLIDAY) {
-          // Check if holiday invoice already created for today (use in-memory data)
-          const contractInvoices = invoicesByContract.get(contract.id) || [];
-          const alreadyHasHoliday = contractInvoices.some(
-            (p) =>
-              p.isHoliday &&
-              p.status === PaymentStatus.PAID &&
-              p.periodStart &&
-              toDateKey(new Date(p.periodStart)) === todayKey,
-          );
-          if (!alreadyHasHoliday) {
-            const holidayPayment = await this.createHolidayPayment(contract, now);
-            // Link holiday PaymentDay to payment
-            await this.paymentDayRepo.updateByContractAndDate(contract.id, now, {
-              paymentId: holidayPayment.id,
-            });
-            generated++;
+
+        // Update in-memory cache with newly created records
+        if (newRecords.length > 0) {
+          let contractPds = pdByContract.get(contract.id);
+          if (!contractPds) {
+            contractPds = [];
+            pdByContract.set(contract.id, contractPds);
           }
+          contractPds.push(...newRecords);
         }
-        continue;
+
+        // Check if today is a Libur Bayar
+        if (this.isLiburBayar(contract, now)) {
+          // Check if holiday payment already exists for today (use in-memory data)
+          const contractPds = pdByContract.get(contract.id) || [];
+          const todayPd = contractPds.find(
+            (pd) => toDateKey(pd.date) === todayKey && pd.contractId === contract.id,
+          );
+          if (todayPd && todayPd.status === PaymentDayStatus.HOLIDAY) {
+            // Check if holiday invoice already created for today (use in-memory data)
+            const contractInvoices = invoicesByContract.get(contract.id) || [];
+            const alreadyHasHoliday = contractInvoices.some(
+              (p) =>
+                p.isHoliday &&
+                p.status === PaymentStatus.PAID &&
+                p.periodStart &&
+                toDateKey(new Date(p.periodStart)) === todayKey,
+            );
+            if (!alreadyHasHoliday) {
+              const holidayPayment = await this.createHolidayPayment(contract, now);
+              // Link holiday PaymentDay to payment
+              await this.paymentDayRepo.updateByContractAndDate(contract.id, now, {
+                paymentId: holidayPayment.id,
+              });
+              generated++;
+              console.info(
+                `[generateDailyPayments] ${contract.contractNumber}: holiday payment created for ${todayKey}`,
+              );
+            }
+          }
+          // Fall through to check for accumulated UNPAID days from previous dates.
+          // Holiday only means today is free — past unpaid days still need invoicing.
+        }
+
+        // Check if there's already an active (PENDING) payment for this contract (use pre-fetched)
+        if (activePaymentsByContract.has(contract.id)) {
+          console.info(
+            `[generateDailyPayments] ${contract.contractNumber}: skipped (active PENDING invoice exists)`,
+          );
+          continue;
+        }
+
+        // Get ALL UNPAID PaymentDays where date <= today (use in-memory data)
+        const contractPds = pdByContract.get(contract.id) || [];
+        const unpaidDays = contractPds
+          .filter(
+            (pd) =>
+              pd.contractId === contract.id &&
+              pd.status === PaymentDayStatus.UNPAID &&
+              toDateKey(pd.date) <= todayKey,
+          )
+          .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+        if (unpaidDays.length === 0) continue;
+
+        const totalAmount = unpaidDays.reduce((sum, pd) => sum + pd.amount, 0);
+
+        // Calculate late fee using pre-fetched settings (no per-contract DB calls)
+        let lateFee = 0;
+        if (contract.holidayScheme !== HolidayScheme.OLD_CONTRACT) {
+          lateFee = computeLateFee(unpaidDays, now, penaltyGraceDays, feePerDay);
+        }
+
+        const periodStart = toLocalMidnightWib(new Date(unpaidDays[0].date));
+        const periodEnd = toLocalMidnightWib(new Date(unpaidDays[unpaidDays.length - 1].date));
+
+        const payment: Invoice = {
+          id: uuidv4(),
+          invoiceNumber: await this.generatePaymentNumber(),
+          contractId: contract.id,
+          customerId: contract.customerId,
+          amount: totalAmount,
+          lateFee,
+          type: InvoiceType.DAILY_BILLING,
+          status: PaymentStatus.PENDING,
+          qrCodeData: '',
+          dueDate: periodEnd,
+          paidAt: null,
+          extensionDays: unpaidDays.length,
+          dokuPaymentUrl: null,
+          dokuReferenceId: null,
+          dailyRate: contract.dailyRate,
+          daysCount: unpaidDays.length,
+          periodStart,
+          periodEnd,
+          expiredAt: null,
+          previousPaymentId: null,
+          isHoliday: false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+
+        const newPayment = await this.invoiceRepo.create(payment);
+
+        // Link all UNPAID days to new payment → PENDING
+        for (const pd of unpaidDays) {
+          await this.paymentDayRepo.update(pd.id, {
+            status: PaymentDayStatus.PENDING,
+            paymentId: newPayment.id,
+          });
+        }
+
+        generated++;
+        console.info(
+          `[generateDailyPayments] ${contract.contractNumber}: invoice created (${unpaidDays.length} days, amount=${totalAmount}, lateFee=${lateFee})`,
+        );
+      } catch (error) {
+        console.error(
+          `[generateDailyPayments] Error processing contract ${contract.contractNumber} (${contract.id}):`,
+          error,
+        );
       }
-
-      // Check if there's already an active (PENDING) payment for this contract (use pre-fetched)
-      if (activePaymentsByContract.has(contract.id)) continue;
-
-      // Get ALL UNPAID PaymentDays where date <= today (use in-memory data)
-      const contractPds = pdByContract.get(contract.id) || [];
-      const unpaidDays = contractPds
-        .filter(
-          (pd) =>
-            pd.contractId === contract.id &&
-            pd.status === PaymentDayStatus.UNPAID &&
-            toDateKey(pd.date) <= todayKey,
-        )
-        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-      if (unpaidDays.length === 0) continue;
-
-      const totalAmount = unpaidDays.reduce((sum, pd) => sum + pd.amount, 0);
-
-      // Calculate late fee using pre-fetched settings (no per-contract DB calls)
-      let lateFee = 0;
-      if (contract.holidayScheme !== HolidayScheme.OLD_CONTRACT) {
-        lateFee = computeLateFee(unpaidDays, now, penaltyGraceDays, feePerDay);
-      }
-
-      const periodStart = toLocalMidnightWib(new Date(unpaidDays[0].date));
-      const periodEnd = toLocalMidnightWib(new Date(unpaidDays[unpaidDays.length - 1].date));
-
-      const payment: Invoice = {
-        id: uuidv4(),
-        invoiceNumber: await this.generatePaymentNumber(),
-        contractId: contract.id,
-        customerId: contract.customerId,
-        amount: totalAmount,
-        lateFee,
-        type: InvoiceType.DAILY_BILLING,
-        status: PaymentStatus.PENDING,
-        qrCodeData: '',
-        dueDate: periodEnd,
-        paidAt: null,
-        extensionDays: unpaidDays.length,
-        dokuPaymentUrl: null,
-        dokuReferenceId: null,
-        dailyRate: contract.dailyRate,
-        daysCount: unpaidDays.length,
-        periodStart,
-        periodEnd,
-        expiredAt: null,
-        previousPaymentId: null,
-        isHoliday: false,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-
-      const newPayment = await this.invoiceRepo.create(payment);
-
-      // Link all UNPAID days to new payment → PENDING
-      for (const pd of unpaidDays) {
-        await this.paymentDayRepo.update(pd.id, {
-          status: PaymentDayStatus.PENDING,
-          paymentId: newPayment.id,
-        });
-      }
-
-      generated++;
     }
 
     return generated;
@@ -649,13 +668,20 @@ export class PaymentService {
     let rolledOver = 0;
 
     for (const payment of expiredPayments) {
-      const contract = contractMap.get(payment.contractId);
-      if (!contract) continue;
-      if (contract.status !== ContractStatus.ACTIVE && contract.status !== ContractStatus.OVERDUE)
-        continue;
+      try {
+        const contract = contractMap.get(payment.contractId);
+        if (!contract) continue;
+        if (contract.status !== ContractStatus.ACTIVE && contract.status !== ContractStatus.OVERDUE)
+          continue;
 
-      await this.rolloverPayment(payment, contract, now);
-      rolledOver++;
+        await this.rolloverPayment(payment, contract, now);
+        rolledOver++;
+      } catch (error) {
+        console.error(
+          `[rolloverExpiredPayments] Error rolling over payment ${payment.invoiceNumber} (${payment.id}):`,
+          error,
+        );
+      }
     }
 
     return rolledOver;

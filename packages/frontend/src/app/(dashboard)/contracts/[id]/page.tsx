@@ -343,6 +343,11 @@ export default function ContractDetailPage() {
   const [servisAttachment, setServisAttachment] = useState('');
   const [revokeReason, setRevokeReason] = useState('');
 
+  // Biaya servis & info part
+  const [servisServiceCost, setServisServiceCost] = useState('0');
+  const [servisPartsReplaced, setServisPartsReplaced] = useState('');
+  const [servisPartsRepaired, setServisPartsRepaired] = useState('');
+
   // Collapsible sections
   const [tagihanOpen, setTagihanOpen] = useState(true);
   const [tagihanPage, setTagihanPage] = useState(1);
@@ -598,6 +603,9 @@ export default function ContractDetailPage() {
         endDate: servisEndDate,
         notes: servisNotes || undefined,
         attachment: servisAttachment || null,
+        serviceCost: parseInt(servisServiceCost) || 0,
+        partsReplaced: servisPartsReplaced || null,
+        partsRepaired: servisPartsRepaired || null,
       });
       toastSuccess('Berhasil', 'Record servis berhasil ditambahkan.');
       setAddServisDialogOpen(false);
@@ -607,8 +615,12 @@ export default function ContractDetailPage() {
       setServisEndDate('');
       setServisNotes('');
       setServisAttachment('');
+      setServisServiceCost('0');
+      setServisPartsReplaced('');
+      setServisPartsRepaired('');
       mutateServiceRecords();
-      refreshAll();
+      mutateSaving();
+      invalidate('/service-records', '/savings', '/contracts');
     } catch (error: any) {
       toastError('Gagal', error?.message || 'Gagal membuat record servis.');
     } finally {
@@ -677,6 +689,14 @@ export default function ContractDetailPage() {
     (servisPage - 1) * SERVIS_PAGE_SIZE,
     servisPage * SERVIS_PAGE_SIZE,
   );
+
+  // Map serviceRecordId → saving transaction (untuk badge "Dana Sisihan" di riwayat servis)
+  const savingByServiceRecord = new Map<string, (typeof savingTransactions)[0]>();
+  savingTransactions.forEach((tx: any) => {
+    if (tx.serviceRecordId) {
+      savingByServiceRecord.set(tx.serviceRecordId, tx);
+    }
+  });
 
   return (
     <div className="space-y-6">
@@ -1029,24 +1049,36 @@ export default function ContractDetailPage() {
             <div className="space-y-4">
               {/* Action Buttons */}
               <div className="flex flex-wrap gap-2">
-                {(contract.status === 'ACTIVE' ||
-                  contract.status === 'OVERDUE' ||
-                  contract.status === 'COMPLETED') &&
-                  contract.savingBalance > 0 && (
-                    <Button variant="outline" size="sm" onClick={() => setServiceDialogOpen(true)}>
-                      <Zap className="h-4 w-4 mr-2" /> Gunakan untuk Servis
-                    </Button>
-                  )}
-                {contract.status === 'COMPLETED' && contract.savingBalance > 0 && (
-                  <>
-                    <Button variant="outline" size="sm" onClick={() => setTransferDialogOpen(true)}>
-                      <RefreshCw className="h-4 w-4 mr-2" /> Gunakan untuk Balik Nama
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => setClaimDialogOpen(true)}>
-                      <FileDown className="h-4 w-4 mr-2" /> Claim Saving
-                    </Button>
-                  </>
-                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={contract.status !== 'COMPLETED' || contract.savingBalance <= 0}
+                  onClick={() => setTransferDialogOpen(true)}
+                  title={
+                    contract.status !== 'COMPLETED'
+                      ? 'Hanya tersedia setelah kontrak COMPLETED'
+                      : contract.savingBalance <= 0
+                        ? 'Saldo saving kosong'
+                        : undefined
+                  }
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" /> Balik Nama
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={contract.status !== 'COMPLETED' || contract.savingBalance <= 0}
+                  onClick={() => setClaimDialogOpen(true)}
+                  title={
+                    contract.status !== 'COMPLETED'
+                      ? 'Hanya tersedia setelah kontrak COMPLETED'
+                      : contract.savingBalance <= 0
+                        ? 'Saldo saving kosong'
+                        : undefined
+                  }
+                >
+                  <FileDown className="h-4 w-4 mr-2" /> Claim Saving
+                </Button>
               </div>
 
               {/* Transaction History */}
@@ -1062,13 +1094,18 @@ export default function ContractDetailPage() {
                         className="flex items-center justify-between text-sm p-3 border rounded-lg"
                       >
                         <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
                             <Badge variant={getSavingTypeBadge(tx.type) as any}>
                               {getSavingTypeLabel(tx.type)}
                             </Badge>
                             {tx.daysCount && (
                               <span className="text-xs text-muted-foreground">
                                 ({tx.daysCount} hari)
+                              </span>
+                            )}
+                            {tx.type === 'DEBIT_SERVICE' && tx.serviceRecordId && (
+                              <span className="text-xs text-muted-foreground italic">
+                                (Terkait Servis)
                               </span>
                             )}
                           </div>
@@ -1552,72 +1589,106 @@ export default function ContractDetailPage() {
               <p className="text-muted-foreground text-center py-4">Belum ada riwayat servis.</p>
             ) : (
               <div className="space-y-3">
-                {servisSlice.map((record) => (
-                  <div key={record.id} className="border rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <Badge
-                          variant={record.serviceType === ServiceType.MAJOR ? 'default' : 'outline'}
-                        >
-                          {record.serviceType === ServiceType.MAJOR ? 'Major' : 'Minor'}
-                        </Badge>
-                        <Badge
-                          variant={
-                            record.status === ServiceRecordStatus.ACTIVE ? 'success' : 'secondary'
-                          }
-                        >
-                          {record.status === ServiceRecordStatus.ACTIVE ? 'Aktif' : 'Dibatalkan'}
-                        </Badge>
-                        {record.replacementProvided && (
-                          <Badge variant="outline" className="text-violet-600 border-violet-300">
-                            Motor Pengganti
+                {servisSlice.map((record) => {
+                  const linkedSaving = savingByServiceRecord.get(record.id);
+                  return (
+                    <div key={record.id} className="border rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Badge
+                            variant={
+                              record.serviceType === ServiceType.MAJOR ? 'default' : 'outline'
+                            }
+                          >
+                            {record.serviceType === ServiceType.MAJOR ? 'Major' : 'Minor'}
                           </Badge>
+                          <Badge
+                            variant={
+                              record.status === ServiceRecordStatus.ACTIVE ? 'success' : 'secondary'
+                            }
+                          >
+                            {record.status === ServiceRecordStatus.ACTIVE ? 'Aktif' : 'Dibatalkan'}
+                          </Badge>
+                          {record.replacementProvided && (
+                            <Badge variant="outline" className="text-violet-600 border-violet-300">
+                              Motor Pengganti
+                            </Badge>
+                          )}
+                          {linkedSaving && (
+                            <Badge variant="outline" className="text-green-600 border-green-300">
+                              <Wallet className="h-3 w-3 mr-1" />
+                              Dana Sisihan: {formatCurrency(linkedSaving.amount)}
+                            </Badge>
+                          )}
+                        </div>
+                        {record.status === ServiceRecordStatus.ACTIVE && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-orange-600 border-orange-300 hover:bg-orange-50"
+                            onClick={() => {
+                              setRevokeServisTarget(record);
+                              setRevokeServisDialogOpen(true);
+                            }}
+                          >
+                            <ShieldOff className="h-3.5 w-3.5 mr-1" /> Revoke
+                          </Button>
                         )}
                       </div>
-                      {record.status === ServiceRecordStatus.ACTIVE && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-orange-600 border-orange-300 hover:bg-orange-50"
-                          onClick={() => {
-                            setRevokeServisTarget(record);
-                            setRevokeServisDialogOpen(true);
-                          }}
-                        >
-                          <ShieldOff className="h-3.5 w-3.5 mr-1" /> Revoke
-                        </Button>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                        <div>
+                          <p className="text-xs text-muted-foreground">Tanggal Mulai</p>
+                          <p className="font-medium">{formatDate(record.startDate)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Tanggal Selesai</p>
+                          <p className="font-medium">{formatDate(record.endDate)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Hari Kompensasi</p>
+                          <p className="font-medium text-violet-600">
+                            {record.compensationDays} hari
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Dibuat</p>
+                          <p className="font-medium text-xs">{formatDate(record.createdAt)}</p>
+                        </div>
+                      </div>
+                      {record.notes && (
+                        <p className="text-sm text-muted-foreground mt-2">{record.notes}</p>
+                      )}
+                      {((record.serviceCost ?? 0) > 0 ||
+                        record.partsReplaced ||
+                        record.partsRepaired) && (
+                        <div className="mt-2 text-xs text-muted-foreground space-y-0.5">
+                          {(record.serviceCost ?? 0) > 0 && (
+                            <p>
+                              <span className="font-medium">Biaya:</span>{' '}
+                              {formatCurrency(record.serviceCost)}
+                            </p>
+                          )}
+                          {record.partsReplaced && (
+                            <p>
+                              <span className="font-medium">Pergantian:</span>{' '}
+                              {record.partsReplaced}
+                            </p>
+                          )}
+                          {record.partsRepaired && (
+                            <p>
+                              <span className="font-medium">Perbaikan:</span> {record.partsRepaired}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      {record.status === ServiceRecordStatus.REVOKED && record.revokeReason && (
+                        <div className="mt-2 bg-gray-50 dark:bg-gray-900/30 rounded p-2 text-xs text-muted-foreground">
+                          <span className="font-medium">Alasan revoke:</span> {record.revokeReason}
+                        </div>
                       )}
                     </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-                      <div>
-                        <p className="text-xs text-muted-foreground">Tanggal Mulai</p>
-                        <p className="font-medium">{formatDate(record.startDate)}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">Tanggal Selesai</p>
-                        <p className="font-medium">{formatDate(record.endDate)}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">Hari Kompensasi</p>
-                        <p className="font-medium text-violet-600">
-                          {record.compensationDays} hari
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">Dibuat</p>
-                        <p className="font-medium text-xs">{formatDate(record.createdAt)}</p>
-                      </div>
-                    </div>
-                    {record.notes && (
-                      <p className="text-sm text-muted-foreground mt-2">{record.notes}</p>
-                    )}
-                    {record.status === ServiceRecordStatus.REVOKED && record.revokeReason && (
-                      <div className="mt-2 bg-gray-50 dark:bg-gray-900/30 rounded p-2 text-xs text-muted-foreground">
-                        <span className="font-medium">Alasan revoke:</span> {record.revokeReason}
-                      </div>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
                 {servisTotalPages > 1 && (
                   <div className="flex items-center justify-center gap-2 pt-2">
                     <Button
@@ -2586,6 +2657,9 @@ export default function ContractDetailPage() {
             setServisEndDate('');
             setServisNotes('');
             setServisAttachment('');
+            setServisServiceCost('0');
+            setServisPartsReplaced('');
+            setServisPartsRepaired('');
           }
         }}
       >
@@ -2668,6 +2742,65 @@ export default function ContractDetailPage() {
                 onChange={(e) => setServisAttachment(e.target.value)}
               />
             </div>
+
+            {/* Biaya Servis & Info Part */}
+            <div className="border-t pt-4 space-y-4">
+              <div className="space-y-2">
+                <Label>Biaya Servis (Rp)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  placeholder="0"
+                  value={servisServiceCost}
+                  onChange={(e) => setServisServiceCost(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Jika ada biaya, akan dipotong otomatis dari saldo saving (jika tersedia).
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Pergantian Part</Label>
+                  <Input
+                    placeholder="Kampas rem, Ban, dll."
+                    value={servisPartsReplaced}
+                    onChange={(e) => setServisPartsReplaced(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Perbaikan Part</Label>
+                  <Input
+                    placeholder="Rantai, Bearing, dll."
+                    value={servisPartsRepaired}
+                    onChange={(e) => setServisPartsRepaired(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Info pemotongan saving — tampil jika ada biaya dan ada saldo */}
+              {contract && parseInt(servisServiceCost) > 0 && contract.savingBalance > 0 && (
+                <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-lg p-3 text-sm space-y-1">
+                  <p className="text-blue-700 dark:text-blue-400">
+                    Saldo saving saat ini:{' '}
+                    <span className="font-medium">{formatCurrency(contract.savingBalance)}</span>
+                  </p>
+                  <p className="text-blue-700 dark:text-blue-400">
+                    Dipotong dari saving:{' '}
+                    <span className="font-medium">
+                      {formatCurrency(
+                        Math.min(parseInt(servisServiceCost), contract.savingBalance),
+                      )}
+                    </span>
+                  </p>
+                  {parseInt(servisServiceCost) > contract.savingBalance && (
+                    <p className="text-orange-600 dark:text-orange-400 font-medium">
+                      Customer membayar sisa:{' '}
+                      {formatCurrency(parseInt(servisServiceCost) - contract.savingBalance)}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
           <DialogFooter>
             <Button
@@ -2708,19 +2841,33 @@ export default function ContractDetailPage() {
             </DialogDescription>
           </DialogHeader>
           {revokeServisTarget && (
-            <div className="bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-900 rounded-lg p-4 text-sm space-y-1">
-              <p>
-                <strong>Jenis:</strong>{' '}
-                {revokeServisTarget.serviceType === ServiceType.MAJOR ? 'Major' : 'Minor'}
-              </p>
-              <p>
-                <strong>Periode:</strong> {formatDate(revokeServisTarget.startDate)} —{' '}
-                {formatDate(revokeServisTarget.endDate)}
-              </p>
-              <p>
-                <strong>Kompensasi:</strong> {revokeServisTarget.compensationDays} hari
-              </p>
-            </div>
+            <>
+              <div className="bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-900 rounded-lg p-4 text-sm space-y-1">
+                <p>
+                  <strong>Jenis:</strong>{' '}
+                  {revokeServisTarget.serviceType === ServiceType.MAJOR ? 'Major' : 'Minor'}
+                </p>
+                <p>
+                  <strong>Periode:</strong> {formatDate(revokeServisTarget.startDate)} —{' '}
+                  {formatDate(revokeServisTarget.endDate)}
+                </p>
+                <p>
+                  <strong>Kompensasi:</strong> {revokeServisTarget.compensationDays} hari
+                </p>
+              </div>
+              {(() => {
+                const ls = savingByServiceRecord.get(revokeServisTarget.id);
+                return ls ? (
+                  <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-lg p-3 text-sm flex items-start gap-2">
+                    <Wallet className="h-4 w-4 text-blue-600 mt-0.5 shrink-0" />
+                    <p className="text-blue-700 dark:text-blue-400">
+                      Dana sisihan <span className="font-medium">{formatCurrency(ls.amount)}</span>{' '}
+                      akan dikembalikan ke saldo secara otomatis.
+                    </p>
+                  </div>
+                ) : null;
+              })()}
+            </>
           )}
           <div className="space-y-2">
             <Label>

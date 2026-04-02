@@ -22,6 +22,13 @@ export class InMemorySavingTransactionRepository implements ISavingTransactionRe
       .map((tx) => ({ ...tx }));
   }
 
+  async findByServiceRecordId(serviceRecordId: string): Promise<SavingTransaction | null> {
+    const found = Array.from(this.data.values()).find(
+      (tx) => tx.serviceRecordId === serviceRecordId,
+    );
+    return found ? { ...found } : null;
+  }
+
   async findByContractAndType(
     contractId: string,
     type: SavingTransactionType,

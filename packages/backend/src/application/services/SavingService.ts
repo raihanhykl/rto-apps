@@ -18,6 +18,7 @@ interface DebitSavingInput {
   description: string;
   photo?: string | null;
   notes?: string | null;
+  serviceRecordId?: string | null;
 }
 
 interface ClaimSavingInput {
@@ -61,6 +62,7 @@ export class SavingService {
       balanceBefore,
       balanceAfter,
       paymentId: invoice.id,
+      serviceRecordId: null,
       daysCount,
       description: null,
       photo: null,
@@ -151,6 +153,7 @@ export class SavingService {
       balanceBefore,
       balanceAfter,
       paymentId,
+      serviceRecordId: null,
       daysCount: creditTx.daysCount,
       description: `Reversal of CREDIT from payment revert`,
       photo: null,
@@ -255,6 +258,7 @@ export class SavingService {
       daysCount: null,
       description: dto.description,
       photo: dto.photo || null,
+      serviceRecordId: dto.serviceRecordId || null,
       createdBy: adminId,
       notes: dto.notes || null,
       createdAt: new Date(),
@@ -281,6 +285,7 @@ export class SavingService {
           type: 'DEBIT_SERVICE',
           amount: dto.amount,
           description: dto.description,
+          serviceRecordId: dto.serviceRecordId || null,
           balanceBefore,
           balanceAfter,
         },
@@ -341,6 +346,7 @@ export class SavingService {
       balanceBefore,
       balanceAfter,
       paymentId: null,
+      serviceRecordId: null,
       daysCount: null,
       description: dto.description,
       photo: dto.photo || null,
@@ -442,6 +448,7 @@ export class SavingService {
       balanceBefore,
       balanceAfter,
       paymentId: null,
+      serviceRecordId: null,
       daysCount: null,
       description: `Claim sisa saving oleh customer`,
       photo: null,
@@ -473,6 +480,89 @@ export class SavingService {
         metadata: {
           type: 'DEBIT_CLAIM',
           amount: claimAmount,
+          balanceBefore,
+          balanceAfter,
+        },
+        ipAddress: '',
+        createdAt: new Date(),
+      });
+
+      return created;
+    };
+
+    if (this.txManager) {
+      return this.txManager.runInTransaction(writeOps);
+    } else {
+      return writeOps({
+        contractRepo: this.contractRepo,
+        invoiceRepo: this.invoiceRepo,
+        paymentDayRepo: null as any,
+        auditRepo: this.auditRepo,
+        savingTxRepo: this.savingTxRepo,
+        serviceRecordRepo: null as any,
+        customerRepo: null as any,
+        settingRepo: null as any,
+      });
+    }
+  }
+
+  /**
+   * Auto-reverse saving debit saat service record di-revoke.
+   * Return null jika tidak ada debit yang terkait.
+   */
+  async reverseServiceDebit(
+    serviceRecordId: string,
+    adminId: string,
+  ): Promise<SavingTransaction | null> {
+    // READS outside transaction
+    const debitTx = await this.savingTxRepo.findByServiceRecordId(serviceRecordId);
+    if (!debitTx) return null;
+    if (debitTx.type !== SavingTransactionType.DEBIT_SERVICE) return null;
+
+    const contract = await this.contractRepo.findById(debitTx.contractId);
+    if (!contract) throw new Error('Contract not found');
+
+    const balanceBefore = contract.savingBalance;
+    const balanceAfter = balanceBefore + debitTx.amount;
+
+    const reversalTx: SavingTransaction = {
+      id: uuidv4(),
+      contractId: debitTx.contractId,
+      type: SavingTransactionType.REVERSAL,
+      amount: debitTx.amount,
+      balanceBefore,
+      balanceAfter,
+      paymentId: null,
+      daysCount: null,
+      description: `Reversal of service debit (service record revoked)`,
+      photo: null,
+      serviceRecordId,
+      createdBy: adminId,
+      notes: null,
+      createdAt: new Date(),
+    };
+
+    // WRITES inside transaction
+    const writeOps = async (repos: TransactionalRepos) => {
+      const created = await repos.savingTxRepo.create(reversalTx);
+
+      // Increment balance (reverse of debit)
+      await repos.contractRepo.update(debitTx.contractId, {
+        savingBalance: balanceAfter,
+      });
+
+      await repos.auditRepo.create({
+        id: uuidv4(),
+        userId: adminId,
+        action: AuditAction.UPDATE,
+        module: 'saving',
+        entityId: created.id,
+        description: `Saving reversal Rp ${debitTx.amount.toLocaleString('id-ID')} (service record revoked)`,
+        metadata: {
+          type: 'REVERSAL',
+          amount: debitTx.amount,
+          originalDebitId: debitTx.id,
+          serviceRecordId,
           balanceBefore,
           balanceAfter,
         },

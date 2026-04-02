@@ -133,6 +133,10 @@ export const CreateServiceRecordDto = z.object({
   endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Format tanggal harus YYYY-MM-DD'),
   notes: z.string().optional().default(''),
   attachment: z.string().optional().nullable().default(null),
+  // Service cost & parts — langsung di ServiceRecord
+  serviceCost: z.number().int().min(0, 'Biaya tidak boleh negatif').optional().default(0),
+  partsReplaced: z.string().optional().nullable().default(null),
+  partsRepaired: z.string().optional().nullable().default(null),
 });
 export type CreateServiceRecordDtoType = z.infer<typeof CreateServiceRecordDto>;
 

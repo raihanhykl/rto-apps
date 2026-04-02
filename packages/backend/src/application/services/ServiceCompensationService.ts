@@ -61,6 +61,9 @@ export class ServiceCompensationService {
       endDate: string;
       notes?: string;
       attachment?: string | null;
+      serviceCost?: number;
+      partsReplaced?: string | null;
+      partsRepaired?: string | null;
     },
     adminId: string,
   ): Promise<ServiceRecord> {
@@ -104,6 +107,9 @@ export class ServiceCompensationService {
         startDate,
         endDate,
         compensationDays: 0,
+        serviceCost: dto.serviceCost || 0,
+        partsReplaced: dto.partsReplaced || null,
+        partsRepaired: dto.partsRepaired || null,
         notes: dto.notes || '',
         attachment: dto.attachment || null,
         daySnapshots: null,
@@ -134,10 +140,11 @@ export class ServiceCompensationService {
         return created;
       };
 
+      let created: ServiceRecord;
       if (this.txManager) {
-        return this.txManager.runInTransaction(writeOps);
+        created = await this.txManager.runInTransaction(writeOps);
       } else {
-        return writeOps({
+        created = await writeOps({
           contractRepo: this.contractRepo,
           invoiceRepo: this.invoiceRepo,
           paymentDayRepo: this.paymentDayRepo,
@@ -148,6 +155,25 @@ export class ServiceCompensationService {
           settingRepo: null as any,
         });
       }
+
+      // Auto-debit saving jika ada biaya servis
+      if (dto.serviceCost && dto.serviceCost > 0 && this.savingService) {
+        const latestContract = await this.contractRepo.findById(dto.contractId);
+        const debitAmount = Math.min(dto.serviceCost, latestContract?.savingBalance || 0);
+        if (debitAmount > 0) {
+          await this.savingService.debitForService(
+            dto.contractId,
+            {
+              amount: debitAmount,
+              description: `Biaya servis: ${dto.notes || 'Service motor'}`,
+              serviceRecordId: created.id,
+            },
+            adminId,
+          );
+        }
+      }
+
+      return created;
     }
 
     // 4. MAJOR + no replacement: Apply compensation
@@ -330,6 +356,9 @@ export class ServiceCompensationService {
         startDate,
         endDate,
         compensationDays,
+        serviceCost: dto.serviceCost || 0,
+        partsReplaced: dto.partsReplaced || null,
+        partsRepaired: dto.partsRepaired || null,
         notes: dto.notes || '',
         attachment: dto.attachment || null,
         daySnapshots: snapshots,
@@ -382,7 +411,25 @@ export class ServiceCompensationService {
       });
     }
 
-    // 8. Sync contract (outside transaction — uses PaymentService's own repos)
+    // 8. Auto-debit saving jika ada biaya servis
+    if (dto.serviceCost && dto.serviceCost > 0 && this.savingService) {
+      // Re-read contract karena balance mungkin berubah setelah transaction
+      const latestContract = await this.contractRepo.findById(dto.contractId);
+      const debitAmount = Math.min(dto.serviceCost, latestContract?.savingBalance || 0);
+      if (debitAmount > 0) {
+        await this.savingService.debitForService(
+          dto.contractId,
+          {
+            amount: debitAmount,
+            description: `Biaya servis: ${dto.notes || 'Service motor'}`,
+            serviceRecordId: created.id,
+          },
+          adminId,
+        );
+      }
+    }
+
+    // 9. Sync contract (outside transaction — uses PaymentService's own repos)
     await this.paymentService.syncContractFromPaymentDays(dto.contractId);
 
     return created;
@@ -540,6 +587,11 @@ export class ServiceCompensationService {
         customerRepo: null as any,
         settingRepo: null as any,
       });
+    }
+
+    // Auto-reverse linked saving debit
+    if (this.savingService) {
+      await this.savingService.reverseServiceDebit(id, adminId);
     }
 
     // Sync contract (outside transaction — uses PaymentService's own repos)
