@@ -462,65 +462,47 @@ describe('PaymentService', () => {
 
   describe('rolloverExpiredPayments', () => {
     it('should rollover all expired payments', async () => {
-      const twoDaysAgo = new Date();
-      twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
-      twoDaysAgo.setHours(0, 0, 0, 0);
+      // Use fixed dates to avoid Libur Bayar (29-31 for NEW_CONTRACT) and Sunday issues
+      // March 10 (Tue), 11 (Wed), 12 (Thu) 2026
+      const twoDaysAgo = new Date('2026-03-10T00:00:00');
+      const yesterday = new Date('2026-03-11T00:00:00');
+      const today = new Date('2026-03-12T00:00:00');
 
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      yesterday.setHours(0, 0, 0, 0);
-      if (yesterday.getDay() === 0) return;
-
-      await contractRepo.update(activeContract.id, { endDate: new Date(twoDaysAgo) });
+      await contractRepo.update(activeContract.id, {
+        startDate: new Date('2026-03-08T00:00:00'),
+        billingStartDate: new Date('2026-03-09T00:00:00'),
+        endDate: new Date(twoDaysAgo),
+      });
 
       await paymentService.generateDailyPayments(yesterday);
-
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
 
       const rolledOver = await paymentService.rolloverExpiredPayments(today);
       expect(rolledOver).toBe(1);
     });
 
     it('should correctly accumulate multiple missed days on rollover', async () => {
-      // Simulate: endDate = 4 days ago, payment generated 3 days ago, server down until today
-      const fourDaysAgo = new Date();
-      fourDaysAgo.setDate(fourDaysAgo.getDate() - 4);
-      fourDaysAgo.setHours(0, 0, 0, 0);
+      // Use fixed dates to avoid Libur Bayar (29-31 for NEW_CONTRACT) and Sunday issues
+      // March 16 (Mon), 17 (Tue), 20 (Fri) 2026
+      const fourDaysAgo = new Date('2026-03-16T00:00:00');
+      const threeDaysAgo = new Date('2026-03-17T00:00:00');
+      const today = new Date('2026-03-20T00:00:00');
 
-      const threeDaysAgo = new Date();
-      threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
-      threeDaysAgo.setHours(0, 0, 0, 0);
-      if (threeDaysAgo.getDay() === 0) return; // skip if Sunday
+      await contractRepo.update(activeContract.id, {
+        startDate: new Date('2026-03-14T00:00:00'),
+        billingStartDate: new Date('2026-03-15T00:00:00'),
+        endDate: new Date(fourDaysAgo),
+      });
 
-      await contractRepo.update(activeContract.id, { endDate: new Date(fourDaysAgo) });
-
-      // Generate a 1-day payment 3 days ago
+      // Generate a 1-day payment on threeDaysAgo
       await paymentService.generateDailyPayments(threeDaysAgo);
 
-      // Skip 2 days (server down), rollover today
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      if (today.getDay() === 0) return;
-
+      // Skip 2 days (server down), rollover on "today"
       await paymentService.rolloverExpiredPayments(today);
 
       const payments = await invoiceRepo.findByContractId(activeContract.id);
       const pendingPayment = payments.find((p: Invoice) => p.status === PaymentStatus.PENDING);
       expect(pendingPayment).toBeDefined();
 
-      // Should recalculate ALL unpaid days from endDate+1 to today
-      // Count working days (skip Libur Bayar Sundays)
-      const endDate = new Date(fourDaysAgo);
-      const firstUnpaid = new Date(endDate.getTime() + 86400000);
-      let _expectedDays = 0;
-      const cursor = new Date(firstUnpaid);
-      while (cursor <= today) {
-        if (cursor.getDay() !== 0)
-          _expectedDays++; // simplified: all Sundays skipped for default 2 holidays/month
-        else _expectedDays++; // actually non-holiday Sundays count too, just use the service logic
-        cursor.setDate(cursor.getDate() + 1);
-      }
       // The key assertion: amount should be more than just +1 day from the original
       expect(pendingPayment!.daysCount).toBeGreaterThan(2);
       expect(pendingPayment!.amount).toBe(pendingPayment!.daysCount! * 58000);
