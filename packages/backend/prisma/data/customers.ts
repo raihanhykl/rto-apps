@@ -1826,7 +1826,8 @@ export const customers: CustomerSeed[] = [
     fullName: 'ACHMAD ANSARULLOH',
     phone: '087748897676',
     email: 'ansatullahachmad@gmail.com',
-    address: 'Jl Pasar Angin Gg. Rawa Bangsa No. 8 RT 001 RW 004 Pasirangin Cileungsi Bandung Barat',
+    address:
+      'Jl Pasar Angin Gg. Rawa Bangsa No. 8 RT 001 RW 004 Pasirangin Cileungsi Bandung Barat',
     ktpNumber: '3217041012880004',
     birthDate: '1987-12-10',
     gender: 'MALE',
@@ -1856,7 +1857,8 @@ export const customers: CustomerSeed[] = [
     fullName: 'FARHAN ALLAM SHIDDIQ',
     phone: '085780105417',
     email: 'farhanallam12@gmail.com',
-    address: 'Puri Agung Permai Jl. Karya 4 Blok C 21 No. 112 RT 007 RW 012 Gelam Jaya Pasar Kemis Tangerang',
+    address:
+      'Puri Agung Permai Jl. Karya 4 Blok C 21 No. 112 RT 007 RW 012 Gelam Jaya Pasar Kemis Tangerang',
     ktpNumber: '3603121204990004',
     birthDate: '1999-04-12',
     gender: 'MALE',
